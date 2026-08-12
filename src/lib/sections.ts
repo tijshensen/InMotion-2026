@@ -543,6 +543,14 @@ export function buildEditorPreviewHtml(opts: {
 <script id="cms-editor-bridge">
 (function () {
   function selectSection(id) {
+    // Highlight immediately in-iframe so parent does not need to rewrite srcDoc
+    // (rewriting reloaded the document and caused scroll jump to top).
+    try {
+      var all = document.querySelectorAll(".cms-edit-section.is-selected");
+      for (var i = 0; i < all.length; i++) all[i].classList.remove("is-selected");
+      var target = document.querySelector('.cms-edit-section[data-section-id="' + id.replace(/"/g, '') + '"]');
+      if (target) target.classList.add("is-selected");
+    } catch (e) {}
     try {
       window.parent.postMessage({ type: "cms-select-section", sectionId: id }, "*");
     } catch (e) {}

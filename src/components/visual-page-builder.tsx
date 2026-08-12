@@ -592,7 +592,9 @@ export function VisualPageBuilder({
     "desktop",
   );
   const iframeRef = useRef<HTMLIFrameElement>(null);
+  /** Last known iframe scroll — updated continuously, restored after srcDoc rewrites */
   const scrollRestore = useRef(0);
+  const previewHtmlRef = useRef("");
 
   const ordered = useMemo(
     () => [...sections].sort((a, b) => a.sortOrder - b.sortOrder),
@@ -606,6 +608,11 @@ export function VisualPageBuilder({
     ? parseStoredContent(selected.content, selectedHtml).fields
     : {};
 
+  /**
+   * Selection is NOT included in the HTML document.
+   * Rebuilding srcDoc on select was reloading the iframe (jump to top then back).
+   * Highlight is applied in-DOM instead (see applySelectionInIframe).
+   */
   const previewHtml = useMemo(
     () =>
       buildEditorPreviewHtml({
@@ -615,7 +622,7 @@ export function VisualPageBuilder({
         metaDescription,
         menuHtml,
         inserts,
-        selectedSectionId,
+        selectedSectionId: null,
         siteSlug,
         linkPages,
         sections: ordered.map((s) => ({
@@ -634,25 +641,75 @@ export function VisualPageBuilder({
       metaDescription,
       menuHtml,
       inserts,
-      selectedSectionId,
       ordered,
       siteSlug,
       linkPages,
     ],
   );
 
-  // Preserve iframe scroll when srcDoc rewrites (live field edits)
-  const onIframeLoad = useCallback(() => {
-    const win = iframeRef.current?.contentWindow;
-    if (win && scrollRestore.current > 0) {
-      win.scrollTo(0, scrollRestore.current);
-    }
+  const applySelectionInIframe = useCallback((sectionId: string | null) => {
+    const doc = iframeRef.current?.contentDocument;
+    if (!doc) return;
+    doc.querySelectorAll(".cms-edit-section.is-selected").forEach((el) => {
+      el.classList.remove("is-selected");
+    });
+    if (!sectionId) return;
+    // CSS.escape is available in modern browsers; fallback for odd ids
+    const safe =
+      typeof CSS !== "undefined" && typeof CSS.escape === "function"
+        ? CSS.escape(sectionId)
+        : sectionId.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
+    const el = doc.querySelector(
+      `.cms-edit-section[data-section-id="${safe}"]`,
+    );
+    if (el) el.classList.add("is-selected");
   }, []);
 
-  useEffect(() => {
+  const restoreIframeScroll = useCallback(() => {
     const win = iframeRef.current?.contentWindow;
-    if (win) scrollRestore.current = win.scrollY || 0;
+    if (!win) return;
+    const y = scrollRestore.current;
+    if (y <= 0) return;
+    // Immediate + rAF — srcDoc paint can reset scroll after first write
+    win.scrollTo(0, y);
+    requestAnimationFrame(() => {
+      win.scrollTo(0, y);
+      requestAnimationFrame(() => win.scrollTo(0, y));
+    });
+  }, []);
+
+  const onIframeLoad = useCallback(() => {
+    const win = iframeRef.current?.contentWindow;
+    if (win) {
+      // Track scroll continuously so we never capture "0" after a reload
+      const onScroll = () => {
+        scrollRestore.current = win.scrollY || 0;
+      };
+      win.addEventListener("scroll", onScroll, { passive: true });
+      // stash remover on the window for this document lifetime
+      (win as unknown as { __cmsScrollOff?: () => void }).__cmsScrollOff = () =>
+        win.removeEventListener("scroll", onScroll);
+    }
+    restoreIframeScroll();
+    applySelectionInIframe(selectedSectionId);
+  }, [restoreIframeScroll, applySelectionInIframe, selectedSectionId]);
+
+  // When content HTML actually changes, keep scroll; do not rebuild for selection
+  useEffect(() => {
+    if (previewHtmlRef.current === previewHtml) return;
+    // Capture scroll from current document *before* React commits new srcDoc
+    const win = iframeRef.current?.contentWindow;
+    if (win) {
+      const y = win.scrollY || 0;
+      if (y > 0) scrollRestore.current = y;
+    }
+    previewHtmlRef.current = previewHtml;
   }, [previewHtml]);
+
+  // Selection highlight without reloading the iframe
+  useEffect(() => {
+    applySelectionInIframe(selectedSectionId);
+  }, [selectedSectionId, applySelectionInIframe]);
 
   // Listen for section clicks from iframe (original: parent.openSidebar)
   useEffect(() => {
@@ -660,6 +717,9 @@ export function VisualPageBuilder({
       const data = ev.data;
       if (!data || data.type !== "cms-select-section") return;
       if (typeof data.sectionId !== "string") return;
+      // Remember scroll at click time (before any parent layout shift)
+      const win = iframeRef.current?.contentWindow;
+      if (win) scrollRestore.current = win.scrollY || 0;
       setSelectedSectionId(data.sectionId);
       setPanelTab("content");
     }
