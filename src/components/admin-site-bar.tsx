@@ -70,8 +70,8 @@ export function AdminSiteBar({
     }
   }
 
-  const generatedHref = `/sites/${activeSlug}/`;
-  const liveHref = `/s/${activeSlug}/`;
+  const generatedHref = `/sites/${activeSlug}`;
+  const liveHref = `/s/${activeSlug}`;
   const hasGenerated = Boolean(lastGeneratedAt);
 
   return (

@@ -76,7 +76,7 @@ export default async function AdminLayout({
                 </Link>
                 {active.lastGeneratedAt && (
                   <Link
-                    href={`/sites/${active.slug}/`}
+                    href={`/sites/${active.slug}`}
                     target="_blank"
                     className="block rounded-lg px-3 py-2 text-sm text-emerald-400/90 hover:bg-slate-800 hover:text-emerald-300"
                   >

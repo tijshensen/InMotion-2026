@@ -66,7 +66,7 @@ export default async function SitesAdminPage() {
               </Link>
               {site.lastGeneratedAt && (
                 <Link
-                  href={`/sites/${site.slug}/`}
+                  href={`/sites/${site.slug}`}
                   target="_blank"
                   className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-800 hover:bg-emerald-100"
                 >

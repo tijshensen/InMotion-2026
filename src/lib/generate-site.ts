@@ -17,31 +17,30 @@ export type GenerateResult = {
   errors: string[];
 };
 
-function rewriteToRelativeAssets(
-  html: string,
-  siteSlug: string,
-  nestDepth: number,
-): string {
-  // Pages at root of sites/{slug}/ use ./assets/; nested a/b.html use ../assets/
-  const up = nestDepth > 0 ? "../".repeat(nestDepth) : "./";
+/**
+ * Point theme assets + internal links at absolute /sites/{slug}/… URLs.
+ * Absolute paths avoid broken ./assets when the browser is on /sites/slug
+ * (no trailing slash).
+ */
+function rewriteForStaticPublish(html: string, siteSlug: string): string {
+  const base = `/sites/${siteSlug}`;
   let s = html;
 
-  // Theme → local assets folder
-  s = s.replace(/\/theme\/[a-zA-Z0-9_-]+\//g, `${up}assets/`);
+  // Theme → published assets
+  s = s.replace(/\/theme\/[a-zA-Z0-9_-]+\//g, `${base}/assets/`);
 
-  // Live routes → static files
-  // /s/slug/foo → foo.html ; /s/slug → index.html
+  // Live preview routes → static HTML files
   s = s.replace(
     new RegExp(`href=(["'])/s/${siteSlug}/([^"']*)\\1`, "g"),
     (_m, q: string, rest: string) => {
-      if (!rest || rest === "/") return `href=${q}${up}index.html${q}`;
+      if (!rest || rest === "/") return `href=${q}${base}${q}`;
       const clean = rest.replace(/\/$/, "");
-      return `href=${q}${up}${clean}.html${q}`;
+      return `href=${q}${base}/${clean}${q}`;
     },
   );
   s = s.replace(
     new RegExp(`href=(["'])/s/${siteSlug}\\1`, "g"),
-    `href=$1${up}index.html$1`,
+    `href=$1${base}$1`,
   );
 
   return s;
@@ -121,12 +120,7 @@ export async function generateStaticSite(
       const fileAbs = path.join(outAbs, fileRel);
       fs.mkdirSync(path.dirname(fileAbs), { recursive: true });
 
-      // foo.html → depth 0; nested/path.html → depth 1
-      const nestDepth = isHome
-        ? 0
-        : Math.max(0, page.slug.split("/").length - 1);
-
-      const html = rewriteToRelativeAssets(result.html, site.slug, nestDepth);
+      const html = rewriteForStaticPublish(result.html, site.slug);
       fs.writeFileSync(fileAbs, html, "utf8");
       files.push(fileRel);
       pagesWritten++;
