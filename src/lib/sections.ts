@@ -399,6 +399,41 @@ export type EditorPreviewSection = {
 };
 
 /**
+ * Root-relative URLs (/uploads/…, /theme/…) break or resolve oddly inside
+ * srcDoc iframes (base is about:srcdoc). Make them absolute for the editor canvas.
+ */
+export function absolutizeRootUrls(html: string, origin: string): string {
+  if (!html || !origin) return html;
+  const o = origin.replace(/\/$/, "");
+  return html
+    .replace(/(src|href)=(["'])\/(?!\/)/gi, `$1=$2${o}/`)
+    .replace(/url\(\s*(['"]?)\/(?!\/)/gi, `url($1${o}/`);
+}
+
+/**
+ * Render a section for the live editor canvas (absolute media URLs optional).
+ */
+export function renderSectionHtmlForEditor(
+  templateHtml: string,
+  contentJson: string,
+  sectionCss?: string,
+  opts?: {
+    siteSlug?: string;
+    linkPages?: LinkablePage[];
+    origin?: string;
+  },
+): string {
+  let body = renderSectionHtml(templateHtml, contentJson, sectionCss);
+  if (opts?.siteSlug && opts.linkPages?.length) {
+    body = resolveInternalLinks(body, opts.siteSlug, opts.linkPages);
+  }
+  if (opts?.origin) {
+    body = absolutizeRootUrls(body, opts.origin);
+  }
+  return body;
+}
+
+/**
  * Full document HTML for the page editor canvas (like original /pages/view iframe).
  * Each section is wrapped so the iframe can postMessage selection to the parent.
  */
@@ -413,17 +448,22 @@ export function buildEditorPreviewHtml(opts: {
   selectedSectionId?: string | null;
   siteSlug?: string;
   linkPages?: LinkablePage[];
+  /** window.location.origin — required so /uploads images load in srcDoc */
+  origin?: string;
 }): string {
+  const origin = opts.origin || "";
   const sectionsHtml = opts.sections
     .map((s, idx) => {
-      let body = renderSectionHtml(
+      const body = renderSectionHtmlForEditor(
         s.templateHtml,
         s.content,
         s.css,
+        {
+          siteSlug: opts.siteSlug,
+          linkPages: opts.linkPages,
+          origin,
+        },
       );
-      if (opts.siteSlug && opts.linkPages?.length) {
-        body = resolveInternalLinks(body, opts.siteSlug, opts.linkPages);
-      }
       const active = opts.selectedSectionId === s.id;
       const hidden = s.isHidden ? " is-hidden" : "";
       const ring = active ? " is-selected" : "";
@@ -454,6 +494,19 @@ export function buildEditorPreviewHtml(opts: {
   }
 
   shell = rewriteThemeAssetUrls(shell, opts.siteSlug || "kiekeboe");
+  if (origin) {
+    shell = absolutizeRootUrls(shell, origin);
+  }
+
+  // Ensure root-relative assets resolve inside srcDoc (about:srcdoc has no host)
+  if (origin && !/<base\s/i.test(shell)) {
+    const baseTag = `<base href="${escapeAttr(origin.endsWith("/") ? origin : origin + "/")}" />`;
+    if (/<head[^>]*>/i.test(shell)) {
+      shell = shell.replace(/<head([^>]*)>/i, `<head$1>${baseTag}`);
+    } else {
+      shell = baseTag + shell;
+    }
+  }
 
   let html = shell
     .replaceAll("{{page.title}}", escapeHtml(opts.pageTitle))
@@ -538,7 +591,34 @@ export function buildEditorPreviewHtml(opts: {
     opacity: 1;
   }
   .cms-edit-body { pointer-events: none; }
-  .cms-edit-body img { max-width: 100%; height: auto; }
+  .cms-edit-body img {
+    max-width: 100%;
+    height: auto;
+    /* Bootstrap visible-xs / hidden-* hide images on desktop; show them in the editor */
+    display: inline-block !important;
+    visibility: visible !important;
+    opacity: 1 !important;
+  }
+  .cms-edit-body .hidden,
+  .cms-edit-body .hidden-xs,
+  .cms-edit-body .hidden-sm,
+  .cms-edit-body .hidden-md,
+  .cms-edit-body .hidden-lg,
+  .cms-edit-body .visible-xs,
+  .cms-edit-body .visible-sm,
+  .cms-edit-body .visible-md,
+  .cms-edit-body .visible-lg {
+    /* Keep layout wrappers usable when they only exist for responsive breakpoints */
+  }
+  .cms-edit-body img.visible-xs,
+  .cms-edit-body img.visible-sm,
+  .cms-edit-body img.hidden-sm,
+  .cms-edit-body img.hidden-md,
+  .cms-edit-body img.hidden-lg,
+  .cms-edit-body img.hidden-xs {
+    display: inline-block !important;
+    visibility: visible !important;
+  }
 </style>
 <script id="cms-editor-bridge">
 (function () {
@@ -613,12 +693,13 @@ function defaultEditorShell() {
 </body></html>`;
 }
 
-/** @deprecated use renderSectionHtml for canvas (true page look) */
+/** @deprecated use renderSectionHtml / renderSectionHtmlForEditor */
 export function renderSectionForEditor(
   templateHtml: string,
   contentJson: string,
-  _sectionId: string,
+  sectionId?: string,
 ): string {
+  void sectionId;
   return renderSectionHtml(templateHtml, contentJson);
 }
 

@@ -5,7 +5,6 @@
  */
 
 import { cookies } from "next/headers";
-import { prisma } from "./db";
 import { getSessionUser } from "./auth";
 import { listAccessibleSites } from "./access";
 

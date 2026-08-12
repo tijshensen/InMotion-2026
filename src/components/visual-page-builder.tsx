@@ -13,7 +13,7 @@ import {
   buildEditorPreviewHtml,
   parseSectionFields,
   parseStoredContent,
-  renderSectionHtml,
+  renderSectionHtmlForEditor,
   serializeFields,
   type FieldType,
   type SectionField,
@@ -22,7 +22,6 @@ import {
   encodeInternalLink,
   isInternalLinkRef,
   parseInternalLinkRef,
-  resolveInternalLinks,
   type LinkablePage,
 } from "@/lib/internal-links";
 import { MediaPicker, type MediaItem } from "@/components/media-picker";
@@ -645,6 +644,9 @@ export function VisualPageBuilder({
     ],
   );
 
+  const editorOrigin =
+    typeof window !== "undefined" ? window.location.origin : "";
+
   const documentHtml = useMemo(
     () =>
       buildEditorPreviewHtml({
@@ -657,6 +659,7 @@ export function VisualPageBuilder({
         selectedSectionId: null,
         siteSlug,
         linkPages,
+        origin: editorOrigin,
         sections: ordered.map((s) => ({
           id: s.id,
           templateHtml: s.templateBlock?.defaultHtml || "",
@@ -668,7 +671,7 @@ export function VisualPageBuilder({
       }),
     // structureKey encodes structural deps; ordered content is snapshotted at rebuild time
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [structureKey, linkPages],
+    [structureKey, linkPages, editorOrigin],
   );
 
   const sectionSelector = useCallback((sectionId: string) => {
@@ -708,14 +711,14 @@ export function VisualPageBuilder({
         return true;
       }
 
-      let html = renderSectionHtml(
+      const origin =
+        typeof window !== "undefined" ? window.location.origin : "";
+      const html = renderSectionHtmlForEditor(
         s.templateBlock?.defaultHtml || "",
         s.content,
         s.css,
+        { siteSlug, linkPages, origin },
       );
-      if (siteSlug && linkPages.length) {
-        html = resolveInternalLinks(html, siteSlug, linkPages);
-      }
 
       // Preserve scroll: only replace the section body, never the document
       body.innerHTML = html || "";
