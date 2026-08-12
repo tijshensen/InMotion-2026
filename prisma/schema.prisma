@@ -1,0 +1,227 @@
+// CMSinMotion — multi-site CMS schema (modern rewrite of MotionCMS 3)
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  SUPERADMIN
+  ADMIN
+  EDITOR
+  VIEWER
+}
+
+model User {
+  id           String    @id @default(cuid())
+  email        String    @unique
+  passwordHash String
+  firstName    String
+  lastName     String
+  role         Role      @default(EDITOR)
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+  memberships  SiteMember[]
+  pages        Page[]    @relation("PageAuthor")
+  sessions     Session[]
+  logs         AuditLog[]
+}
+
+model Session {
+  id        String   @id @default(cuid())
+  token     String   @unique
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+}
+
+/// A customer website / tenant (multi-site product)
+model Site {
+  id          String   @id @default(cuid())
+  name        String
+  slug        String   @unique
+  domain      String?
+  siteTitle   String   @default("")
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  members     SiteMember[]
+  languages   Language[]
+  templateSets TemplateSet[]
+  pages       Page[]
+  inserts     Insert[]
+  settings    SiteSetting[]
+  media       MediaAsset[]
+}
+
+model SiteMember {
+  id     String @id @default(cuid())
+  siteId String
+  userId String
+  role   Role   @default(EDITOR)
+  site   Site   @relation(fields: [siteId], references: [id], onDelete: Cascade)
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([siteId, userId])
+}
+
+model Language {
+  id         String  @id @default(cuid())
+  siteId     String
+  site       Site    @relation(fields: [siteId], references: [id], onDelete: Cascade)
+  name       String
+  code       String  // e.g. nl, en
+  flag       String?
+  siteTitle  String  @default("")
+  isDefault  Boolean @default(false)
+  pages      Page[]
+
+  @@unique([siteId, code])
+}
+
+model TemplateSet {
+  id        String     @id @default(cuid())
+  siteId    String
+  site      Site       @relation(fields: [siteId], references: [id], onDelete: Cascade)
+  name      String
+  menuHtml  String     @default("")
+  submenuHtml String   @default("")
+  templates Template[]
+  cssAssets TemplateCss[]
+  jsAssets  TemplateJs[]
+}
+
+model Template {
+  id            String   @id @default(cuid())
+  templateSetId String
+  templateSet   TemplateSet @relation(fields: [templateSetId], references: [id], onDelete: Cascade)
+  name          String
+  coreHtml      String   @default("") // layout shell with {{block:name}} placeholders
+  menuHtml      String   @default("")
+  submenuHtml   String   @default("")
+  blocks        TemplateBlock[]
+  pages         Page[]
+}
+
+model TemplateBlock {
+  id          String   @id @default(cuid())
+  templateId  String
+  template    Template @relation(fields: [templateId], references: [id], onDelete: Cascade)
+  name        String
+  defaultHtml String   @default("")
+  isRepeatable Boolean @default(false)
+  sortOrder   Int      @default(0)
+  pageBlocks  PageBlock[]
+}
+
+model TemplateCss {
+  id            String @id @default(cuid())
+  templateSetId String
+  templateSet   TemplateSet @relation(fields: [templateSetId], references: [id], onDelete: Cascade)
+  name          String
+  content       String @default("")
+}
+
+model TemplateJs {
+  id            String @id @default(cuid())
+  templateSetId String
+  templateSet   TemplateSet @relation(fields: [templateSetId], references: [id], onDelete: Cascade)
+  name          String
+  content       String @default("")
+}
+
+model Page {
+  id              String   @id @default(cuid())
+  siteId          String
+  site            Site     @relation(fields: [siteId], references: [id], onDelete: Cascade)
+  languageId      String
+  language        Language @relation(fields: [languageId], references: [id], onDelete: Cascade)
+  templateId      String?
+  template        Template? @relation(fields: [templateId], references: [id], onDelete: SetNull)
+  authorId        String?
+  author          User?    @relation("PageAuthor", fields: [authorId], references: [id], onDelete: SetNull)
+  parentId        String?
+  parent          Page?    @relation("PageTree", fields: [parentId], references: [id], onDelete: SetNull)
+  children        Page[]   @relation("PageTree")
+  title           String
+  menuTitle       String   @default("")
+  slug            String   // SEO path segment
+  metaDescription String   @default("")
+  isDefault       Boolean  @default(false)
+  isHidden        Boolean  @default(false)
+  inMenu          Boolean  @default(true)
+  sortOrder       Int      @default(0)
+  /// Original MotionCMS page.id — used for #internalURI{id} link resolution
+  legacyId        Int?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  blocks          PageBlock[]
+
+  @@unique([siteId, languageId, slug])
+  @@index([siteId, parentId])
+  @@index([siteId, legacyId])
+}
+
+model PageBlock {
+  id              String   @id @default(cuid())
+  pageId          String
+  page            Page     @relation(fields: [pageId], references: [id], onDelete: Cascade)
+  templateBlockId String?
+  templateBlock   TemplateBlock? @relation(fields: [templateBlockId], references: [id], onDelete: SetNull)
+  content         String   @default("") // HTML / JSON content
+  css             String   @default("")
+  sortOrder       Int      @default(0)
+  isHidden        Boolean  @default(false)
+  updatedAt       DateTime @updatedAt
+}
+
+/// Reusable snippets (old "inserts")
+model Insert {
+  id           String  @id @default(cuid())
+  siteId       String
+  site         Site    @relation(fields: [siteId], references: [id], onDelete: Cascade)
+  tag          String  // e.g. {{footer}}
+  content      String  @default("")
+  onlyInRender Boolean @default(false)
+
+  @@unique([siteId, tag])
+}
+
+model SiteSetting {
+  id     String @id @default(cuid())
+  siteId String
+  site   Site   @relation(fields: [siteId], references: [id], onDelete: Cascade)
+  key    String
+  value  String @default("")
+
+  @@unique([siteId, key])
+}
+
+model MediaAsset {
+  id        String   @id @default(cuid())
+  siteId    String
+  site      Site     @relation(fields: [siteId], references: [id], onDelete: Cascade)
+  filename  String
+  path      String
+  mimeType  String   @default("")
+  sizeBytes Int      @default(0)
+  alt       String   @default("")
+  createdAt DateTime @default(now())
+}
+
+model AuditLog {
+  id        String   @id @default(cuid())
+  userId    String?
+  user      User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  severity  String   @default("info")
+  module    String
+  action    String
+  payload   String   @default("") // JSON string
+  createdAt DateTime @default(now())
+}
