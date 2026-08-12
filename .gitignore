@@ -51,3 +51,7 @@ prisma/dev.db-journal
 # uploaded media (keep folder)
 /public/uploads/**
 !/public/uploads/.gitkeep
+
+# statically generated websites
+/public/sites/**
+!/public/sites/.gitkeep

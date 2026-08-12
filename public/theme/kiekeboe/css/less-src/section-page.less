@@ -1,0 +1,187 @@
+
+.fullwidth,
+.image_right,
+.image_left,
+.section-afbeelding-rechts
+
+{
+ 
+ 	h2
+	{
+	font-weight:400;
+	font-size:30px;
+	margin:24px 0 24px;
+	}
+	.content{
+		margin-bottom: 40px;
+	}
+	
+	.content,
+	.content p,
+	.content td,
+	.content li,
+	.content a{
+		font-weight:300;
+		font-size:16px;
+		line-height:24px;
+		color:#44463f;
+
+	}
+	img{
+		margin-top: 20px;
+	}
+}
+
+.image_right{}
+.image_right h2{
+		
+
+}
+.image_right .content{
+	width:60%;
+	float:left;
+}
+.image_left .content{
+	width:60%;
+	float:left;
+}
+.image_right .content p{
+	padding:0 30px 24px 0;
+}
+.image_left .content p{
+	padding:0 0 24px 30px;
+}
+.image_right img{
+	float:right;
+	width:40%;
+}
+.image_left img{
+	float:left;
+	width:40%;
+}
+
+.main_content h4{
+	font-weight:400;
+	font-size:24px;
+	padding:35px 0 0 0;
+}
+.image_right h4{
+		font-weight:300;
+	font-size:24px;
+	padding:30px 0;
+}
+.main_content h5{
+		font-weight:400;
+	font-size:18px;
+	padding:30px 0;
+}
+.main_content i{
+		font-weight:300;
+	font-size:16px;
+	line-height:24px;
+	padding:30px 0;
+	display:block;
+	width:75%;
+}
+.table_list tr{}
+.table_list tr td{
+		font-weight:300;
+	font-size:16px;
+	line-height:30px;
+	width:50%;
+}
+.image_right img.auto{
+	height:149px;
+	width:106px;
+}
+.add_space{
+	position: fixed;
+}
+.add_space img{
+	
+}
+
+
+.page-content h1{
+	margin: 36px 0 ;
+	font-size: 36px;
+	color: #44463f;
+	font-weight: 500;
+}
+
+
+.main_content{
+	min-height:900px;
+	margin-bottom: 90px;
+}
+
+
+#Container .mix{
+	display: none;
+}
+
+.affix{
+	position:fixed;
+	top:60;
+	right:0;
+	z-index:2147483646;
+}
+
+
+/*Custom Media Query Css*/
+
+@media only screen and (min-width: 768px) and (max-width: 991px) {
+	.dec_block{
+		width:100%;
+	}
+	.image_block{
+		width:100%;
+	}
+}
+
+
+
+@media only screen and (max-width: 767px) {
+
+	.page h1{
+		font-size: 30px;
+		margin: 24px 0 24px 0;
+	}
+	.page h2{
+		font-size: 24px;
+		
+	}
+
+	.main_content{
+		margin-bottom: 90px;
+	}
+
+	.dec_block{
+		width:100%;
+	}
+	.image_block{
+		width:100%;
+	}
+	.image_right img{
+		width:100%;
+		margin: 20px auto;
+	}
+	.image_left img{
+		width:100%;
+		margin: 20px auto;
+	}
+	.image_right .content{
+		width:100%;
+	}
+	.image_left .content{
+		width:100%;
+	}
+	.image_left .content p{
+		padding:0 30px 24px 0;
+	}
+	.image_right img.auto{
+		margin:0 auto;
+		text-align:center;
+	}
+
+}

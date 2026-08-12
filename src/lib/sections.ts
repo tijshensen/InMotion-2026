@@ -25,6 +25,7 @@ import {
   resolveInternalLinks,
   type LinkablePage,
 } from "./internal-links";
+import { isFullThemeShell, rewriteThemeAssetUrls } from "./theme";
 
 export type FieldType = "singleline" | "multiline" | "image" | "file";
 
@@ -426,21 +427,25 @@ export function buildEditorPreviewHtml(opts: {
     })
     .join("\n");
 
-  let shell = opts.shellHtml || TAILWIND_SHELL || defaultEditorShell();
-  // Upgrade legacy Bootstrap shells so the editor matches public output
-  if (
-    /bootstrap/i.test(shell) ||
-    (!shell.includes("tailwindcss") && !shell.includes("{{sections}}"))
-  ) {
+  // Keep full site themes (Bootstrap/custom) as-is so the builder matches live CSS
+  let shell = (opts.shellHtml || "").trim() || TAILWIND_SHELL || defaultEditorShell();
+  const fullTheme = isFullThemeShell(shell);
+  if (!fullTheme && !shell.includes("{{sections}}") && shell.length < 500) {
     shell = TAILWIND_SHELL;
   }
-  if (!shell.includes("tailwindcss") && !shell.includes("cdn.tailwindcss.com")) {
-    // Inject Tailwind CDN into head if missing
+  // Only inject Tailwind CDN for Tailwind/minimal shells — never for full Bootstrap themes
+  if (
+    !fullTheme &&
+    !shell.includes("cdn.tailwindcss.com") &&
+    !shell.includes("kiekeboe.css")
+  ) {
     shell = shell.replace(
       /<\/head>/i,
       `<script src="https://cdn.tailwindcss.com"><\/script></head>`,
     );
   }
+
+  shell = rewriteThemeAssetUrls(shell, opts.siteSlug || "kiekeboe");
 
   let html = shell
     .replaceAll("{{page.title}}", escapeHtml(opts.pageTitle))
@@ -449,6 +454,7 @@ export function buildEditorPreviewHtml(opts: {
       escapeHtml(opts.metaDescription || ""),
     )
     .replaceAll("{{site.title}}", escapeHtml(opts.siteTitle))
+    .replaceAll("{{site.slug}}", escapeHtml(opts.siteSlug || ""))
     .replaceAll("{{menu}}", opts.menuHtml || "")
     .replaceAll("{{sections}}", sectionsHtml);
 

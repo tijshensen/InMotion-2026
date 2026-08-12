@@ -1,0 +1,103 @@
+/*VISIE*/
+
+
+
+
+.media{
+	margin-bottom: 40px;
+}
+
+@media (max-width: 767px)
+{
+	.media-wrapper {
+		background: none !important;
+		float: none !important;
+		width: 100% !important;
+	}
+}
+
+@media (max-width: 767px){
+	.media{
+		img {
+			width: 100%;
+		}
+	}
+}
+
+.media-wrapper{
+	width: 50%;
+	float: left;
+}
+.media-wrapper.media-werkwijze{
+	width: 50%;
+	float: right;
+}
+
+@media (min-width: 768px)
+{
+	.media-wrapper.media-visie 
+	{
+	background: url("../images/visie.jpg") no-repeat center center;
+	-webkit-background-size: cover;
+	-moz-background-size: cover;
+	-o-background-size: cover;
+	background-size: cover;
+	min-height: 369px;
+	width: 48%;
+	}
+	
+	.media-wrapper.media-werkwijze 
+	{
+	background: url("../images/werkwijze.jpg") no-repeat center center;
+	-webkit-background-size: cover;
+	-moz-background-size: cover;
+	-o-background-size: cover;
+	background-size: cover;
+	min-height: 369px;
+	width: 48%;
+	}
+	
+}
+
+.media-body{
+	min-height: 369px;
+	padding:40px 60px 10px 30px;
+	overflow: hidden;
+	zoom: 1;
+	
+	p{
+		font-weight:400;
+		font-size:24px;
+		line-height:36px;
+		color:#fff;
+		margin-bottom: 24px;
+
+	}
+}
+
+.media-heading
+{
+	padding-bottom: 20px;
+ 	a, span{
+		font-weight: 700;
+		text-transform: uppercase;
+		color: #ffccbc;
+	}
+}
+
+.werkwijze .media-heading a,
+.werkwijze .media-heading span
+{
+	color: #e1bee7;
+}
+
+
+.media-body.media-visie{
+		background: #E65100;
+		border-bottom: 9px solid #d84315;
+}
+
+.media-body.media-werkwijze{
+		background: #9c27b0;
+		border-bottom: 9px solid #8e24aa;
+}

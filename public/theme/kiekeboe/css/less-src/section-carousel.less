@@ -1,0 +1,72 @@
+
+.carousel{
+
+	.carousel-caption{
+	
+		left: 10%;
+		right: 10%;
+		background: rgba(0, 123, 157, 0.2);
+		padding: 19px 25px;
+		-webkit-transition: all 1s ease;
+		-moz-transition: all 1s ease;
+		-ms-transition: all 1s ease;
+		-o-transition: all 1s ease;
+		transition: all 1s ease;
+		text-align: left;
+		
+		h3{
+			font-weight: 700;
+			color: @white;
+			opacity: 1;
+			text-shadow: @shadow-z1;
+			font-size: 24px;
+			line-height: 36px;	
+		}
+
+	}
+
+	.carousel-control.right,
+	.carousel-control.left
+	{	
+		background: none;
+	}
+
+	.icon-next, 
+	.icon-prev{
+		font-family: FontAwesome;
+		font-size: 60px;
+		color: @white;
+		text-shadow: none;
+		top: 40%;
+	}
+	.icon-prev{
+		left: 20% !important;
+	}
+	.icon-next{
+		right: 20% !important;
+	}
+
+	.icon-next:before {
+		content: "\f105";
+	}
+
+	.icon-prev:before {
+		content: "\f104";
+	}
+}
+
+
+@media (min-width: @screen-md-min)
+{ 
+	.carousel
+	{
+		.carousel-caption
+		{
+			h3{
+				font-size: 30px;
+				line-height: 43px;
+			}
+		}
+	}
+}
+

@@ -17,6 +17,8 @@
     "db:convert-tailwind": "tsx scripts/convert-bootstrap-to-tailwind.ts",
     "db:fix-links": "tsx scripts/fix-internal-links.ts",
     "db:install-themes": "tsx scripts/install-full-themes.ts",
+    "theme:compile-less": "tsx scripts/compile-theme-less.ts",
+    "site:generate": "tsx scripts/generate-site-cli.ts",
     "postinstall": "prisma generate"
   },
   "dependencies": {
@@ -34,6 +36,7 @@
     "@uiw/react-codemirror": "^4.25.11",
     "bcryptjs": "^3.0.3",
     "jose": "^6.2.8",
+    "less": "^4.8.1",
     "nanoid": "^6.0.1",
     "next": "15.5.23",
     "react": "19.1.0",

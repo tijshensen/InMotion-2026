@@ -1,0 +1,119 @@
+@background: #263238;
+@tint-light:#ff7043;
+@tint: #f05a03;
+@font-color: #263238;
+@font-color-hover: @tint;
+@shadow-z1: 0 2px 5px 0 rgba(0,0,0,.26);
+@inner-shadow: inset 0px 4px 6px 2px rgba(84,84,84,0.20);
+
+.background-size(@cover){
+	-webkit-background-size: @cover;
+	-moz-background-size: 	 @cover;
+	-o-background-size: 	 @cover;
+	-background-size: 		 @cover;
+}
+
+.animation (@name, @duration: 300ms, @delay: 0, @ease: ease, @alternate: alternate) {
+	-webkit-animation: @name @duration @delay @ease @alternate;
+	-moz-animation:    @name @duration @delay @ease @alternate;
+	-ms-animation:     @name @duration @delay @ease @alternate;
+}
+
+.blur(@blur)
+{
+	-webkit-filter : blur(@blur);
+	-moz-filter    : blur(@blur);
+	-o-filter      : blur(@blur);
+	-ms-filter     : blur(@blur);
+	filter         : blur(@blur);
+}
+
+//*****TEXT*******//
+
+.text-center{
+	text-align: center;
+}
+
+
+.header-big
+{
+	font-size: 36px;
+	color: @grey-800;
+	font-weight: 300;
+	margin-bottom: 40px;
+}
+
+.offset-top-20{
+	margin-top: 20px;
+}
+
+img.center{
+	margin: 0 auto;
+}
+
+
+.linkedin:before
+{
+	color: @indigo-800;
+	font-family: fontAwesome;
+	content: "\f0e1";
+	font-size: 16px;
+	margin-right: 10px;
+	padding: 6px 8px;
+	border: 2px solid @indigo-800;
+	border-radius: 4px;
+}
+
+.linkedin:hover{
+	color: @indigo-900;
+}
+
+
+
+
+
+//*****Buttons******//
+
+.btn {
+	background: none;
+	-webkit-transition: all .3s ease;
+	-moz-transition: all .3s ease;
+	transition: all .3s ease;
+	min-width: 155px;
+}
+
+.btn-primary {
+
+	display: inline-block;
+	padding: 14px 28px 13px 28px;
+	line-height: 1;
+	border: 2px solid rgb(52, 152, 219);
+	font-weight: bold;
+	font-size: 11px;
+	text-transform: uppercase;
+	letter-spacing: 1px;
+	color: rgb(52, 152, 219);
+}
+
+.btn-white {
+	border-color: rgb(255, 255, 255);
+	color: rgb(255, 255, 255);
+}
+
+
+.btn-white:hover {
+	background: rgb(255, 255, 255);
+	color: rgb(51, 51, 51);
+	border-color: rgb(255, 255, 255);
+}
+
+
+
+//*****Modals******//
+
+.modal-content{
+
+	h4,label{
+		font-weight: 300;
+	}
+}

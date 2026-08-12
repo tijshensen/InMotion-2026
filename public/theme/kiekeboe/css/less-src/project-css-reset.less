@@ -1,0 +1,77 @@
+/* #####################  RESET CSS  ##################### */
+
+html, body, div, span, applet, object, iframe,
+h1, h2, h3, h4, h5, h6, p, blockquote, pre,
+a, abbr, acronym, address, big, cite, code,
+del, dfn, em, font, ins, kbd, q, s, samp,
+small, strike, strong, tt, var,
+b, u, i, center,
+dl, dt, dd, ol, ul, li,
+fieldset, form, label, legend,
+table, caption, tbody, tfoot, thead, tr, th, td {
+	margin: 0;
+	padding: 0;
+	border: 0;
+	outline: 0;
+	vertical-align: baseline;
+	background: transparent;
+}
+img{
+	margin: 0;
+	padding: 0;
+	border: 0;
+	outline: 0;
+	background: transparent;
+}
+ol, ul {
+	list-style: none;
+}
+blockquote, q {
+	quotes: none;
+}
+blockquote:before, blockquote:after,
+q:before, q:after {
+	content: '';
+	content: none;
+}
+
+
+body{
+	font-family: 'Roboto', sans-serif;
+	-webkit-font-smoothing: antialiased;
+	font-weight: 400;
+	line-height: 1;
+}
+
+a:focus,
+:focus {
+	outline: 0;
+	outline: none;
+}
+
+
+a {
+	text-decoration:none; 
+	font-weight:400;
+	color: @font-color;
+	-webkit-transition: all .3s ease;
+	transition: all .3s ease;
+}
+a:hover {
+	text-decoration:none; 
+	color: @font-color-hover;
+}
+
+
+p, li{
+	font-weight:300;
+	font-size:16px;
+	line-height:24px;
+	color: @font-color;
+}
+
+//***FOR RESPONSIVE TABLES***//
+
+@-moz-document url-prefix() {
+  fieldset { display: table-cell; }
+}

@@ -1,10 +1,12 @@
 import { prisma } from "@/lib/db";
 import { requireUser } from "@/lib/auth";
+import { getActiveSite } from "@/lib/site-context";
 import { CreatePageForm } from "./create-page-form";
 import { PagesTable } from "./pages-table";
 
 export default async function PagesAdminPage() {
   await requireUser();
+  const active = await getActiveSite();
 
   const sites = await prisma.site.findMany({
     include: {
@@ -15,7 +17,8 @@ export default async function PagesAdminPage() {
   });
 
   const pages = await prisma.page.findMany({
-    orderBy: [{ siteId: "asc" }, { sortOrder: "asc" }],
+    where: active ? { siteId: active.id } : undefined,
+    orderBy: [{ sortOrder: "asc" }],
     include: {
       site: true,
       language: true,
@@ -23,7 +26,7 @@ export default async function PagesAdminPage() {
     },
   });
 
-  const kiekeboeId = sites.find((s) => s.slug === "kiekeboe")?.id;
+  const defaultSiteId = active?.id || sites[0]?.id;
 
   return (
     <div className="space-y-8">
@@ -31,21 +34,22 @@ export default async function PagesAdminPage() {
         <div>
           <h1 className="text-2xl font-semibold">Pages</h1>
           <p className="text-slate-500 mt-1">
-            Open <strong>Builder</strong> on any row to edit title + body with
-            the visual page builder.
+            {active
+              ? `Editing pages for ${active.name}`
+              : "Select a website from the top bar."}
           </p>
         </div>
       </div>
 
       <CreatePageForm
         sites={JSON.parse(JSON.stringify(sites))}
-        defaultSiteId={kiekeboeId}
+        defaultSiteId={defaultSiteId}
       />
 
       <PagesTable
         pages={JSON.parse(JSON.stringify(pages))}
         sites={sites.map((s) => ({ id: s.id, name: s.name, slug: s.slug }))}
-        defaultSiteId={kiekeboeId}
+        defaultSiteId={defaultSiteId}
       />
     </div>
   );

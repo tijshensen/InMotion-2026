@@ -48,6 +48,12 @@ model Site {
   domain      String?
   siteTitle   String   @default("")
   isActive    Boolean  @default(true)
+  /// Visual CSS framework for this site: bootstrap | tailwind | none | custom
+  cssFramework String  @default("none")
+  /// Folder under /public/theme/{themeSlug} and /sites/{slug} for static publish
+  themeSlug   String   @default("")
+  /// When the static site was last generated
+  lastGeneratedAt DateTime?
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
