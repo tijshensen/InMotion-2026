@@ -260,6 +260,11 @@ function FieldEditors({
   onChange: (key: string, value: string) => void;
 }) {
   const [mediaFor, setMediaFor] = useState<string | null>(null);
+  const mediaField = mediaFor
+    ? fields.find((x) => x.key === mediaFor) ?? null
+    : null;
+  const cropW = mediaField?.width ? parseInt(mediaField.width, 10) : NaN;
+  const cropH = mediaField?.height ? parseInt(mediaField.height, 10) : NaN;
 
   if (!fields.length) {
     return (
@@ -283,6 +288,9 @@ function FieldEditors({
             <span className="text-[10px] uppercase tracking-wide text-slate-400">
               {f.type}
               {f.width ? ` · ${f.width}×${f.height || "auto"}` : ""}
+              {f.type === "image" && f.width && f.height
+                ? " · crop"
+                : ""}
             </span>
           </div>
 
@@ -436,6 +444,16 @@ function FieldEditors({
         <MediaPicker
           open
           siteId={siteId}
+          targetWidth={
+            mediaField?.type === "image" && Number.isFinite(cropW) && cropW > 0
+              ? cropW
+              : null
+          }
+          targetHeight={
+            mediaField?.type === "image" && Number.isFinite(cropH) && cropH > 0
+              ? cropH
+              : null
+          }
           onClose={() => setMediaFor(null)}
           onSelect={(asset: MediaItem) => {
             onChange(mediaFor, asset.path);
