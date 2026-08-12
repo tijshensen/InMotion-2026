@@ -13,6 +13,7 @@ import {
   buildEditorPreviewHtml,
   parseSectionFields,
   parseStoredContent,
+  renderSectionHtml,
   serializeFields,
   type FieldType,
   type SectionField,
@@ -21,6 +22,7 @@ import {
   encodeInternalLink,
   isInternalLinkRef,
   parseInternalLinkRef,
+  resolveInternalLinks,
   type LinkablePage,
 } from "@/lib/internal-links";
 import { MediaPicker, type MediaItem } from "@/components/media-picker";
@@ -592,9 +594,10 @@ export function VisualPageBuilder({
     "desktop",
   );
   const iframeRef = useRef<HTMLIFrameElement>(null);
-  /** Last known iframe scroll — updated continuously, restored after srcDoc rewrites */
+  /** Last known iframe scroll — restored only after rare full srcDoc reloads */
   const scrollRestore = useRef(0);
-  const previewHtmlRef = useRef("");
+  /** Last content/css we painted into each section (skip no-op writes) */
+  const paintedContentRef = useRef<Map<string, string>>(new Map());
 
   const ordered = useMemo(
     () => [...sections].sort((a, b) => a.sortOrder - b.sortOrder),
@@ -609,11 +612,40 @@ export function VisualPageBuilder({
     : {};
 
   /**
-   * Selection is NOT included in the HTML document.
-   * Rebuilding srcDoc on select was reloading the iframe (jump to top then back).
-   * Highlight is applied in-DOM instead (see applySelectionInIframe).
+   * Full iframe document only rebuilds when page structure changes
+   * (add/remove/reorder sections, shell, menu, page meta).
+   * Field value edits do NOT change this key — those patch the iframe DOM.
    */
-  const previewHtml = useMemo(
+  const structureKey = useMemo(
+    () =>
+      [
+        shellHtml,
+        pageTitle,
+        siteTitle,
+        metaDescription,
+        menuHtml,
+        siteSlug,
+        inserts.map((i) => `${i.tag}:${i.content}`).join("||"),
+        ordered
+          .map(
+            (s) =>
+              `${s.id}:${s.templateBlockId ?? ""}:${s.sortOrder}:${s.templateBlock?.defaultHtml?.length ?? 0}`,
+          )
+          .join("|"),
+      ].join("###"),
+    [
+      shellHtml,
+      pageTitle,
+      siteTitle,
+      metaDescription,
+      menuHtml,
+      siteSlug,
+      inserts,
+      ordered,
+    ],
+  );
+
+  const documentHtml = useMemo(
     () =>
       buildEditorPreviewHtml({
         shellHtml,
@@ -634,43 +666,78 @@ export function VisualPageBuilder({
           name: s.templateBlock?.name,
         })),
       }),
-    [
-      shellHtml,
-      pageTitle,
-      siteTitle,
-      metaDescription,
-      menuHtml,
-      inserts,
-      ordered,
-      siteSlug,
-      linkPages,
-    ],
+    // structureKey encodes structural deps; ordered content is snapshotted at rebuild time
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [structureKey, linkPages],
   );
 
-  const applySelectionInIframe = useCallback((sectionId: string | null) => {
-    const doc = iframeRef.current?.contentDocument;
-    if (!doc) return;
-    doc.querySelectorAll(".cms-edit-section.is-selected").forEach((el) => {
-      el.classList.remove("is-selected");
-    });
-    if (!sectionId) return;
-    // CSS.escape is available in modern browsers; fallback for odd ids
+  const sectionSelector = useCallback((sectionId: string) => {
     const safe =
       typeof CSS !== "undefined" && typeof CSS.escape === "function"
         ? CSS.escape(sectionId)
         : sectionId.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
-    const el = doc.querySelector(
-      `.cms-edit-section[data-section-id="${safe}"]`,
-    );
-    if (el) el.classList.add("is-selected");
+    return `.cms-edit-section[data-section-id="${safe}"]`;
   }, []);
+
+  const applySelectionInIframe = useCallback(
+    (sectionId: string | null) => {
+      const doc = iframeRef.current?.contentDocument;
+      if (!doc) return;
+      doc.querySelectorAll(".cms-edit-section.is-selected").forEach((el) => {
+        el.classList.remove("is-selected");
+      });
+      if (!sectionId) return;
+      const el = doc.querySelector(sectionSelector(sectionId));
+      if (el) el.classList.add("is-selected");
+    },
+    [sectionSelector],
+  );
+
+  /** Patch one section's body in the live iframe without reloading srcDoc. */
+  const paintSectionInIframe = useCallback(
+    (s: PageSection) => {
+      const doc = iframeRef.current?.contentDocument;
+      if (!doc) return false;
+      const wrap = doc.querySelector(sectionSelector(s.id));
+      if (!wrap) return false;
+      const body = wrap.querySelector(".cms-edit-body");
+      if (!body) return false;
+
+      const paintKey = `${s.content}\n/*css*/\n${s.css}\n/*hidden*/\n${s.isHidden}`;
+      if (paintedContentRef.current.get(s.id) === paintKey) {
+        return true;
+      }
+
+      let html = renderSectionHtml(
+        s.templateBlock?.defaultHtml || "",
+        s.content,
+        s.css,
+      );
+      if (siteSlug && linkPages.length) {
+        html = resolveInternalLinks(html, siteSlug, linkPages);
+      }
+
+      // Preserve scroll: only replace the section body, never the document
+      body.innerHTML = html || "";
+      wrap.classList.toggle("is-hidden", Boolean(s.isHidden));
+      paintedContentRef.current.set(s.id, paintKey);
+      return true;
+    },
+    [sectionSelector, siteSlug, linkPages],
+  );
+
+  const paintAllSectionsInIframe = useCallback(() => {
+    for (const s of ordered) {
+      paintSectionInIframe(s);
+    }
+    applySelectionInIframe(selectedSectionId);
+  }, [ordered, paintSectionInIframe, applySelectionInIframe, selectedSectionId]);
 
   const restoreIframeScroll = useCallback(() => {
     const win = iframeRef.current?.contentWindow;
     if (!win) return;
     const y = scrollRestore.current;
     if (y <= 0) return;
-    // Immediate + rAF — srcDoc paint can reset scroll after first write
     win.scrollTo(0, y);
     requestAnimationFrame(() => {
       win.scrollTo(0, y);
@@ -681,30 +748,43 @@ export function VisualPageBuilder({
   const onIframeLoad = useCallback(() => {
     const win = iframeRef.current?.contentWindow;
     if (win) {
-      // Track scroll continuously so we never capture "0" after a reload
       const onScroll = () => {
         scrollRestore.current = win.scrollY || 0;
       };
       win.addEventListener("scroll", onScroll, { passive: true });
-      // stash remover on the window for this document lifetime
       (win as unknown as { __cmsScrollOff?: () => void }).__cmsScrollOff = () =>
         win.removeEventListener("scroll", onScroll);
     }
+    // Full document just loaded — content is already correct from documentHtml.
+    // Seed paint cache so we don't rewrite immediately.
+    paintedContentRef.current.clear();
+    for (const s of ordered) {
+      const paintKey = `${s.content}\n/*css*/\n${s.css}\n/*hidden*/\n${s.isHidden}`;
+      paintedContentRef.current.set(s.id, paintKey);
+    }
     restoreIframeScroll();
     applySelectionInIframe(selectedSectionId);
-  }, [restoreIframeScroll, applySelectionInIframe, selectedSectionId]);
+  }, [
+    ordered,
+    restoreIframeScroll,
+    applySelectionInIframe,
+    selectedSectionId,
+  ]);
 
-  // When content HTML actually changes, keep scroll; do not rebuild for selection
+  // Capture scroll before rare full reloads (structure change only)
   useEffect(() => {
-    if (previewHtmlRef.current === previewHtml) return;
-    // Capture scroll from current document *before* React commits new srcDoc
     const win = iframeRef.current?.contentWindow;
     if (win) {
       const y = win.scrollY || 0;
       if (y > 0) scrollRestore.current = y;
     }
-    previewHtmlRef.current = previewHtml;
-  }, [previewHtml]);
+    paintedContentRef.current.clear();
+  }, [structureKey]);
+
+  // Field / CSS / hide edits: patch only the changed section body
+  useEffect(() => {
+    paintAllSectionsInIframe();
+  }, [paintAllSectionsInIframe]);
 
   // Selection highlight without reloading the iframe
   useEffect(() => {
@@ -717,7 +797,6 @@ export function VisualPageBuilder({
       const data = ev.data;
       if (!data || data.type !== "cms-select-section") return;
       if (typeof data.sectionId !== "string") return;
-      // Remember scroll at click time (before any parent layout shift)
       const win = iframeRef.current?.contentWindow;
       if (win) scrollRestore.current = win.scrollY || 0;
       setSelectedSectionId(data.sectionId);
@@ -880,7 +959,7 @@ export function VisualPageBuilder({
               ref={iframeRef}
               title="Page preview"
               className="h-full w-full border-0 bg-white"
-              srcDoc={previewHtml}
+              srcDoc={documentHtml}
               onLoad={onIframeLoad}
               sandbox="allow-same-origin allow-scripts"
             />
