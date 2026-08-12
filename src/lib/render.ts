@@ -132,6 +132,7 @@ export async function renderPublicPage({
     .replaceAll("{{page.title}}", escapeHtml(page.title))
     .replaceAll("{{page.metaDescription}}", escapeHtml(page.metaDescription))
     .replaceAll("{{site.title}}", escapeHtml(site.siteTitle || site.name))
+    .replaceAll("{{site.slug}}", escapeHtml(site.slug))
     .replaceAll("{{menu}}", menu)
     .replaceAll("{{sections}}", sectionsHtml);
 

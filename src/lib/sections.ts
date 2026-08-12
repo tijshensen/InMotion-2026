@@ -570,18 +570,21 @@ function defaultEditorShell() {
 <style>
   body { font-family: system-ui, sans-serif; }
   .cms-sections img, .cms-edit-body img { max-width: 100%; height: auto; }
-  .menu { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 0.25rem 1.25rem; }
-  .submenu { list-style: none; margin: 0.35rem 0 0; padding-left: 0.5rem; border-left: 2px solid #334155; display: flex; flex-direction: column; gap: 0.25rem; }
-  .menu a { color: #cbd5e1; text-decoration: none; }
   .single_activiteiten img { width: 100%; display: block; object-fit: cover; }
   .single_activiteiten h5 { margin: 0; padding: 0.75rem 1rem; font-size: 0.95rem; font-weight: 600; }
+  .cms-nav .cms-menu, .cms-nav .cms-submenu { list-style: none; margin: 0; padding: 0; }
+  .cms-nav-panel.cms-nav-open { display: block !important; }
+  @media (min-width: 768px) {
+    .cms-nav-panel { display: block !important; }
+    .cms-nav .cms-submenu-toggle { display: none !important; }
+  }
 </style>
 </head>
 <body class="min-h-screen bg-slate-50 text-slate-900">
-<header class="bg-slate-900 text-white">
-  <div class="mx-auto flex max-w-6xl flex-col gap-3 px-4 py-4 sm:flex-row sm:items-center sm:justify-between">
-    <strong class="text-lg">{{site.title}}</strong>
-    <nav class="text-sm">{{menu}}</nav>
+<header class="bg-slate-900 text-white shadow">
+  <div class="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-3 px-4 py-3 md:py-4">
+    <strong class="text-lg font-semibold tracking-tight">{{site.title}}</strong>
+    {{menu}}
   </div>
 </header>
 <main class="cms-sections mx-auto max-w-6xl px-4 py-8">{{sections}}</main>
