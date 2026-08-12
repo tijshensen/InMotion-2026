@@ -180,18 +180,20 @@ export function AdminShell({
     <div
       className={[
         "flex flex-col bg-slate-50",
-        isCanvas ? "h-dvh max-h-dvh overflow-hidden" : "min-h-screen",
+        isCanvas
+          ? "fixed inset-0 z-30 h-[100dvh] max-h-[100dvh] overflow-hidden"
+          : "min-h-screen",
       ].join(" ")}
       style={
         {
-          ["--admin-header-h" as string]: `${headerH}px`,
+          ["--admin-header-h" as string]: `${Math.max(headerH, 48)}px`,
         } as React.CSSProperties
       }
     >
-      {/* Top bar — sticky, single row (scroll horizontally on small screens) */}
+      {/* Top bar — always on top of canvas content */}
       <header
         ref={headerRef}
-        className="shrink-0 z-50 flex items-center gap-2 sm:gap-3 border-b border-slate-800 bg-slate-950 px-3 py-2 text-sm overflow-x-auto"
+        className="shrink-0 z-[60] flex items-center gap-2 sm:gap-3 border-b border-slate-800 bg-slate-950 px-3 py-2 text-sm overflow-x-auto"
       >
         <button
           type="button"
@@ -533,7 +535,7 @@ export function AdminShell({
         )}
       </header>
 
-      <div className="flex flex-1 min-h-0 relative overflow-hidden">
+      <div className="flex flex-1 min-h-0 h-0 relative overflow-hidden">
         {/* Left navigation — slides off screen when collapsed */}
         <aside
           className={[
@@ -602,24 +604,20 @@ export function AdminShell({
           </div>
         </aside>
 
-        <div
+        <main
           className={[
             "flex-1 min-w-0 min-h-0",
-            isCanvas
-              ? "overflow-hidden relative h-full"
-              : "overflow-auto",
+            isCanvas ? "overflow-hidden relative" : "overflow-auto",
           ].join(" ")}
         >
           {isCanvas ? (
-            <div className="absolute inset-0 flex flex-col min-h-0">
-              {children}
-            </div>
+            <div className="absolute inset-0 overflow-hidden">{children}</div>
           ) : (
             <div className="admin-main mx-auto max-w-5xl px-6 py-8">
               {children}
             </div>
           )}
-        </div>
+        </main>
       </div>
     </div>
   );

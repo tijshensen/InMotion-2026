@@ -1,4 +1,3 @@
-import Link from "next/link";
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/db";
 import { requireUser } from "@/lib/auth";
@@ -60,7 +59,6 @@ export default async function EditPageAdmin({ params }: Props) {
     },
   });
 
-  // Full list — menu HTML builders exclude isHidden / !inMenu / orphans
   const menuPages = allPages as MenuPage[];
   const linkPages = allPages.map((p) => ({
     id: p.id,
@@ -81,31 +79,9 @@ export default async function EditPageAdmin({ params }: Props) {
     content: i.content,
   }));
 
+  // Full-bleed canvas only — no breadcrumb bar (page select + actions live in top nav)
   return (
-    <div className="admin-page-builder -mx-6 -my-8 max-w-none">
-      <div className="flex flex-wrap items-center gap-3 border-b border-slate-200 bg-white px-4 py-3">
-        <Link
-          href="/admin/pages"
-          className="text-sm text-slate-500 hover:text-slate-800"
-        >
-          ← Pages
-        </Link>
-        <span className="text-slate-300">/</span>
-        <h1 className="text-sm font-semibold text-slate-900 truncate max-w-[40vw]">
-          {page.title}
-        </h1>
-        <span className="hidden sm:inline text-xs text-slate-400">
-          {page.site.name} · {page.template?.name || "no template"}
-        </span>
-        <Link
-          href={`/s/${page.site.slug}/${page.isDefault ? "" : page.slug}`}
-          target="_blank"
-          className="ml-auto rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs hover:bg-slate-50"
-        >
-          Open live page ↗
-        </Link>
-      </div>
-
+    <div className="admin-page-builder h-full min-h-0 w-full overflow-hidden">
       <PageEditor
         page={JSON.parse(JSON.stringify(page))}
         catalog={JSON.parse(JSON.stringify(catalog))}

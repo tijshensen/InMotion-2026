@@ -139,13 +139,23 @@ button {
   outline: none;
 }
 
-/* Page builder: full-bleed within admin shell */
-.admin-main:has(.admin-page-builder) {
-  max-width: none;
-  padding-left: 0;
-  padding-right: 0;
-  padding-top: 0;
-  padding-bottom: 0;
+/* Page builder: full-bleed canvas fills shell body under top bar */
+html,
+body {
+  height: 100%;
+}
+
+.admin-page-builder {
+  height: 100%;
+  min-height: 0;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.admin-page-builder > * {
+  min-height: 0;
 }
 
 .cms-page-canvas .cms-section-render img {

@@ -906,10 +906,10 @@ export function VisualPageBuilder({
   return (
     <div
       className={[
-        "relative flex flex-col",
+        "flex flex-col",
         chromeMode
-          ? "absolute inset-0 h-full w-full min-h-0"
-          : "min-h-[calc(100vh-5.5rem)]",
+          ? "h-full w-full min-h-0 overflow-hidden"
+          : "relative min-h-[calc(100vh-5.5rem)]",
       ].join(" ")}
     >
       {/* Local toolbar only outside admin chrome mode */}
@@ -951,25 +951,30 @@ export function VisualPageBuilder({
         </div>
       )}
 
-      {/* Canvas fills remaining space under top bar */}
+      {/* Canvas — explicit flex-1 + min-h-0 so iframe gets remaining viewport height */}
       <div
         className={[
-          "flex-1 min-h-0 w-full bg-slate-300/70 transition-[padding] duration-200",
-          chromeMode ? "p-0" : "p-3 sm:p-6",
-          panelOpen ? "lg:pr-[min(28rem,100%)]" : "",
+          "min-h-0 w-full bg-slate-400/40",
+          chromeMode ? "flex-1" : "flex-1 p-3 sm:p-6",
+          panelOpen ? "lg:pr-[28rem]" : "",
         ].join(" ")}
+        style={
+          chromeMode
+            ? { height: "100%", minHeight: 0 }
+            : undefined
+        }
       >
         <div
           className={[
-            "mx-auto overflow-hidden bg-white transition-all duration-200",
+            "mx-auto bg-white overflow-hidden transition-all duration-200",
             chromeMode
               ? "h-full w-full shadow-none rounded-none"
-              : "h-full min-h-[480px] rounded-lg shadow-2xl",
+              : "min-h-[480px] h-full rounded-lg shadow-2xl",
           ].join(" ")}
           style={{
             width: chromeMode && device === "desktop" ? "100%" : deviceWidth,
             maxWidth: "100%",
-            height: chromeMode ? "100%" : undefined,
+            height: "100%",
           }}
         >
           {ordered.length === 0 ? (
@@ -990,6 +995,7 @@ export function VisualPageBuilder({
               ref={iframeRef}
               title="Page preview"
               className="block h-full w-full border-0 bg-white"
+              style={{ height: "100%", minHeight: "100%" }}
               srcDoc={documentHtml}
               onLoad={onIframeLoad}
               sandbox="allow-same-origin allow-scripts"
@@ -998,15 +1004,18 @@ export function VisualPageBuilder({
         </div>
       </div>
 
-      {/* Slide-in panel — offset below admin top bar via CSS variable */}
+      {/* Section editor — always below measured top bar */}
       <aside
         className={[
-          "fixed right-0 z-40 flex w-full max-w-md flex-col border-l border-slate-200 bg-white shadow-2xl transition-transform duration-200 ease-out",
-          chromeMode
-            ? "bottom-0 top-[var(--admin-header-h,3.5rem)]"
-            : "inset-y-0",
+          "fixed right-0 z-[55] flex w-full max-w-md flex-col border-l border-slate-200 bg-white shadow-2xl transition-transform duration-200 ease-out",
+          "bottom-0",
           panelOpen ? "translate-x-0" : "translate-x-full",
         ].join(" ")}
+        style={{
+          top: chromeMode
+            ? "var(--admin-header-h, 56px)"
+            : 0,
+        }}
         aria-hidden={!panelOpen}
       >
         {selected && (
