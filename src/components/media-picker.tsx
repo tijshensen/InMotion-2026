@@ -273,7 +273,14 @@ export function MediaPicker({
                           <img
                             src={item.path}
                             alt={item.alt || item.filename}
-                            className="max-h-full max-w-full object-contain"
+                            className="h-full w-full object-cover"
+                            onError={(e) => {
+                              // Fallback if cover fails (broken/missing file)
+                              const el = e.currentTarget;
+                              el.className =
+                                "max-h-full max-w-full object-contain opacity-40";
+                              el.alt = "Preview unavailable";
+                            }}
                           />
                         </div>
                         <div className="px-2 py-1.5">

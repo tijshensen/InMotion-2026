@@ -176,10 +176,8 @@ export async function cropAndResizeImage(opts: {
   await mkdir(dir, { recursive: true });
 
   const id = randomBytes(8).toString("hex");
-  const baseLabel = originalBasename(
-    opts.originalFilename || path.basename(opts.sourcePublicPath),
-  ).replace(/\.[^.]+$/, "");
-  const storedName = `c${id}-${baseLabel}-${targetWidth}x${targetHeight}.jpg`;
+  // Keep crop filenames simple (no multi-dot originals) for reliable URLs
+  const storedName = `c${id}-${targetWidth}x${targetHeight}.jpg`;
   const diskPath = path.join(dir, storedName);
 
   const buffer = await sharp(abs)

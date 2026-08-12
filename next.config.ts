@@ -12,6 +12,19 @@ const nextConfig: NextConfig = {
     },
   },
   trailingSlash: false,
+  /**
+   * Serve /uploads/* via API route that reads disk on each request.
+   * Avoids next start static-file cache missing files written after boot
+   * (new uploads + crops).
+   */
+  async rewrites() {
+    return [
+      {
+        source: "/uploads/:path*",
+        destination: "/api/uploads/:path*",
+      },
+    ];
+  },
 };
 
 export default nextConfig;

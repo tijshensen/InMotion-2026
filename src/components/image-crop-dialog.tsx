@@ -228,26 +228,34 @@ export function ImageCropDialog({
           <div className="flex justify-center">
             <div
               ref={frameRef}
-              className="relative overflow-hidden rounded-xl border-2 border-blue-500 bg-slate-900 shadow-inner touch-none select-none cursor-grab active:cursor-grabbing"
+              className="relative overflow-hidden rounded-xl border-2 border-blue-500 bg-slate-200 shadow-inner touch-none select-none cursor-grab active:cursor-grabbing"
               style={{ width: frameSize.w, height: frameSize.h }}
               onPointerDown={onPointerDown}
               onPointerMove={onPointerMove}
               onPointerUp={onPointerUp}
               onPointerCancel={onPointerUp}
             >
+              {!ready && (
+                <p className="absolute inset-0 z-10 flex items-center justify-center text-xs text-slate-500 pointer-events-none">
+                  Loading image…
+                </p>
+              )}
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
                 src={imageUrl}
                 alt=""
                 draggable={false}
                 onLoad={onImageLoad}
+                onError={() => {
+                  setNatural({ w: 0, h: 0 });
+                }}
                 className="absolute max-w-none pointer-events-none"
                 style={{
                   width: imgDisplayW || undefined,
                   height: imgDisplayH || undefined,
                   left: offset.x,
                   top: offset.y,
-                  opacity: ready ? 1 : 0.3,
+                  opacity: ready ? 1 : 0,
                 }}
               />
               {/* Corner guides */}

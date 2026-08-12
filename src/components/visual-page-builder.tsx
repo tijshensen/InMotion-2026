@@ -252,12 +252,15 @@ function FieldEditors({
   siteId,
   linkPages,
   onChange,
+  onChangeMany,
 }: {
   fields: SectionField[];
   values: Record<string, string>;
   siteId: string;
   linkPages: LinkPageOption[];
   onChange: (key: string, value: string) => void;
+  /** Batch field updates (avoids stale overwrite when setting path + alt). */
+  onChangeMany: (updates: Record<string, string>) => void;
 }) {
   const [mediaFor, setMediaFor] = useState<string | null>(null);
   const mediaField = mediaFor
@@ -365,6 +368,7 @@ function FieldEditors({
                   {values[f.key] ? (
                     // eslint-disable-next-line @next/next/no-img-element
                     <img
+                      key={values[f.key]}
                       src={values[f.key]}
                       alt={values[f.key + META.alt] || f.label}
                       className="max-h-full max-w-full object-contain"
@@ -456,17 +460,22 @@ function FieldEditors({
           }
           onClose={() => setMediaFor(null)}
           onSelect={(asset: MediaItem) => {
-            onChange(mediaFor, asset.path);
             const field = fields.find((x) => x.key === mediaFor);
-            if (field?.type === "image" && asset.alt) {
-              onChange(mediaFor + META.alt, asset.alt);
+            const updates: Record<string, string> = {
+              [mediaFor]: asset.path,
+            };
+            if (field?.type === "image") {
+              // Always set alt key when picking an image (even if empty)
+              // so we batch with path in one state update
+              if (asset.alt) {
+                updates[mediaFor + META.alt] = asset.alt;
+              }
             }
             if (field?.type === "file") {
-              onChange(
-                mediaFor + META.fileLabel,
-                asset.filename || asset.alt || "Download",
-              );
+              updates[mediaFor + META.fileLabel] =
+                asset.filename || asset.alt || "Download";
             }
+            onChangeMany(updates);
             setMediaFor(null);
           }}
         />
@@ -576,10 +585,14 @@ export function VisualPageBuilder({
   }, []);
 
   function setField(key: string, value: string) {
+    setFields({ [key]: value });
+  }
+
+  function setFields(updates: Record<string, string>) {
     if (!selected) return;
     const fields = {
       ...parseStoredContent(selected.content, selectedHtml).fields,
-      [key]: value,
+      ...updates,
     };
     onChange(
       sections.map((s) =>
@@ -789,6 +802,7 @@ export function VisualPageBuilder({
                   siteId={siteId}
                   linkPages={linkPages}
                   onChange={setField}
+                  onChangeMany={setFields}
                 />
               )}
               {panelTab === "style" && (
