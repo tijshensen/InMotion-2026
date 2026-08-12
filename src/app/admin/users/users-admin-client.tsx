@@ -176,9 +176,17 @@ export function UsersAdminClient({
       )}
 
       <section className="rounded-xl border border-slate-200 bg-white p-4">
-        <h2 className="text-sm font-semibold text-slate-800 mb-3">
-          Organizations
-        </h2>
+        <div className="flex items-center justify-between gap-2 mb-3">
+          <h2 className="text-sm font-semibold text-slate-800">
+            Organizations
+          </h2>
+          <a
+            href="/admin/organizations"
+            className="text-xs text-blue-600 hover:underline"
+          >
+            Manage organizations →
+          </a>
+        </div>
         <ul className="grid gap-2 sm:grid-cols-2">
           {organizations.map((o) => (
             <li
@@ -192,7 +200,15 @@ export function UsersAdminClient({
             </li>
           ))}
           {organizations.length === 0 && (
-            <li className="text-sm text-slate-500">No organizations yet.</li>
+            <li className="text-sm text-slate-500">
+              No organizations yet.{" "}
+              <a
+                href="/admin/organizations"
+                className="text-blue-600 hover:underline"
+              >
+                Create one
+              </a>
+            </li>
           )}
         </ul>
       </section>

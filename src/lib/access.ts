@@ -236,6 +236,90 @@ export async function canManageOrgUsers(
   return mem?.role === "OWNER";
 }
 
+/** Edit org name/slug/active or delete (same as manage users: owner or superadmin). */
+export async function canManageOrganization(
+  actorId: string,
+  organizationId: string,
+): Promise<boolean> {
+  return canManageOrgUsers(actorId, organizationId);
+}
+
+/** Detailed org list for admin Organizations UI. */
+export async function listOrganizationsForAdmin(userId: string) {
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { role: true, isActive: true },
+  });
+  if (!user || !user.isActive) return [];
+
+  if (user.role === "SUPERADMIN") {
+    return prisma.organization.findMany({
+      orderBy: { name: "asc" },
+      include: {
+        _count: { select: { sites: true, members: true } },
+        members: {
+          where: { role: "OWNER" },
+          include: {
+            user: {
+              select: {
+                id: true,
+                email: true,
+                firstName: true,
+                lastName: true,
+              },
+            },
+          },
+          take: 5,
+        },
+        sites: {
+          select: { id: true, name: true, slug: true },
+          orderBy: { name: "asc" },
+          take: 20,
+        },
+      },
+    });
+  }
+
+  const memberships = await prisma.organizationMember.findMany({
+    where: { userId },
+    select: { organizationId: true, role: true },
+  });
+  if (!memberships.length) return [];
+
+  const orgs = await prisma.organization.findMany({
+    where: { id: { in: memberships.map((m) => m.organizationId) } },
+    orderBy: { name: "asc" },
+    include: {
+      _count: { select: { sites: true, members: true } },
+      members: {
+        where: { role: "OWNER" },
+        include: {
+          user: {
+            select: {
+              id: true,
+              email: true,
+              firstName: true,
+              lastName: true,
+            },
+          },
+        },
+        take: 5,
+      },
+      sites: {
+        select: { id: true, name: true, slug: true },
+        orderBy: { name: "asc" },
+        take: 20,
+      },
+    },
+  });
+
+  const roleByOrg = new Map(memberships.map((m) => [m.organizationId, m.role]));
+  return orgs.map((o) => ({
+    ...o,
+    myRole: roleByOrg.get(o.id) ?? "MEMBER",
+  }));
+}
+
 /** API helper: 401 / 403 / null when OK. */
 export async function assertSiteAccess(
   user: SessionUser | null,
