@@ -10,6 +10,7 @@ import {
   useState,
   useTransition,
 } from "react";
+import { useEditorChrome, type CanvasDevice } from "@/components/editor-chrome-context";
 
 export type AdminPageOption = {
   id: string;
@@ -52,6 +53,7 @@ export function AdminShell({
 }: AdminShellProps) {
   const router = useRouter();
   const pathname = usePathname();
+  const { chrome } = useEditorChrome();
   const [pending, startTransition] = useTransition();
   const [navCollapsed, setNavCollapsed] = useState(false);
   const [pageQuery, setPageQuery] = useState("");
@@ -63,6 +65,9 @@ export function AdminShell({
 
   const pageMenuRef = useRef<HTMLDivElement>(null);
   const publishMenuRef = useRef<HTMLDivElement>(null);
+
+  /** Page canvas editor route: /admin/pages/[id] */
+  const isCanvas = Boolean(pathname.match(/^\/admin\/pages\/[^/]+$/));
 
   useEffect(() => {
     setLocalHasChanges(hasUnpublishedChanges);
@@ -76,6 +81,11 @@ export function AdminShell({
       /* ignore */
     }
   }, []);
+
+  // Canvas mode: auto-collapse left nav so the page is top bar + canvas only
+  useEffect(() => {
+    if (isCanvas) setNavCollapsed(true);
+  }, [isCanvas]);
 
   const toggleNav = useCallback(() => {
     setNavCollapsed((c) => {
@@ -154,9 +164,14 @@ export function AdminShell({
   const hasPublished = Boolean(activeSite?.lastGeneratedAt);
 
   return (
-    <div className="min-h-screen flex flex-col bg-slate-50">
+    <div
+      className={[
+        "flex flex-col bg-slate-50",
+        isCanvas ? "h-screen overflow-hidden" : "min-h-screen",
+      ].join(" ")}
+    >
       {/* Top bar */}
-      <header className="sticky top-0 z-40 flex flex-wrap items-center gap-3 border-b border-slate-800 bg-slate-950 px-3 py-2 text-sm">
+      <header className="shrink-0 z-40 flex flex-wrap items-center gap-2 sm:gap-3 border-b border-slate-800 bg-slate-950 px-3 py-2 text-sm">
         <button
           type="button"
           onClick={toggleNav}
@@ -207,7 +222,13 @@ export function AdminShell({
         </div>
 
         {/* Filterable page selector */}
-        <div className="relative min-w-0 flex-1 max-w-md" ref={pageMenuRef}>
+        <div
+          className={[
+            "relative min-w-0 flex-1",
+            isCanvas ? "max-w-xs" : "max-w-md",
+          ].join(" ")}
+          ref={pageMenuRef}
+        >
           <label className="sr-only" htmlFor="admin-page-filter">
             Select page
           </label>
@@ -327,6 +348,60 @@ export function AdminShell({
           )}
         </div>
 
+        {/* Canvas controls: device + page settings + save */}
+        {isCanvas && chrome && (
+          <div className="flex flex-wrap items-center gap-2 shrink-0">
+            <div className="flex rounded-lg border border-slate-700 p-0.5 text-[11px]">
+              {(
+                [
+                  ["desktop", "Desktop"],
+                  ["tablet", "Tablet"],
+                  ["phone", "Phone"],
+                ] as const
+              ).map(([id, label]) => (
+                <button
+                  key={id}
+                  type="button"
+                  onClick={() => chrome.setDevice(id as CanvasDevice)}
+                  className={[
+                    "rounded-md px-2 py-1",
+                    chrome.device === id
+                      ? "bg-white text-slate-900"
+                      : "text-slate-400 hover:text-white",
+                  ].join(" ")}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+            <button
+              type="button"
+              onClick={() => chrome.setShowMeta((v) => !v)}
+              className={[
+                "rounded-lg border px-2.5 py-1.5 text-xs",
+                chrome.showMeta
+                  ? "border-blue-500 bg-blue-600/20 text-blue-200"
+                  : "border-slate-700 text-slate-300 hover:bg-slate-800",
+              ].join(" ")}
+            >
+              {chrome.showMeta ? "Hide settings" : "Page settings"}
+            </button>
+            <button
+              type="button"
+              disabled={chrome.saving}
+              onClick={() => chrome.onSave()}
+              className="rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-blue-500 disabled:opacity-60"
+            >
+              {chrome.saving ? "Saving…" : "Save page"}
+            </button>
+            {chrome.saveStatus && (
+              <span className="text-[11px] text-slate-400 hidden md:inline">
+                {chrome.saveStatus}
+              </span>
+            )}
+          </div>
+        )}
+
         {/* Publish menu */}
         <div className="ml-auto relative shrink-0" ref={publishMenuRef}>
           <button
@@ -430,14 +505,14 @@ export function AdminShell({
         )}
       </header>
 
-      <div className="flex flex-1 min-h-0 relative">
+      <div className="flex flex-1 min-h-0 relative overflow-hidden">
         {/* Left navigation — slides off screen when collapsed */}
         <aside
           className={[
             "shrink-0 border-r border-slate-200 bg-slate-900 text-slate-100 flex flex-col transition-all duration-200 ease-out overflow-hidden",
             navCollapsed
-              ? "w-0 border-r-0 opacity-0 pointer-events-none -translate-x-2"
-              : "w-60 opacity-100 translate-x-0",
+              ? "w-0 border-r-0 opacity-0 pointer-events-none"
+              : "w-60 opacity-100",
           ].join(" ")}
           aria-hidden={navCollapsed}
         >
@@ -499,10 +574,19 @@ export function AdminShell({
           </div>
         </aside>
 
-        <div className="flex-1 min-w-0 overflow-auto">
-          <div className="admin-main mx-auto max-w-5xl px-6 py-8">
-            {children}
-          </div>
+        <div
+          className={[
+            "flex-1 min-w-0 min-h-0",
+            isCanvas ? "overflow-hidden flex flex-col" : "overflow-auto",
+          ].join(" ")}
+        >
+          {isCanvas ? (
+            <div className="flex-1 min-h-0 flex flex-col">{children}</div>
+          ) : (
+            <div className="admin-main mx-auto max-w-5xl px-6 py-8">
+              {children}
+            </div>
+          )}
         </div>
       </div>
     </div>

@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useState } from "react";
+import { FormEvent, useCallback, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   VisualPageBuilder,
@@ -8,6 +8,10 @@ import {
   type PageSection,
 } from "@/components/visual-page-builder";
 import { parseStoredContent } from "@/lib/sections";
+import {
+  useRegisterEditorChrome,
+  type CanvasDevice,
+} from "@/components/editor-chrome-context";
 
 type TemplateBlock = {
   id: string;
@@ -62,163 +66,187 @@ export function PageEditor({
   const [status, setStatus] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [showMeta, setShowMeta] = useState(false);
+  const [device, setDevice] = useState<CanvasDevice>("desktop");
 
-  async function onSubmit(e?: FormEvent) {
-    e?.preventDefault();
-    setLoading(true);
-    setStatus(null);
+  const onSubmit = useCallback(
+    async (e?: FormEvent) => {
+      e?.preventDefault();
+      setLoading(true);
+      setStatus(null);
 
-    const sectionsRes = await fetch(`/api/pages/${page.id}/sections`, {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        sections: sections.map((s, i) => {
-          const html = s.templateBlock?.defaultHtml || "";
-          const fields = parseStoredContent(s.content, html).fields;
-          return {
-            id: s.id,
-            sortOrder: i,
-            isHidden: s.isHidden,
-            css: s.css,
-            fields,
-          };
+      const sectionsRes = await fetch(`/api/pages/${page.id}/sections`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          sections: sections.map((s, i) => {
+            const html = s.templateBlock?.defaultHtml || "";
+            const fields = parseStoredContent(s.content, html).fields;
+            return {
+              id: s.id,
+              sortOrder: i,
+              isHidden: s.isHidden,
+              css: s.css,
+              fields,
+            };
+          }),
         }),
-      }),
-    });
+      });
 
-    if (!sectionsRes.ok) {
+      if (!sectionsRes.ok) {
+        setLoading(false);
+        setStatus("Failed to save sections");
+        return;
+      }
+
+      const res = await fetch(`/api/pages/${page.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          title,
+          menuTitle,
+          slug,
+          metaDescription,
+          isHidden,
+          isDefault,
+        }),
+      });
       setLoading(false);
-      setStatus("Failed to save sections");
-      return;
-    }
+      if (!res.ok) {
+        setStatus("Failed to save page settings");
+        return;
+      }
+      setStatus("Saved");
+      router.refresh();
+    },
+    [
+      page.id,
+      sections,
+      title,
+      menuTitle,
+      slug,
+      metaDescription,
+      isHidden,
+      isDefault,
+      router,
+    ],
+  );
 
-    const res = await fetch(`/api/pages/${page.id}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        title,
-        menuTitle,
-        slug,
-        metaDescription,
-        isHidden,
-        isDefault,
-      }),
-    });
-    setLoading(false);
-    if (!res.ok) {
-      setStatus("Failed to save page settings");
-      return;
-    }
-    setStatus("Saved");
-    router.refresh();
-  }
-
-  async function onDelete() {
+  const onDelete = useCallback(async () => {
     if (!confirm("Delete this page?")) return;
     const res = await fetch(`/api/pages/${page.id}`, { method: "DELETE" });
     if (res.ok) {
       router.push("/admin/pages");
       router.refresh();
     }
-  }
+  }, [page.id, router]);
+
+  const chrome = useMemo(
+    () => ({
+      device,
+      setDevice,
+      onSave: () => {
+        void onSubmit();
+      },
+      saving: loading,
+      saveStatus: status,
+      showMeta,
+      setShowMeta,
+      onDelete: () => {
+        void onDelete();
+      },
+    }),
+    [device, onSubmit, loading, status, showMeta, onDelete],
+  );
+
+  useRegisterEditorChrome(chrome);
 
   return (
-    <div className="space-y-0">
-      <div className="flex flex-wrap items-center gap-2 border-b border-slate-100 bg-white px-4 py-2">
-        <button
-          type="button"
-          onClick={() => void onSubmit()}
-          disabled={loading}
-          className="rounded-lg bg-blue-600 px-4 py-1.5 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-60"
-        >
-          {loading ? "Saving…" : "Save page"}
-        </button>
-        <button
-          type="button"
-          onClick={() => setShowMeta((v) => !v)}
-          className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm hover:bg-slate-50"
-        >
-          {showMeta ? "Hide settings" : "Page settings"}
-        </button>
-        <button
-          type="button"
-          onClick={onDelete}
-          className="rounded-lg border border-red-200 px-3 py-1.5 text-sm text-red-600 hover:bg-red-50"
-        >
-          Delete
-        </button>
-        {status && <span className="text-sm text-slate-500">{status}</span>}
-      </div>
-
+    <div className="flex h-full min-h-0 flex-col bg-slate-100">
       {showMeta && (
-        <div className="mx-4 my-3 rounded-xl border border-slate-200 bg-white p-5 shadow-sm grid sm:grid-cols-2 gap-4">
-          <label className="space-y-1 text-sm sm:col-span-2">
-            <span className="text-slate-600">Title</span>
-            <input
-              value={title}
-              onChange={(e) => setTitle(e.target.value)}
-              className="w-full rounded-lg border border-slate-200 px-3 py-2"
-            />
-          </label>
-          <label className="space-y-1 text-sm">
-            <span className="text-slate-600">Menu title</span>
-            <input
-              value={menuTitle}
-              onChange={(e) => setMenuTitle(e.target.value)}
-              className="w-full rounded-lg border border-slate-200 px-3 py-2"
-            />
-          </label>
-          <label className="space-y-1 text-sm">
-            <span className="text-slate-600">Slug</span>
-            <input
-              value={slug}
-              onChange={(e) => setSlug(e.target.value)}
-              className="w-full rounded-lg border border-slate-200 px-3 py-2 font-mono text-sm"
-            />
-          </label>
-          <label className="space-y-1 text-sm sm:col-span-2">
-            <span className="text-slate-600">Meta description</span>
-            <textarea
-              value={metaDescription}
-              onChange={(e) => setMetaDescription(e.target.value)}
-              rows={2}
-              className="w-full rounded-lg border border-slate-200 px-3 py-2"
-            />
-          </label>
-          <label className="flex items-center gap-2 text-sm">
-            <input
-              type="checkbox"
-              checked={isDefault}
-              onChange={(e) => setIsDefault(e.target.checked)}
-            />
-            Default page
-          </label>
-          <label className="flex items-center gap-2 text-sm">
-            <input
-              type="checkbox"
-              checked={isHidden}
-              onChange={(e) => setIsHidden(e.target.checked)}
-            />
-            Hidden page
-          </label>
+        <div className="shrink-0 border-b border-slate-200 bg-white px-4 py-3 shadow-sm z-10">
+          <div className="mx-auto max-w-4xl grid sm:grid-cols-2 gap-3">
+            <label className="space-y-1 text-sm sm:col-span-2">
+              <span className="text-slate-600">Title</span>
+              <input
+                value={title}
+                onChange={(e) => setTitle(e.target.value)}
+                className="w-full rounded-lg border border-slate-200 px-3 py-2"
+              />
+            </label>
+            <label className="space-y-1 text-sm">
+              <span className="text-slate-600">Menu title</span>
+              <input
+                value={menuTitle}
+                onChange={(e) => setMenuTitle(e.target.value)}
+                className="w-full rounded-lg border border-slate-200 px-3 py-2"
+              />
+            </label>
+            <label className="space-y-1 text-sm">
+              <span className="text-slate-600">Slug</span>
+              <input
+                value={slug}
+                onChange={(e) => setSlug(e.target.value)}
+                className="w-full rounded-lg border border-slate-200 px-3 py-2 font-mono text-sm"
+              />
+            </label>
+            <label className="space-y-1 text-sm sm:col-span-2">
+              <span className="text-slate-600">Meta description</span>
+              <textarea
+                value={metaDescription}
+                onChange={(e) => setMetaDescription(e.target.value)}
+                rows={2}
+                className="w-full rounded-lg border border-slate-200 px-3 py-2"
+              />
+            </label>
+            <label className="flex items-center gap-2 text-sm">
+              <input
+                type="checkbox"
+                checked={isDefault}
+                onChange={(e) => setIsDefault(e.target.checked)}
+              />
+              Default page
+            </label>
+            <label className="flex items-center gap-2 text-sm">
+              <input
+                type="checkbox"
+                checked={isHidden}
+                onChange={(e) => setIsHidden(e.target.checked)}
+              />
+              Hidden page
+            </label>
+            <div className="sm:col-span-2 flex justify-end">
+              <button
+                type="button"
+                onClick={() => void onDelete()}
+                className="rounded-lg border border-red-200 px-3 py-1.5 text-xs text-red-600 hover:bg-red-50"
+              >
+                Delete page
+              </button>
+            </div>
+          </div>
         </div>
       )}
 
-      <VisualPageBuilder
-        pageId={page.id}
-        siteId={page.siteId}
-        siteSlug={siteSlug}
-        pageTitle={title}
-        siteTitle={siteTitle}
-        metaDescription={metaDescription}
-        shellHtml={shellHtml}
-        menuHtml={menuHtml}
-        inserts={inserts}
-        sections={sections}
-        catalog={catalog}
-        linkPages={linkPages}
-        onChange={setSections}
-      />
+      <div className="flex-1 min-h-0">
+        <VisualPageBuilder
+          pageId={page.id}
+          siteId={page.siteId}
+          siteSlug={siteSlug}
+          pageTitle={title}
+          siteTitle={siteTitle}
+          metaDescription={metaDescription}
+          shellHtml={shellHtml}
+          menuHtml={menuHtml}
+          inserts={inserts}
+          sections={sections}
+          catalog={catalog}
+          linkPages={linkPages}
+          onChange={setSections}
+          device={device}
+          onDeviceChange={setDevice}
+          chromeMode
+        />
+      </div>
     </div>
   );
 }

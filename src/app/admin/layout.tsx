@@ -3,6 +3,7 @@ import { prisma } from "@/lib/db";
 import { getActiveSite } from "@/lib/site-context";
 import { siteHasUnpublishedChanges } from "@/lib/publish-status";
 import { AdminShell } from "@/components/admin-shell";
+import { EditorChromeProvider } from "@/components/editor-chrome-context";
 
 const nav = [
   { href: "/admin", label: "Dashboard" },
@@ -45,29 +46,31 @@ export default async function AdminLayout({
     : { hasChanges: false, lastGeneratedAt: null, lastContentAt: null };
 
   return (
-    <AdminShell
-      user={{
-        firstName: user.firstName,
-        lastName: user.lastName,
-        email: user.email,
-        role: user.role,
-      }}
-      activeSite={
-        active
-          ? {
-              id: active.id,
-              name: active.name,
-              slug: active.slug,
-              cssFramework: active.cssFramework,
-              lastGeneratedAt: active.lastGeneratedAt?.toISOString() ?? null,
-            }
-          : null
-      }
-      pages={pages}
-      hasUnpublishedChanges={publish.hasChanges}
-      nav={nav}
-    >
-      {children}
-    </AdminShell>
+    <EditorChromeProvider>
+      <AdminShell
+        user={{
+          firstName: user.firstName,
+          lastName: user.lastName,
+          email: user.email,
+          role: user.role,
+        }}
+        activeSite={
+          active
+            ? {
+                id: active.id,
+                name: active.name,
+                slug: active.slug,
+                cssFramework: active.cssFramework,
+                lastGeneratedAt: active.lastGeneratedAt?.toISOString() ?? null,
+              }
+            : null
+        }
+        pages={pages}
+        hasUnpublishedChanges={publish.hasChanges}
+        nav={nav}
+      >
+        {children}
+      </AdminShell>
+    </EditorChromeProvider>
   );
 }

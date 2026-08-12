@@ -53,6 +53,8 @@ export type LinkPageOption = LinkablePage & {
   menuTitle: string;
 };
 
+type CanvasDevice = "desktop" | "tablet" | "phone";
+
 type Props = {
   pageId: string;
   siteId: string;
@@ -70,6 +72,11 @@ type Props = {
   onChange: (
     sections: PageSection[] | ((prev: PageSection[]) => PageSection[]),
   ) => void;
+  /** Controlled device (from top bar) */
+  device?: CanvasDevice;
+  onDeviceChange?: (d: CanvasDevice) => void;
+  /** Hide local device toolbar; fill parent height (admin canvas mode) */
+  chromeMode?: boolean;
 };
 
 /**
@@ -582,6 +589,9 @@ export function VisualPageBuilder({
   catalog,
   linkPages,
   onChange,
+  device: deviceProp,
+  onDeviceChange,
+  chromeMode = false,
 }: Props) {
   const [selectedSectionId, setSelectedSectionId] = useState<string | null>(
     null,
@@ -589,9 +599,9 @@ export function VisualPageBuilder({
   const [panelTab, setPanelTab] = useState<"content" | "style">("content");
   const [showAdd, setShowAdd] = useState(false);
   const [adding, setAdding] = useState(false);
-  const [device, setDevice] = useState<"desktop" | "tablet" | "phone">(
-    "desktop",
-  );
+  const [deviceInternal, setDeviceInternal] = useState<CanvasDevice>("desktop");
+  const device = deviceProp ?? deviceInternal;
+  const setDevice = onDeviceChange ?? setDeviceInternal;
   const iframeRef = useRef<HTMLIFrameElement>(null);
   /** Last known iframe scroll — restored only after rare full srcDoc reloads */
   const scrollRestore = useRef(0);
@@ -887,35 +897,49 @@ export function VisualPageBuilder({
   const panelOpen = Boolean(selected);
 
   return (
-    <div className="relative min-h-[calc(100vh-5.5rem)]">
-      {/* Toolbar */}
-      <div className="sticky top-0 z-20 flex flex-wrap items-center gap-2 border-b border-slate-200 bg-white/95 px-4 py-2 backdrop-blur">
-        <span className="text-xs font-medium text-slate-500">
-          Page canvas
-        </span>
-        <div className="flex rounded-lg border border-slate-200 p-0.5 text-xs">
-          {(
-            [
-              ["desktop", "Desktop"],
-              ["tablet", "Tablet"],
-              ["phone", "Phone"],
-            ] as const
-          ).map(([id, label]) => (
-            <button
-              key={id}
-              type="button"
-              onClick={() => setDevice(id)}
-              className={[
-                "rounded-md px-2.5 py-1",
-                device === id
-                  ? "bg-slate-900 text-white"
-                  : "text-slate-600 hover:bg-slate-50",
-              ].join(" ")}
-            >
-              {label}
-            </button>
-          ))}
-        </div>
+    <div
+      className={[
+        "relative flex flex-col",
+        chromeMode ? "h-full min-h-0" : "min-h-[calc(100vh-5.5rem)]",
+      ].join(" ")}
+    >
+      {/* Slim toolbar — device controls live in admin top bar when chromeMode */}
+      <div
+        className={[
+          "shrink-0 z-20 flex flex-wrap items-center gap-2 border-b border-slate-200 bg-white/95 px-4 py-1.5 backdrop-blur",
+          chromeMode ? "border-slate-200/80" : "",
+        ].join(" ")}
+      >
+        {!chromeMode && (
+          <>
+            <span className="text-xs font-medium text-slate-500">
+              Page canvas
+            </span>
+            <div className="flex rounded-lg border border-slate-200 p-0.5 text-xs">
+              {(
+                [
+                  ["desktop", "Desktop"],
+                  ["tablet", "Tablet"],
+                  ["phone", "Phone"],
+                ] as const
+              ).map(([id, label]) => (
+                <button
+                  key={id}
+                  type="button"
+                  onClick={() => setDevice(id)}
+                  className={[
+                    "rounded-md px-2.5 py-1",
+                    device === id
+                      ? "bg-slate-900 text-white"
+                      : "text-slate-600 hover:bg-slate-50",
+                  ].join(" ")}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+          </>
+        )}
         <button
           type="button"
           onClick={() => setShowAdd(true)}
@@ -924,24 +948,25 @@ export function VisualPageBuilder({
           + Add section
         </button>
         <p className="text-[11px] text-slate-400 ml-auto hidden sm:block">
-          Looks like the live page · click a section to edit fields
+          Click a section to edit fields
         </p>
       </div>
 
-      {/* Canvas: full public-style render in iframe (original contentFrame) */}
+      {/* Canvas: full public-style render in iframe */}
       <div
         className={[
-          "bg-slate-300/60 p-3 sm:p-6 transition-[padding] duration-200",
-          panelOpen ? "lg:pr-[calc(24rem+1.5rem)]" : "",
+          "flex-1 min-h-0 bg-slate-300/60 transition-[padding] duration-200",
+          chromeMode ? "p-2 sm:p-3" : "p-3 sm:p-6",
+          panelOpen ? "lg:pr-[calc(24rem+0.75rem)]" : "",
         ].join(" ")}
       >
         <div
-          className="mx-auto overflow-hidden rounded-lg bg-white shadow-2xl transition-all duration-200"
+          className="mx-auto h-full overflow-hidden rounded-lg bg-white shadow-2xl transition-all duration-200"
           style={{
             width: deviceWidth,
             maxWidth: "100%",
-            height: "calc(100vh - 8rem)",
-            minHeight: "480px",
+            minHeight: chromeMode ? undefined : "480px",
+            height: chromeMode ? "100%" : "calc(100vh - 8rem)",
           }}
         >
           {ordered.length === 0 ? (
@@ -973,7 +998,8 @@ export function VisualPageBuilder({
       {/* Slide-in panel (original #sidebar with Content / Style tabs) */}
       <aside
         className={[
-          "fixed inset-y-0 right-0 z-40 flex w-full max-w-md flex-col border-l border-slate-200 bg-white shadow-2xl transition-transform duration-200 ease-out",
+          "fixed right-0 z-40 flex w-full max-w-md flex-col border-l border-slate-200 bg-white shadow-2xl transition-transform duration-200 ease-out",
+          chromeMode ? "top-12 bottom-0" : "inset-y-0",
           panelOpen ? "translate-x-0" : "translate-x-full",
         ].join(" ")}
         aria-hidden={!panelOpen}
