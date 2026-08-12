@@ -9,6 +9,7 @@ import { AdminSiteBar } from "@/components/admin-site-bar";
 const nav = [
   { href: "/admin", label: "Dashboard" },
   { href: "/admin/pages", label: "Pages" },
+  { href: "/admin/templates", label: "Page templates" },
   { href: "/admin/sections", label: "Sections" },
   { href: "/admin/menus", label: "Menus" },
   { href: "/admin/media", label: "Media" },
