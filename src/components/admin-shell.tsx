@@ -444,7 +444,12 @@ export function AdminShell({
             <button
               type="button"
               onClick={() => chrome.onAddSection?.()}
-              className="rounded-lg border border-slate-600 bg-slate-800 px-2.5 py-1.5 text-xs font-medium text-white hover:bg-slate-700 whitespace-nowrap"
+              className={[
+                "rounded-lg border px-2.5 py-1.5 text-xs font-medium whitespace-nowrap",
+                chrome.showAdd
+                  ? "border-blue-500 bg-blue-600/20 text-blue-200"
+                  : "border-slate-600 bg-slate-800 text-white hover:bg-slate-700",
+              ].join(" ")}
             >
               + Add section
             </button>
@@ -458,18 +463,19 @@ export function AdminShell({
                   : "border-slate-700 text-slate-300 hover:bg-slate-800",
               ].join(" ")}
             >
-              {chrome.showMeta ? "Hide settings" : "Page settings"}
-            </button>
-            <button
-              type="button"
-              disabled={chrome.saving}
-              onClick={() => chrome.onSave()}
-              className="rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-blue-500 disabled:opacity-60 whitespace-nowrap"
-            >
-              {chrome.saving ? "Saving…" : "Save page"}
+              Page settings
             </button>
             {chrome.saveStatus && (
-              <span className="text-[11px] text-slate-400 hidden lg:inline whitespace-nowrap">
+              <span
+                className={[
+                  "text-[11px] hidden sm:inline whitespace-nowrap",
+                  chrome.saving
+                    ? "text-amber-300/90"
+                    : chrome.saveStatus === "Saved"
+                      ? "text-emerald-400/90"
+                      : "text-slate-400",
+                ].join(" ")}
+              >
                 {chrome.saveStatus}
               </span>
             )}

@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   VisualPageBuilder,
@@ -45,6 +45,8 @@ type Props = {
   linkPages: LinkPageOption[];
 };
 
+const AUTOSAVE_MS = 700;
+
 export function PageEditor({
   page,
   catalog,
@@ -64,73 +66,114 @@ export function PageEditor({
   const [isDefault, setIsDefault] = useState(page.isDefault);
   const [sections, setSections] = useState<PageSection[]>(page.blocks);
   const [status, setStatus] = useState<string | null>(null);
-  const [loading, setLoading] = useState(false);
+  const [saving, setSaving] = useState(false);
   const [showMeta, setShowMeta] = useState(false);
   const [device, setDevice] = useState<CanvasDevice>("desktop");
   const [showAdd, setShowAdd] = useState(false);
 
-  const onSubmit = useCallback(
-    async (e?: FormEvent) => {
-      e?.preventDefault();
-      setLoading(true);
-      setStatus(null);
+  const skipFirstSave = useRef(true);
+  const saveGen = useRef(0);
 
-      const sectionsRes = await fetch(`/api/pages/${page.id}/sections`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          sections: sections.map((s, i) => {
-            const html = s.templateBlock?.defaultHtml || "";
-            const fields = parseStoredContent(s.content, html).fields;
-            return {
-              id: s.id,
-              sortOrder: i,
-              isHidden: s.isHidden,
-              css: s.css,
-              fields,
-            };
+  const persist = useCallback(
+    async (payload: {
+      sections: PageSection[];
+      title: string;
+      menuTitle: string;
+      slug: string;
+      metaDescription: string;
+      isHidden: boolean;
+      isDefault: boolean;
+    }) => {
+      const gen = ++saveGen.current;
+      setSaving(true);
+      setStatus("Saving…");
+
+      try {
+        const sectionsRes = await fetch(`/api/pages/${page.id}/sections`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            sections: payload.sections.map((s, i) => {
+              const html = s.templateBlock?.defaultHtml || "";
+              const fields = parseStoredContent(s.content, html).fields;
+              return {
+                id: s.id,
+                sortOrder: i,
+                isHidden: s.isHidden,
+                css: s.css,
+                fields,
+              };
+            }),
           }),
-        }),
-      });
+        });
 
-      if (!sectionsRes.ok) {
-        setLoading(false);
-        setStatus("Failed to save sections");
-        return;
-      }
+        if (!sectionsRes.ok) {
+          if (gen === saveGen.current) {
+            setSaving(false);
+            setStatus("Save failed");
+          }
+          return;
+        }
 
-      const res = await fetch(`/api/pages/${page.id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          title,
-          menuTitle,
-          slug,
-          metaDescription,
-          isHidden,
-          isDefault,
-        }),
-      });
-      setLoading(false);
-      if (!res.ok) {
-        setStatus("Failed to save page settings");
-        return;
+        const res = await fetch(`/api/pages/${page.id}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            title: payload.title,
+            menuTitle: payload.menuTitle,
+            slug: payload.slug,
+            metaDescription: payload.metaDescription,
+            isHidden: payload.isHidden,
+            isDefault: payload.isDefault,
+          }),
+        });
+
+        if (gen !== saveGen.current) return;
+
+        setSaving(false);
+        if (!res.ok) {
+          setStatus("Save failed");
+          return;
+        }
+        setStatus("Saved");
+      } catch {
+        if (gen === saveGen.current) {
+          setSaving(false);
+          setStatus("Save failed");
+        }
       }
-      setStatus("Saved");
-      router.refresh();
     },
-    [
-      page.id,
-      sections,
-      title,
-      menuTitle,
-      slug,
-      metaDescription,
-      isHidden,
-      isDefault,
-      router,
-    ],
+    [page.id],
   );
+
+  // Debounced autosave whenever content or meta changes
+  useEffect(() => {
+    if (skipFirstSave.current) {
+      skipFirstSave.current = false;
+      return;
+    }
+    const t = window.setTimeout(() => {
+      void persist({
+        sections,
+        title,
+        menuTitle,
+        slug,
+        metaDescription,
+        isHidden,
+        isDefault,
+      });
+    }, AUTOSAVE_MS);
+    return () => window.clearTimeout(t);
+  }, [
+    sections,
+    title,
+    menuTitle,
+    slug,
+    metaDescription,
+    isHidden,
+    isDefault,
+    persist,
+  ]);
 
   const onDelete = useCallback(async () => {
     if (!confirm("Delete this page?")) return;
@@ -145,22 +188,23 @@ export function PageEditor({
     () => ({
       device,
       setDevice,
-      onSave: () => {
-        void onSubmit();
-      },
-      saving: loading,
+      saving,
       saveStatus: status,
       showMeta,
       setShowMeta,
+      showAdd,
       onDelete: () => {
         void onDelete();
       },
-      onAddSection: () => setShowAdd(true),
+      onAddSection: () => setShowAdd((v) => !v),
     }),
-    [device, onSubmit, loading, status, showMeta, onDelete],
+    [device, saving, status, showMeta, showAdd, onDelete],
   );
 
   useRegisterEditorChrome(chrome);
+
+  const fieldClass =
+    "w-full rounded-lg border border-slate-700 bg-slate-800 px-3 py-2 text-sm text-white placeholder:text-slate-500 focus:outline-none focus:ring-1 focus:ring-blue-500";
 
   return (
     <div className="relative flex h-full w-full min-h-0 flex-col overflow-hidden bg-slate-300">
@@ -187,106 +231,102 @@ export function PageEditor({
         />
       </div>
 
-      {/* Page settings — slide in from the right (below top bar) */}
+      {/* Page settings — dark slide-in from the right */}
       {showMeta && (
         <button
           type="button"
           aria-label="Close page settings"
-          className="fixed inset-0 z-[56] bg-slate-900/30"
+          className="fixed inset-0 z-[56] bg-slate-900/40"
           style={{ top: "var(--admin-header-h, 56px)" }}
           onClick={() => setShowMeta(false)}
         />
       )}
       <aside
         className={[
-          "fixed right-0 z-[57] flex w-full max-w-md flex-col border-l border-slate-200 bg-white shadow-2xl transition-transform duration-200 ease-out",
+          "fixed right-0 z-[57] flex w-full max-w-md flex-col border-l border-slate-800 bg-slate-900 text-slate-100 shadow-2xl transition-transform duration-200 ease-out",
           "bottom-0",
           showMeta ? "translate-x-0" : "translate-x-full pointer-events-none",
         ].join(" ")}
         style={{ top: "var(--admin-header-h, 56px)" }}
         aria-hidden={!showMeta}
       >
-        <div className="flex items-center justify-between border-b border-slate-100 px-4 py-3 shrink-0">
+        <div className="flex items-center justify-between border-b border-slate-800 px-4 py-3 shrink-0">
           <div>
-            <p className="text-[11px] uppercase tracking-wide text-slate-400">
+            <p className="text-[11px] uppercase tracking-wide text-slate-500">
               Page
             </p>
-            <h2 className="font-semibold text-slate-900">Page settings</h2>
+            <h2 className="font-semibold text-white">Page settings</h2>
           </div>
           <button
             type="button"
             onClick={() => setShowMeta(false)}
-            className="rounded-lg border border-slate-200 px-2 py-1 text-xs text-slate-600 hover:bg-slate-50"
+            className="rounded-lg border border-slate-700 px-2 py-1 text-xs text-slate-300 hover:bg-slate-800"
           >
             Close
           </button>
         </div>
         <div className="flex-1 overflow-y-auto px-4 py-4 space-y-4">
           <label className="block space-y-1 text-sm">
-            <span className="text-slate-600">Title</span>
+            <span className="text-slate-400">Title</span>
             <input
               value={title}
               onChange={(e) => setTitle(e.target.value)}
-              className="w-full rounded-lg border border-slate-200 px-3 py-2"
+              className={fieldClass}
             />
           </label>
           <label className="block space-y-1 text-sm">
-            <span className="text-slate-600">Menu title</span>
+            <span className="text-slate-400">Menu title</span>
             <input
               value={menuTitle}
               onChange={(e) => setMenuTitle(e.target.value)}
-              className="w-full rounded-lg border border-slate-200 px-3 py-2"
+              className={fieldClass}
             />
           </label>
           <label className="block space-y-1 text-sm">
-            <span className="text-slate-600">Slug</span>
+            <span className="text-slate-400">Slug</span>
             <input
               value={slug}
               onChange={(e) => setSlug(e.target.value)}
-              className="w-full rounded-lg border border-slate-200 px-3 py-2 font-mono text-sm"
+              className={`${fieldClass} font-mono`}
             />
           </label>
           <label className="block space-y-1 text-sm">
-            <span className="text-slate-600">Meta description</span>
+            <span className="text-slate-400">Meta description</span>
             <textarea
               value={metaDescription}
               onChange={(e) => setMetaDescription(e.target.value)}
               rows={3}
-              className="w-full rounded-lg border border-slate-200 px-3 py-2"
+              className={fieldClass}
             />
           </label>
-          <label className="flex items-center gap-2 text-sm">
+          <label className="flex items-center gap-2 text-sm text-slate-300">
             <input
               type="checkbox"
               checked={isDefault}
               onChange={(e) => setIsDefault(e.target.checked)}
+              className="rounded border-slate-600"
             />
             Default page
           </label>
-          <label className="flex items-center gap-2 text-sm">
+          <label className="flex items-center gap-2 text-sm text-slate-300">
             <input
               type="checkbox"
               checked={isHidden}
               onChange={(e) => setIsHidden(e.target.checked)}
+              className="rounded border-slate-600"
             />
             Hidden page
           </label>
+          <p className="text-[11px] text-slate-500">
+            Changes save automatically.
+            {status ? ` ${status}` : ""}
+          </p>
           <button
             type="button"
             onClick={() => void onDelete()}
-            className="rounded-lg border border-red-200 px-3 py-1.5 text-xs text-red-600 hover:bg-red-50"
+            className="rounded-lg border border-red-900/60 bg-red-950/40 px-3 py-1.5 text-xs text-red-300 hover:bg-red-950/70"
           >
             Delete page
-          </button>
-        </div>
-        <div className="shrink-0 border-t border-slate-100 px-4 py-3">
-          <button
-            type="button"
-            disabled={loading}
-            onClick={() => void onSubmit()}
-            className="w-full rounded-lg bg-blue-600 px-3 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-60"
-          >
-            {loading ? "Saving…" : "Save page"}
           </button>
         </div>
       </aside>

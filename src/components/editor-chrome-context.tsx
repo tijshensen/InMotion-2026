@@ -20,13 +20,16 @@ export type CanvasDevice = "desktop" | "tablet" | "phone";
 export type EditorChromeState = {
   device: CanvasDevice;
   setDevice: (d: CanvasDevice) => void;
-  onSave: () => void;
+  /** @deprecated Autosave — kept optional for status display only */
+  onSave?: () => void;
   saving: boolean;
   saveStatus: string | null;
   showMeta: boolean;
   setShowMeta: (v: boolean | ((prev: boolean) => boolean)) => void;
+  /** Whether add-section panel is open (for toggle styling) */
+  showAdd?: boolean;
   onDelete?: () => void;
-  /** Open the add-section picker (canvas only) */
+  /** Toggle the add-section picker (canvas only) */
   onAddSection?: () => void;
 };
 
