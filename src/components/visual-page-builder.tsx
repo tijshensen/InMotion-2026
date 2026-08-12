@@ -24,6 +24,7 @@ import {
 } from "@/lib/internal-links";
 import { MediaPicker, type MediaItem } from "@/components/media-picker";
 import { HtmlCodeEditor } from "@/components/html-code-editor";
+import { BlockEditor } from "@/components/block-editor";
 
 type TemplateBlock = {
   id: string;
@@ -308,29 +309,32 @@ function FieldEditors({
 
           {f.type === "multiline" && (
             <div className="space-y-2">
-              <HtmlCodeEditor
-                value={values[f.key] ?? ""}
+              <BlockEditor
+                content={values[f.key] ?? ""}
+                siteId={siteId}
                 onChange={(html) => onChange(f.key, html)}
-                minHeight="180px"
-                placeholder={'<p>HTML… use <a href="#internalURI194"> for internal pages</a></p>'}
+                placeholder={`${f.label}…`}
               />
-              <p className="text-[11px] text-slate-500">
-                Inline links: use an external URL or{" "}
-                <code className="rounded bg-slate-100 px-1">
-                  #internalURI{"{pageId}"}
-                </code>{" "}
-                (pick id from the list below).
-              </p>
               <details className="text-xs">
                 <summary className="cursor-pointer text-slate-500">
-                  Internal page ids for multiline HTML
+                  Internal page links (copy into Link tool)
                 </summary>
-                <ul className="mt-2 max-h-40 overflow-y-auto space-y-0.5 rounded-lg border border-slate-200 bg-white p-2">
+                <p className="mt-1 text-[11px] text-slate-500">
+                  Select text → Link in the toolbar, paste a ref like{" "}
+                  <code className="rounded bg-slate-100 px-1">
+                    #internalURI194
+                  </code>
+                  .
+                </p>
+                <ul className="mt-2 max-h-36 overflow-y-auto space-y-0.5 rounded-lg border border-slate-200 bg-white p-2">
                   {linkPages.map((p) => (
-                    <li key={p.id} className="font-mono text-[10px] text-slate-600">
+                    <li
+                      key={p.id}
+                      className="font-mono text-[10px] text-slate-600"
+                    >
                       <button
                         type="button"
-                        className="hover:text-blue-600 text-left w-full"
+                        className="w-full text-left hover:text-blue-600"
                         onClick={() => {
                           const ref = encodeInternalLink(p);
                           void navigator.clipboard?.writeText(ref);
