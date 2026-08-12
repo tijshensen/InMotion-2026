@@ -31,6 +31,9 @@ export type EditorChromeState = {
   onDelete?: () => void;
   /** Toggle the add-section picker (canvas only) */
   onAddSection?: () => void;
+  /** Allow clicking internal links on the canvas */
+  linksEnabled?: boolean;
+  setLinksEnabled?: (v: boolean | ((prev: boolean) => boolean)) => void;
 };
 
 type Ctx = {

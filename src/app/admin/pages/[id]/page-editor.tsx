@@ -70,6 +70,7 @@ export function PageEditor({
   const [showMeta, setShowMeta] = useState(false);
   const [device, setDevice] = useState<CanvasDevice>("desktop");
   const [showAdd, setShowAdd] = useState(false);
+  const [linksEnabled, setLinksEnabled] = useState(false);
 
   const skipFirstSave = useRef(true);
   const saveGen = useRef(0);
@@ -197,8 +198,10 @@ export function PageEditor({
         void onDelete();
       },
       onAddSection: () => setShowAdd((v) => !v),
+      linksEnabled,
+      setLinksEnabled,
     }),
-    [device, saving, status, showMeta, showAdd, onDelete],
+    [device, saving, status, showMeta, showAdd, linksEnabled, onDelete],
   );
 
   useRegisterEditorChrome(chrome);
@@ -228,6 +231,7 @@ export function PageEditor({
           chromeMode
           showAdd={showAdd}
           onShowAddChange={setShowAdd}
+          linksEnabled={linksEnabled}
         />
       </div>
 

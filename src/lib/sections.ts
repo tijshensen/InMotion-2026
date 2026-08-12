@@ -599,16 +599,16 @@ export function buildEditorPreviewHtml(opts: {
     visibility: visible !important;
     opacity: 1 !important;
   }
-  .cms-edit-body .hidden,
-  .cms-edit-body .hidden-xs,
-  .cms-edit-body .hidden-sm,
-  .cms-edit-body .hidden-md,
-  .cms-edit-body .hidden-lg,
-  .cms-edit-body .visible-xs,
-  .cms-edit-body .visible-sm,
-  .cms-edit-body .visible-md,
-  .cms-edit-body .visible-lg {
-    /* Keep layout wrappers usable when they only exist for responsive breakpoints */
+  /* When parent enables link mode, only anchors receive clicks */
+  html[data-cms-links="1"] .cms-edit-body a {
+    pointer-events: auto;
+    cursor: pointer;
+    position: relative;
+    z-index: 5;
+  }
+  html[data-cms-links="1"] .cms-edit-body a:hover {
+    outline: 2px dashed #60a5fa;
+    outline-offset: 2px;
   }
   .cms-edit-body img.visible-xs,
   .cms-edit-body img.visible-sm,
@@ -622,9 +622,20 @@ export function buildEditorPreviewHtml(opts: {
 </style>
 <script id="cms-editor-bridge">
 (function () {
+  function linksEnabled() {
+    return document.documentElement.getAttribute("data-cms-links") === "1";
+  }
+  function isInternalHref(href) {
+    if (!href) return false;
+    if (/^#internalURI\\d+$/i.test(href) || /^#page:[a-z0-9_-]+$/i.test(href)) return true;
+    if (href.charAt(0) === "/" && href.indexOf("/s/") === 0) return true;
+    try {
+      var u = new URL(href, window.location.href);
+      if (u.origin === window.location.origin && u.pathname.indexOf("/s/") === 0) return true;
+    } catch (e) {}
+    return false;
+  }
   function selectSection(id) {
-    // Highlight immediately in-iframe so parent does not need to rewrite srcDoc
-    // (rewriting reloaded the document and caused scroll jump to top).
     try {
       var all = document.querySelectorAll(".cms-edit-section.is-selected");
       for (var i = 0; i < all.length; i++) all[i].classList.remove("is-selected");
@@ -635,7 +646,26 @@ export function buildEditorPreviewHtml(opts: {
       window.parent.postMessage({ type: "cms-select-section", sectionId: id }, "*");
     } catch (e) {}
   }
+  // Link clicks (capture, before section select)
   document.addEventListener("click", function (e) {
+    var a = e.target && e.target.closest ? e.target.closest("a") : null;
+    if (!a) return;
+    var href = a.getAttribute("href") || "";
+    e.preventDefault();
+    e.stopPropagation();
+    if (!linksEnabled()) return;
+    if (isInternalHref(href)) {
+      try {
+        window.parent.postMessage({ type: "cms-navigate-internal", href: href }, "*");
+      } catch (err) {}
+    }
+  }, true);
+  // Section select (unless the click was on a link in link mode)
+  document.addEventListener("click", function (e) {
+    if (linksEnabled()) {
+      var a = e.target && e.target.closest ? e.target.closest("a") : null;
+      if (a) return;
+    }
     var el = e.target;
     while (el && el !== document && !(el.getAttribute && el.getAttribute("data-section-id"))) {
       el = el.parentNode;
@@ -646,11 +676,12 @@ export function buildEditorPreviewHtml(opts: {
       selectSection(el.getAttribute("data-section-id"));
     }
   }, true);
-  // prevent navigation inside preview
-  document.addEventListener("click", function (e) {
-    var a = e.target && e.target.closest ? e.target.closest("a") : null;
-    if (a) { e.preventDefault(); }
-  }, true);
+  // Parent can toggle link mode without reloading srcDoc
+  window.addEventListener("message", function (ev) {
+    var data = ev.data;
+    if (!data || data.type !== "cms-set-links") return;
+    document.documentElement.setAttribute("data-cms-links", data.enabled ? "1" : "0");
+  });
 })();
 </script>`;
 

@@ -8,6 +8,7 @@
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 import {
   META,
   buildEditorPreviewHtml,
@@ -80,6 +81,8 @@ type Props = {
   /** Controlled add-section dialog (top bar when chromeMode) */
   showAdd?: boolean;
   onShowAddChange?: (open: boolean) => void;
+  /** Allow internal link clicks on the canvas */
+  linksEnabled?: boolean;
 };
 
 /**
@@ -597,7 +600,9 @@ export function VisualPageBuilder({
   chromeMode = false,
   showAdd: showAddProp,
   onShowAddChange,
+  linksEnabled = false,
 }: Props) {
+  const router = useRouter();
   const [selectedSectionId, setSelectedSectionId] = useState<string | null>(
     null,
   );
@@ -784,11 +789,17 @@ export function VisualPageBuilder({
     }
     restoreIframeScroll();
     applySelectionInIframe(selectedSectionId);
+    try {
+      win?.postMessage({ type: "cms-set-links", enabled: linksEnabled }, "*");
+    } catch {
+      /* ignore */
+    }
   }, [
     ordered,
     restoreIframeScroll,
     applySelectionInIframe,
     selectedSectionId,
+    linksEnabled,
   ]);
 
   // Capture scroll before rare full reloads (structure change only)
@@ -811,20 +822,76 @@ export function VisualPageBuilder({
     applySelectionInIframe(selectedSectionId);
   }, [selectedSectionId, applySelectionInIframe]);
 
-  // Listen for section clicks from iframe (original: parent.openSidebar)
+  // Sync link mode into iframe without rebuilding srcDoc
   useEffect(() => {
+    const win = iframeRef.current?.contentWindow;
+    if (!win) return;
+    try {
+      win.postMessage({ type: "cms-set-links", enabled: linksEnabled }, "*");
+    } catch {
+      /* ignore */
+    }
+  }, [linksEnabled]);
+
+  // Listen for section clicks + internal link navigation from iframe
+  useEffect(() => {
+    function resolveInternalToPageId(href: string): string | null {
+      const ref = parseInternalLinkRef(href);
+      if (ref?.kind === "legacy") {
+        const p = linkPages.find((x) => x.legacyId === ref.id);
+        return p?.id ?? null;
+      }
+      if (ref?.kind === "page") {
+        return linkPages.find((x) => x.id === ref.id)?.id ?? null;
+      }
+
+      try {
+        const u = href.startsWith("http")
+          ? new URL(href)
+          : new URL(href, window.location.origin);
+        const parts = u.pathname.replace(/^\/+|\/+$/g, "").split("/");
+        // /s/{siteSlug} or /s/{siteSlug}/{slug...}
+        if (parts[0] === "s" && parts[1] === siteSlug) {
+          if (parts.length <= 2 || !parts[2]) {
+            return (
+              linkPages.find((p) => p.isDefault)?.id ??
+              linkPages.find((p) => p.slug === "home")?.id ??
+              null
+            );
+          }
+          const slug = parts.slice(2).join("/");
+          return linkPages.find((p) => p.slug === slug)?.id ?? null;
+        }
+      } catch {
+        /* ignore */
+      }
+      return null;
+    }
+
     function onMessage(ev: MessageEvent) {
       const data = ev.data;
-      if (!data || data.type !== "cms-select-section") return;
-      if (typeof data.sectionId !== "string") return;
-      const win = iframeRef.current?.contentWindow;
-      if (win) scrollRestore.current = win.scrollY || 0;
-      setSelectedSectionId(data.sectionId);
-      setPanelTab("content");
+      if (!data || typeof data !== "object") return;
+
+      if (data.type === "cms-select-section") {
+        if (typeof data.sectionId !== "string") return;
+        const win = iframeRef.current?.contentWindow;
+        if (win) scrollRestore.current = win.scrollY || 0;
+        setSelectedSectionId(data.sectionId);
+        setPanelTab("content");
+        return;
+      }
+
+      if (data.type === "cms-navigate-internal") {
+        if (typeof data.href !== "string") return;
+        const pageId = resolveInternalToPageId(data.href);
+        if (pageId) {
+          router.push(`/admin/pages/${pageId}`);
+        }
+      }
     }
     window.addEventListener("message", onMessage);
     return () => window.removeEventListener("message", onMessage);
-  }, []);
+  }, [linkPages, siteSlug, router]);
 
   function setField(key: string, value: string) {
     setFields({ [key]: value });
