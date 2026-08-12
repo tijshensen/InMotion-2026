@@ -14,6 +14,7 @@ import {
   parseSectionFields,
   parseStoredContent,
   serializeFields,
+  type FieldType,
   type SectionField,
 } from "@/lib/sections";
 import {
@@ -64,7 +65,10 @@ type Props = {
   sections: PageSection[];
   catalog: TemplateBlock[];
   linkPages: LinkPageOption[];
-  onChange: (sections: PageSection[]) => void;
+  /** Supports functional updates so async media/crop always applies on latest state */
+  onChange: (
+    sections: PageSection[] | ((prev: PageSection[]) => PageSection[]),
+  ) => void;
 };
 
 /**
@@ -250,6 +254,7 @@ function FieldEditors({
   fields,
   values,
   siteId,
+  sectionId,
   linkPages,
   onChange,
   onChangeMany,
@@ -257,17 +262,102 @@ function FieldEditors({
   fields: SectionField[];
   values: Record<string, string>;
   siteId: string;
+  sectionId: string;
   linkPages: LinkPageOption[];
   onChange: (key: string, value: string) => void;
   /** Batch field updates (avoids stale overwrite when setting path + alt). */
   onChangeMany: (updates: Record<string, string>) => void;
 }) {
   const [mediaFor, setMediaFor] = useState<string | null>(null);
+  /**
+   * Optimistic overlay so the URL input / thumb update immediately after
+   * media pick, even if a parent re-render races with async crop.
+   */
+  const [localOverlay, setLocalOverlay] = useState<Record<string, string>>({});
+  /** Stable target for async crop completion (field key at open time). */
+  const mediaTargetRef = useRef<{
+    sectionId: string;
+    fieldKey: string;
+    fieldType: FieldType;
+  } | null>(null);
+
+  const displayValues = { ...values, ...localOverlay };
+
+  // Drop overlay entries once parent values catch up
+  useEffect(() => {
+    setLocalOverlay((prev) => {
+      const keys = Object.keys(prev);
+      if (!keys.length) return prev;
+      let changed = false;
+      const next = { ...prev };
+      for (const k of keys) {
+        if (values[k] === prev[k]) {
+          delete next[k];
+          changed = true;
+        }
+      }
+      return changed ? next : prev;
+    });
+  }, [values]);
+
+  // Clear overlay when switching sections
+  useEffect(() => {
+    setLocalOverlay({});
+    setMediaFor(null);
+    mediaTargetRef.current = null;
+  }, [sectionId]);
+
   const mediaField = mediaFor
     ? fields.find((x) => x.key === mediaFor) ?? null
     : null;
   const cropW = mediaField?.width ? parseInt(mediaField.width, 10) : NaN;
   const cropH = mediaField?.height ? parseInt(mediaField.height, 10) : NaN;
+
+  function openMedia(field: SectionField) {
+    mediaTargetRef.current = {
+      sectionId,
+      fieldKey: field.key,
+      fieldType: field.type,
+    };
+    setMediaFor(field.key);
+  }
+
+  function applyMediaAsset(asset: MediaItem) {
+    const target = mediaTargetRef.current;
+    const fieldKey = target?.fieldKey || mediaFor;
+    if (!fieldKey) return;
+
+    const field =
+      fields.find((x) => x.key === fieldKey) ||
+      (target
+        ? ({ key: fieldKey, type: target.fieldType } as SectionField)
+        : null);
+
+    const path = (asset.path || "").trim();
+    if (!path) {
+      console.error("[media] selected asset has empty path", asset);
+      return;
+    }
+
+    const updates: Record<string, string> = {
+      [fieldKey]: path,
+    };
+    if (field?.type === "image" || target?.fieldType === "image") {
+      if (asset.alt) {
+        updates[fieldKey + META.alt] = asset.alt;
+      }
+    }
+    if (field?.type === "file" || target?.fieldType === "file") {
+      updates[fieldKey + META.fileLabel] =
+        asset.filename || asset.alt || "Download";
+    }
+
+    // Optimistic UI first, then push into section content
+    setLocalOverlay((prev) => ({ ...prev, ...updates }));
+    onChangeMany(updates);
+    setMediaFor(null);
+    mediaTargetRef.current = null;
+  }
 
   if (!fields.length) {
     return (
@@ -301,15 +391,15 @@ function FieldEditors({
             <div className="space-y-2">
               <input
                 type="text"
-                value={values[f.key] ?? ""}
+                value={displayValues[f.key] ?? ""}
                 onChange={(e) => onChange(f.key, e.target.value)}
                 className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
               />
               <FieldLinkEditor
                 label="Add link (text)"
-                href={values[f.key + META.link] ?? ""}
-                target={values[f.key + META.linkTarget] ?? ""}
-                title={values[f.key + META.linkTitle] ?? ""}
+                href={displayValues[f.key + META.link] ?? ""}
+                target={displayValues[f.key + META.linkTarget] ?? ""}
+                title={displayValues[f.key + META.linkTitle] ?? ""}
                 linkPages={linkPages}
                 onChangeHref={(v) => onChange(f.key + META.link, v)}
                 onChangeTarget={(v) => onChange(f.key + META.linkTarget, v)}
@@ -321,7 +411,7 @@ function FieldEditors({
           {f.type === "multiline" && (
             <div className="space-y-2">
               <BlockEditor
-                content={values[f.key] ?? ""}
+                content={displayValues[f.key] ?? ""}
                 siteId={siteId}
                 onChange={(html) => onChange(f.key, html)}
                 placeholder={`${f.label}…`}
@@ -365,12 +455,14 @@ function FieldEditors({
             <div className="space-y-2">
               <div className="flex gap-3">
                 <div className="h-20 w-28 shrink-0 overflow-hidden rounded-lg border border-slate-200 bg-slate-50 flex items-center justify-center">
-                  {values[f.key] ? (
+                  {displayValues[f.key] &&
+                  displayValues[f.key] !== "." &&
+                  displayValues[f.key] !== "#" ? (
                     // eslint-disable-next-line @next/next/no-img-element
                     <img
-                      key={values[f.key]}
-                      src={values[f.key]}
-                      alt={values[f.key + META.alt] || f.label}
+                      key={displayValues[f.key]}
+                      src={displayValues[f.key]}
+                      alt={displayValues[f.key + META.alt] || f.label}
                       className="max-h-full max-w-full object-contain"
                     />
                   ) : (
@@ -380,14 +472,18 @@ function FieldEditors({
                 <div className="flex-1 space-y-2 min-w-0">
                   <input
                     type="text"
-                    value={values[f.key] ?? ""}
-                    onChange={(e) => onChange(f.key, e.target.value)}
+                    value={displayValues[f.key] ?? ""}
+                    onChange={(e) => {
+                      const v = e.target.value;
+                      setLocalOverlay((prev) => ({ ...prev, [f.key]: v }));
+                      onChange(f.key, v);
+                    }}
                     placeholder="Image URL"
                     className="w-full rounded-lg border border-slate-200 px-2 py-1.5 font-mono text-xs"
                   />
                   <button
                     type="button"
-                    onClick={() => setMediaFor(f.key)}
+                    onClick={() => openMedia(f)}
                     className="rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-blue-700"
                   >
                     Choose from media…
@@ -397,15 +493,15 @@ function FieldEditors({
               <input
                 type="text"
                 placeholder="Alt text"
-                value={values[f.key + META.alt] ?? f.alt ?? ""}
+                value={displayValues[f.key + META.alt] ?? f.alt ?? ""}
                 onChange={(e) => onChange(f.key + META.alt, e.target.value)}
                 className="w-full rounded-lg border border-slate-200 px-2 py-1.5 text-xs"
               />
               <FieldLinkEditor
                 label="Add link (image)"
-                href={values[f.key + META.link] ?? ""}
-                target={values[f.key + META.linkTarget] ?? ""}
-                title={values[f.key + META.linkTitle] ?? ""}
+                href={displayValues[f.key + META.link] ?? ""}
+                target={displayValues[f.key + META.linkTarget] ?? ""}
+                title={displayValues[f.key + META.linkTitle] ?? ""}
                 linkPages={linkPages}
                 onChangeHref={(v) => onChange(f.key + META.link, v)}
                 onChangeTarget={(v) => onChange(f.key + META.linkTarget, v)}
@@ -419,14 +515,14 @@ function FieldEditors({
               <input
                 type="text"
                 placeholder="File URL / path"
-                value={values[f.key] ?? ""}
+                value={displayValues[f.key] ?? ""}
                 onChange={(e) => onChange(f.key, e.target.value)}
                 className="w-full rounded-lg border border-slate-200 px-2 py-1.5 font-mono text-xs"
               />
               <input
                 type="text"
                 placeholder="Link label"
-                value={values[f.key + META.fileLabel] ?? f.defaultValue}
+                value={displayValues[f.key + META.fileLabel] ?? f.defaultValue}
                 onChange={(e) =>
                   onChange(f.key + META.fileLabel, e.target.value)
                 }
@@ -434,7 +530,7 @@ function FieldEditors({
               />
               <button
                 type="button"
-                onClick={() => setMediaFor(f.key)}
+                onClick={() => openMedia(f)}
                 className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs hover:bg-slate-50"
               >
                 Pick from media…
@@ -458,25 +554,12 @@ function FieldEditors({
               ? cropH
               : null
           }
-          onClose={() => setMediaFor(null)}
-          onSelect={(asset: MediaItem) => {
-            const field = fields.find((x) => x.key === mediaFor);
-            const updates: Record<string, string> = {
-              [mediaFor]: asset.path,
-            };
-            if (field?.type === "image") {
-              // Always set alt key when picking an image (even if empty)
-              // so we batch with path in one state update
-              if (asset.alt) {
-                updates[mediaFor + META.alt] = asset.alt;
-              }
-            }
-            if (field?.type === "file") {
-              updates[mediaFor + META.fileLabel] =
-                asset.filename || asset.alt || "Download";
-            }
-            onChangeMany(updates);
+          onClose={() => {
             setMediaFor(null);
+            mediaTargetRef.current = null;
+          }}
+          onSelect={(asset: MediaItem) => {
+            applyMediaAsset(asset);
           }}
         />
       )}
@@ -588,18 +671,24 @@ export function VisualPageBuilder({
     setFields({ [key]: value });
   }
 
+  /**
+   * Always merge into the *latest* section content via functional setState.
+   * Async media crop used to close over a stale `sections` / `selected` snapshot,
+   * so the new image URL never replaced the old one.
+   */
   function setFields(updates: Record<string, string>) {
-    if (!selected) return;
-    const fields = {
-      ...parseStoredContent(selected.content, selectedHtml).fields,
-      ...updates,
-    };
-    onChange(
-      sections.map((s) =>
-        s.id === selected.id
-          ? { ...s, content: serializeFields(fields) }
-          : s,
-      ),
+    const sectionId = selectedSectionId;
+    if (!sectionId) return;
+    onChange((prev) =>
+      prev.map((s) => {
+        if (s.id !== sectionId) return s;
+        const html = s.templateBlock?.defaultHtml || "";
+        const fields = {
+          ...parseStoredContent(s.content, html).fields,
+          ...updates,
+        };
+        return { ...s, content: serializeFields(fields) };
+      }),
     );
   }
 
@@ -800,6 +889,7 @@ export function VisualPageBuilder({
                   fields={selectedFields}
                   values={selectedValues}
                   siteId={siteId}
+                  sectionId={selected.id}
                   linkPages={linkPages}
                   onChange={setField}
                   onChangeMany={setFields}

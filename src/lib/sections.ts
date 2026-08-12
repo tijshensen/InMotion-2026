@@ -314,12 +314,23 @@ export function renderSectionHtml(
       html = html.replace(def.raw, value || "");
     } else if (def.type === "image") {
       let img = def.raw;
+      // Empty / placeholder junk from legacy imports
+      const empty =
+        !value ||
+        value === "." ||
+        value === "#" ||
+        value === "null" ||
+        value === "undefined";
       // If import stored a caption/label instead of a URL, fall back to template src
       const looksLikeSrc =
-        !value ||
+        empty ||
         /^(https?:\/\/|\/|data:|blob:|\.\/|\.\.\/)/i.test(value) ||
         /\.(jpe?g|png|gif|webp|svg|avif)(\?|#|$)/i.test(value);
-      const src = looksLikeSrc ? value || def.defaultValue || "" : def.defaultValue || value || "";
+      const src = empty
+        ? def.defaultValue || ""
+        : looksLikeSrc
+          ? value
+          : def.defaultValue || value || "";
       if (/src\s*=\s*["'][^"']*["']/i.test(img)) {
         img = img.replace(
           /src\s*=\s*["'][^"']*["']/i,

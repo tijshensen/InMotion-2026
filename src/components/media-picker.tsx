@@ -82,14 +82,16 @@ export function MediaPicker({
     }
   }, [siteId]);
 
+  // Only reset picker state when the dialog opens / site changes — not when
+  // `load` identity changes mid-crop (that used to abort the crop dialog).
   useEffect(() => {
-    if (open) {
-      setSelectedId(null);
-      setCropSource(null);
-      setCropError(null);
-      void load();
-    }
-  }, [open, load]);
+    if (!open) return;
+    setSelectedId(null);
+    setCropSource(null);
+    setCropError(null);
+    void load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- intentional: open/siteId only
+  }, [open, siteId]);
 
   useEffect(() => {
     if (!open) return;
@@ -166,7 +168,11 @@ export function MediaPicker({
         throw new Error(data.error || "Crop failed");
       }
       const asset = data as MediaItem;
+      if (!asset?.path) {
+        throw new Error("Crop succeeded but no image path was returned");
+      }
       setCropSource(null);
+      // Call onSelect before any further state that might unmount the tree
       onSelect(asset);
     } catch (e) {
       setCropError(e instanceof Error ? e.message : "Crop failed");
