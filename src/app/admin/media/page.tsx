@@ -1,37 +1,42 @@
 import { prisma } from "@/lib/db";
 import { requireUser } from "@/lib/auth";
+import { getActiveSite } from "@/lib/site-context";
 import { MediaLibraryClient } from "./media-library-client";
 
 export default async function MediaAdminPage() {
   await requireUser();
+  const active = await getActiveSite();
 
-  const sites = await prisma.site.findMany({
-    orderBy: { name: "asc" },
-    select: { id: true, name: true, slug: true },
+  if (!active) {
+    return (
+      <div className="space-y-4">
+        <h1 className="text-2xl font-semibold">Media</h1>
+        <p className="text-sm text-slate-500">
+          Select a website in the top bar first.
+        </p>
+      </div>
+    );
+  }
+
+  const assets = await prisma.mediaAsset.findMany({
+    where: { siteId: active.id },
+    orderBy: { createdAt: "desc" },
   });
-
-  const initialSiteId = sites[0]?.id || "";
-
-  const assets = initialSiteId
-    ? await prisma.mediaAsset.findMany({
-        where: { siteId: initialSiteId },
-        orderBy: { createdAt: "desc" },
-      })
-    : [];
 
   return (
     <div className="space-y-6">
       <div>
         <h1 className="text-2xl font-semibold">Media</h1>
         <p className="text-slate-500 mt-1">
-          Upload and manage images per site. Use them from the page editor Image
-          button.
+          Images for{" "}
+          <strong className="text-slate-700">{active.name}</strong>. Use them
+          from the page editor Image button.
         </p>
       </div>
 
       <MediaLibraryClient
-        sites={sites}
-        initialSiteId={initialSiteId}
+        siteId={active.id}
+        siteName={active.name}
         initialAssets={JSON.parse(JSON.stringify(assets))}
       />
     </div>

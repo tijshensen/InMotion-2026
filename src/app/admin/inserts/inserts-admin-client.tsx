@@ -12,12 +12,12 @@ type InsertRow = {
   tag: string;
   content: string;
   onlyInRender: boolean;
-  site: Site;
+  site?: Site;
 };
 
 type Props = {
-  sites: Site[];
-  defaultSiteId?: string;
+  siteId: string;
+  siteName: string;
 };
 
 type FormState = {
@@ -49,14 +49,7 @@ function formatTagLabel(tag: string, maxLen = 28) {
   return `${t.slice(0, maxLen - 1)}…`;
 }
 
-export function InsertsAdminClient({ sites, defaultSiteId }: Props) {
-  const preferred =
-    defaultSiteId ||
-    sites.find((s) => s.slug === "kiekeboe")?.id ||
-    sites[0]?.id ||
-    "";
-
-  const [filterSiteId, setFilterSiteId] = useState(preferred);
+export function InsertsAdminClient({ siteId, siteName }: Props) {
   const [q, setQ] = useState("");
   const [inserts, setInserts] = useState<InsertRow[]>([]);
   const [loading, setLoading] = useState(true);
@@ -70,9 +63,7 @@ export function InsertsAdminClient({ sites, defaultSiteId }: Props) {
     setLoading(true);
     setError(null);
     try {
-      const url = filterSiteId
-        ? `/api/inserts?siteId=${encodeURIComponent(filterSiteId)}`
-        : "/api/inserts";
+      const url = `/api/inserts?siteId=${encodeURIComponent(siteId)}`;
       const res = await fetch(url);
       if (!res.ok) throw new Error("Failed to load inserts");
       const data = (await res.json()) as InsertRow[];
@@ -83,7 +74,7 @@ export function InsertsAdminClient({ sites, defaultSiteId }: Props) {
     } finally {
       setLoading(false);
     }
-  }, [filterSiteId]);
+  }, [siteId]);
 
   useEffect(() => {
     void load();
@@ -102,7 +93,7 @@ export function InsertsAdminClient({ sites, defaultSiteId }: Props) {
   function openCreate() {
     setError(null);
     setStatus(null);
-    setForm(emptyForm(filterSiteId || preferred || sites[0]?.id || ""));
+    setForm(emptyForm(siteId));
   }
 
   function openEdit(row: InsertRow) {
@@ -238,10 +229,10 @@ export function InsertsAdminClient({ sites, defaultSiteId }: Props) {
     }
   }
 
-  if (!sites.length) {
+  if (!siteId) {
     return (
       <p className="text-sm text-amber-700 bg-amber-50 rounded-lg px-4 py-3">
-        Create a site first, then add inserts.
+        Select a website in the top bar first.
       </p>
     );
   }
@@ -249,21 +240,6 @@ export function InsertsAdminClient({ sites, defaultSiteId }: Props) {
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-end gap-3">
-        <label className="text-sm space-y-1">
-          <span className="text-slate-600">Site</span>
-          <select
-            value={filterSiteId}
-            onChange={(e) => setFilterSiteId(e.target.value)}
-            className="block rounded-lg border border-slate-200 px-3 py-2 min-w-[12rem] bg-white"
-          >
-            <option value="">All sites</option>
-            {sites.map((s) => (
-              <option key={s.id} value={s.id}>
-                {s.name}
-              </option>
-            ))}
-          </select>
-        </label>
         <label className="text-sm space-y-1 flex-1 min-w-[12rem]">
           <span className="text-slate-600">Search</span>
           <input
@@ -327,21 +303,13 @@ export function InsertsAdminClient({ sites, defaultSiteId }: Props) {
 
           <div className="grid sm:grid-cols-2 gap-4">
             <label className="text-sm space-y-1">
-              <span className="text-slate-600">Site</span>
-              <select
-                value={form.siteId}
-                onChange={(e) =>
-                  setForm((f) => f && { ...f, siteId: e.target.value })
-                }
-                required
-                className="w-full rounded-lg border border-slate-200 px-3 py-2 bg-white"
-              >
-                {sites.map((s) => (
-                  <option key={s.id} value={s.id}>
-                    {s.name}
-                  </option>
-                ))}
-              </select>
+              <span className="text-slate-600">Website</span>
+              <input
+                type="text"
+                readOnly
+                value={siteName}
+                className="w-full rounded-lg border border-slate-200 px-3 py-2 bg-slate-50 text-slate-600"
+              />
             </label>
             <label className="text-sm space-y-1">
               <span className="text-slate-600">Tag</span>

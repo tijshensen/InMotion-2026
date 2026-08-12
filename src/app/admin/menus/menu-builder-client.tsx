@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useMemo, useState, type ReactNode } from "react";
+import { useCallback, useState, type ReactNode } from "react";
 import { buildMenuTree, type MenuNode, type MenuPage } from "@/lib/menu";
 
 type Site = {
@@ -10,8 +10,7 @@ type Site = {
 };
 
 type Props = {
-  sites: Site[];
-  initialSiteId: string;
+  site: Site;
   initialLanguageId: string;
   initialPages: MenuPage[];
 };
@@ -59,12 +58,11 @@ function flattenFromTree(nodes: MenuNode[], parentId: string | null = null): Men
 }
 
 export function MenuBuilderClient({
-  sites,
-  initialSiteId,
+  site,
   initialLanguageId,
   initialPages,
 }: Props) {
-  const [siteId, setSiteId] = useState(initialSiteId);
+  const siteId = site.id;
   const [languageId, setLanguageId] = useState(initialLanguageId);
   const [pages, setPages] = useState<MenuPage[]>(initialPages);
   const [tree, setTree] = useState<MenuNode[]>(() =>
@@ -76,11 +74,7 @@ export function MenuBuilderClient({
   const [error, setError] = useState<string | null>(null);
   const [dragId, setDragId] = useState<string | null>(null);
 
-  const site = useMemo(
-    () => sites.find((s) => s.id === siteId) || sites[0],
-    [sites, siteId],
-  );
-  const languages = site?.languages || [];
+  const languages = site.languages || [];
 
   const load = useCallback(async (sId: string, lId: string) => {
     setLoading(true);
@@ -100,14 +94,6 @@ export function MenuBuilderClient({
       setLoading(false);
     }
   }, []);
-
-  async function onSiteChange(id: string) {
-    setSiteId(id);
-    const s = sites.find((x) => x.id === id);
-    const lang = s?.languages[0]?.id || "";
-    setLanguageId(lang);
-    if (lang) await load(id, lang);
-  }
 
   async function onLanguageChange(id: string) {
     setLanguageId(id);
@@ -345,10 +331,10 @@ export function MenuBuilderClient({
     ));
   }
 
-  if (!sites.length) {
+  if (!languages.length) {
     return (
       <p className="text-sm text-amber-700 bg-amber-50 rounded-lg px-4 py-3">
-        Create a site and pages first.
+        This website has no languages yet.
       </p>
     );
   }
@@ -356,20 +342,6 @@ export function MenuBuilderClient({
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-end gap-3 rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-        <label className="space-y-1 text-sm">
-          <span className="text-slate-600">Site</span>
-          <select
-            value={siteId}
-            onChange={(e) => void onSiteChange(e.target.value)}
-            className="block rounded-lg border border-slate-200 px-3 py-2 min-w-[12rem]"
-          >
-            {sites.map((s) => (
-              <option key={s.id} value={s.id}>
-                {s.name}
-              </option>
-            ))}
-          </select>
-        </label>
         <label className="space-y-1 text-sm">
           <span className="text-slate-600">Language</span>
           <select

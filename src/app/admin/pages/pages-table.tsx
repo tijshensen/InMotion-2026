@@ -14,28 +14,11 @@ type PageRow = {
   _count: { blocks: number };
 };
 
-type SiteOpt = { id: string; name: string; slug: string };
-
-export function PagesTable({
-  pages,
-  sites,
-  defaultSiteId,
-}: {
-  pages: PageRow[];
-  sites: SiteOpt[];
-  defaultSiteId?: string;
-}) {
-  const preferred =
-    defaultSiteId ||
-    sites.find((s) => s.slug === "kiekeboe")?.id ||
-    sites[0]?.id ||
-    "";
-  const [siteId, setSiteId] = useState(preferred);
+export function PagesTable({ pages }: { pages: PageRow[] }) {
   const [q, setQ] = useState("");
 
   const filtered = useMemo(() => {
     return pages.filter((p) => {
-      if (siteId && p.siteId !== siteId) return false;
       if (!q.trim()) return true;
       const needle = q.toLowerCase();
       return (
@@ -43,26 +26,11 @@ export function PagesTable({
         p.slug.toLowerCase().includes(needle)
       );
     });
-  }, [pages, siteId, q]);
+  }, [pages, q]);
 
   return (
     <div className="space-y-3">
       <div className="flex flex-wrap gap-3 items-end">
-        <label className="text-sm space-y-1">
-          <span className="text-slate-600">Site</span>
-          <select
-            value={siteId}
-            onChange={(e) => setSiteId(e.target.value)}
-            className="block rounded-lg border border-slate-200 px-3 py-2 min-w-[14rem]"
-          >
-            <option value="">All sites</option>
-            {sites.map((s) => (
-              <option key={s.id} value={s.id}>
-                {s.name}
-              </option>
-            ))}
-          </select>
-        </label>
         <label className="text-sm space-y-1 flex-1 min-w-[12rem]">
           <span className="text-slate-600">Search</span>
           <input
@@ -82,7 +50,6 @@ export function PagesTable({
           <thead className="bg-slate-50 text-left text-slate-500">
             <tr>
               <th className="px-4 py-3 font-medium">Title</th>
-              <th className="px-4 py-3 font-medium">Site</th>
               <th className="px-4 py-3 font-medium">Slug</th>
               <th className="px-4 py-3 font-medium">Blocks</th>
               <th className="px-4 py-3 font-medium">Status</th>
@@ -100,30 +67,29 @@ export function PagesTable({
                     {p.title || "(untitled)"}
                   </Link>
                 </td>
-                <td className="px-4 py-3 text-slate-600">{p.site.name}</td>
-                <td className="px-4 py-3 font-mono text-xs text-slate-500">
-                  /{p.slug}
+                <td className="px-4 py-3 font-mono text-xs text-slate-600">
+                  {p.slug}
                 </td>
+                <td className="px-4 py-3 text-slate-600">{p._count.blocks}</td>
                 <td className="px-4 py-3">
-                  {p._count.blocks > 0 ? (
-                    <span className="text-emerald-600">{p._count.blocks}</span>
-                  ) : (
-                    <span className="text-amber-600">0</span>
+                  {p.isDefault && (
+                    <span className="mr-1 rounded-full bg-blue-50 px-2 py-0.5 text-[11px] text-blue-700">
+                      default
+                    </span>
                   )}
-                </td>
-                <td className="px-4 py-3">
-                  {p.isHidden ? (
-                    <span className="text-amber-600">Hidden</span>
-                  ) : p.isDefault ? (
-                    <span className="text-emerald-600">Default</span>
-                  ) : (
-                    <span className="text-slate-400">Published</span>
+                  {p.isHidden && (
+                    <span className="rounded-full bg-amber-50 px-2 py-0.5 text-[11px] text-amber-800">
+                      hidden
+                    </span>
+                  )}
+                  {!p.isDefault && !p.isHidden && (
+                    <span className="text-slate-400">—</span>
                   )}
                 </td>
                 <td className="px-4 py-3">
                   <Link
                     href={`/admin/pages/${p.id}`}
-                    className="rounded-md bg-blue-600 px-2.5 py-1 text-xs font-medium text-white hover:bg-blue-700"
+                    className="text-blue-600 hover:underline"
                   >
                     Builder
                   </Link>
@@ -133,10 +99,10 @@ export function PagesTable({
             {filtered.length === 0 && (
               <tr>
                 <td
-                  colSpan={6}
-                  className="px-4 py-8 text-center text-slate-500"
+                  colSpan={5}
+                  className="px-4 py-10 text-center text-slate-500"
                 >
-                  No pages match this filter.
+                  No pages match.
                 </td>
               </tr>
             )}

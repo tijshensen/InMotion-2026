@@ -43,22 +43,12 @@ type SiteLite = {
 };
 
 type Props = {
-  sites: SiteLite[];
-  defaultSiteId?: string;
+  site: SiteLite;
 };
 
-export function SectionsAdminClient({ sites, defaultSiteId }: Props) {
-  const initialSite =
-    sites.find((s) => s.id === defaultSiteId) ||
-    sites.find((s) => s.slug === "kiekeboe") ||
-    sites[0] ||
-    null;
-
-  const [siteId, setSiteId] = useState(initialSite?.id || "");
-  const site = sites.find((s) => s.id === siteId) || initialSite;
-
+export function SectionsAdminClient({ site }: Props) {
   const templates = useMemo(
-    () => site?.templateSets.flatMap((ts) => ts.templates) || [],
+    () => site.templateSets.flatMap((ts) => ts.templates) || [],
     [site],
   );
   const [templateId, setTemplateId] = useState(templates[0]?.id || "");
@@ -131,14 +121,6 @@ export function SectionsAdminClient({ sites, defaultSiteId }: Props) {
     setTemplateId(id);
     setSelectedId(null);
     setStatus(null);
-  }
-
-  function onSiteChange(id: string) {
-    setSiteId(id);
-    const s = sites.find((x) => x.id === id);
-    const t = s?.templateSets[0]?.templates[0];
-    setTemplateId(t?.id || "");
-    setSelectedId(null);
   }
 
   const fields = parseSectionFields(html);
@@ -216,27 +198,17 @@ export function SectionsAdminClient({ sites, defaultSiteId }: Props) {
     setStatus("Deleted");
   }
 
-  if (!sites.length) {
-    return <p className="text-sm text-slate-500">No sites yet.</p>;
+  if (!templates.length) {
+    return (
+      <p className="text-sm text-slate-500">
+        No page templates on this website yet.
+      </p>
+    );
   }
 
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap gap-3 items-end">
-        <label className="text-sm space-y-1">
-          <span className="text-slate-600">Site</span>
-          <select
-            value={site?.id || ""}
-            onChange={(e) => onSiteChange(e.target.value)}
-            className="block rounded-lg border border-slate-200 px-3 py-2 min-w-[12rem]"
-          >
-            {sites.map((s) => (
-              <option key={s.id} value={s.id}>
-                {s.name}
-              </option>
-            ))}
-          </select>
-        </label>
         <label className="text-sm space-y-1">
           <span className="text-slate-600">Page template</span>
           <select

@@ -8,25 +8,27 @@ export default async function PagesAdminPage() {
   await requireUser();
   const active = await getActiveSite();
 
-  const sites = await prisma.site.findMany({
-    include: {
-      languages: true,
-      templateSets: { include: { templates: true } },
-    },
-    orderBy: { name: "asc" },
-  });
+  const site = active
+    ? await prisma.site.findUnique({
+        where: { id: active.id },
+        include: {
+          languages: true,
+          templateSets: { include: { templates: true } },
+        },
+      })
+    : null;
 
-  const pages = await prisma.page.findMany({
-    where: active ? { siteId: active.id } : undefined,
-    orderBy: [{ sortOrder: "asc" }],
-    include: {
-      site: true,
-      language: true,
-      _count: { select: { blocks: true } },
-    },
-  });
-
-  const defaultSiteId = active?.id || sites[0]?.id;
+  const pages = active
+    ? await prisma.page.findMany({
+        where: { siteId: active.id },
+        orderBy: [{ sortOrder: "asc" }],
+        include: {
+          site: true,
+          language: true,
+          _count: { select: { blocks: true } },
+        },
+      })
+    : [];
 
   return (
     <div className="space-y-8">
@@ -41,16 +43,9 @@ export default async function PagesAdminPage() {
         </div>
       </div>
 
-      <CreatePageForm
-        sites={JSON.parse(JSON.stringify(sites))}
-        defaultSiteId={defaultSiteId}
-      />
+      <CreatePageForm site={site ? JSON.parse(JSON.stringify(site)) : null} />
 
-      <PagesTable
-        pages={JSON.parse(JSON.stringify(pages))}
-        sites={sites.map((s) => ({ id: s.id, name: s.name, slug: s.slug }))}
-        defaultSiteId={defaultSiteId}
-      />
+      <PagesTable pages={JSON.parse(JSON.stringify(pages))} />
     </div>
   );
 }

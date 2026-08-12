@@ -1,41 +1,48 @@
 import { requireUser } from "@/lib/auth";
-import { prisma } from "@/lib/db";
+import { getActiveSite } from "@/lib/site-context";
 import { InsertsAdminClient } from "./inserts-admin-client";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
 /**
- * Minimal server page: auth + site list only.
- * Insert HTML is fetched client-side (never via RSC).
- * No dynamic() chunks — avoids "Failed to load chunk" errors.
+ * Inserts for the active website only (site chosen in the top bar).
  */
 export default async function InsertsAdminPage() {
   try {
     await requireUser();
+    const active = await getActiveSite();
 
-    const sites = await prisma.site.findMany({
-      orderBy: { name: "asc" },
-      select: { id: true, name: true, slug: true },
-    });
-
-    const defaultSiteId =
-      sites.find((s) => s.slug === "kiekeboe")?.id ?? sites[0]?.id;
+    if (!active) {
+      return (
+        <div className="space-y-4">
+          <h1 className="text-2xl font-semibold">Inserts</h1>
+          <p className="text-sm text-slate-500">
+            Select a website in the top bar first.
+          </p>
+        </div>
+      );
+    }
 
     return (
       <div className="space-y-6">
         <div>
           <h1 className="text-2xl font-semibold">Inserts</h1>
           <p className="text-slate-500 mt-1 max-w-2xl">
-            Reusable HTML snippets. In templates use{" "}
+            Reusable HTML for{" "}
+            <strong className="text-slate-700">{active.name}</strong>. In
+            templates use{" "}
             <code className="text-xs bg-slate-100 px-1 rounded">
               {"{{insert:tag}}"}
             </code>
-            . Click a tag to edit. Preview shows the rendered HTML.
+            .
           </p>
         </div>
 
-        <InsertsAdminClient sites={sites} defaultSiteId={defaultSiteId} />
+        <InsertsAdminClient
+          siteId={active.id}
+          siteName={active.name}
+        />
       </div>
     );
   } catch (err) {

@@ -3,8 +3,6 @@
 import { useCallback, useRef, useState } from "react";
 import { formatBytes } from "@/lib/media-format";
 
-type Site = { id: string; name: string; slug: string };
-
 type Asset = {
   id: string;
   filename: string;
@@ -16,17 +14,16 @@ type Asset = {
 };
 
 type Props = {
-  sites: Site[];
-  initialSiteId: string;
+  siteId: string;
+  siteName: string;
   initialAssets: Asset[];
 };
 
 export function MediaLibraryClient({
-  sites,
-  initialSiteId,
+  siteId,
+  siteName,
   initialAssets,
 }: Props) {
-  const [siteId, setSiteId] = useState(initialSiteId);
   const [assets, setAssets] = useState(initialAssets);
   const [loading, setLoading] = useState(false);
   const [uploading, setUploading] = useState(false);
@@ -51,11 +48,6 @@ export function MediaLibraryClient({
       setLoading(false);
     }
   }, []);
-
-  async function onSiteChange(id: string) {
-    setSiteId(id);
-    await load(id);
-  }
 
   async function onUpload(files: FileList | null) {
     if (!files?.length || !siteId) return;
@@ -117,10 +109,10 @@ export function MediaLibraryClient({
     void navigator.clipboard.writeText(path);
   }
 
-  if (!sites.length) {
+  if (!siteId) {
     return (
       <p className="text-sm text-amber-700 bg-amber-50 rounded-lg px-4 py-3">
-        Create a site first, then upload media.
+        Select a website in the top bar first.
       </p>
     );
   }
@@ -128,20 +120,9 @@ export function MediaLibraryClient({
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-end gap-3 rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-        <label className="space-y-1 text-sm">
-          <span className="text-slate-600">Site</span>
-          <select
-            value={siteId}
-            onChange={(e) => void onSiteChange(e.target.value)}
-            className="block rounded-lg border border-slate-200 px-3 py-2 min-w-[12rem]"
-          >
-            {sites.map((s) => (
-              <option key={s.id} value={s.id}>
-                {s.name}
-              </option>
-            ))}
-          </select>
-        </label>
+        <p className="text-sm text-slate-600 pb-2">
+          Library: <strong className="text-slate-800">{siteName}</strong>
+        </p>
         <input
           ref={fileRef}
           type="file"
@@ -157,6 +138,13 @@ export function MediaLibraryClient({
           className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-60"
         >
           {uploading ? "Uploading…" : "Upload images"}
+        </button>
+        <button
+          type="button"
+          onClick={() => void load(siteId)}
+          className="rounded-lg border border-slate-200 px-3 py-2 text-sm hover:bg-slate-50"
+        >
+          Refresh
         </button>
         {error && <p className="text-sm text-red-600 w-full">{error}</p>}
       </div>
