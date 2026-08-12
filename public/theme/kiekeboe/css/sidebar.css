@@ -1,0 +1,21 @@
+.sidebar {
+  margin-top: 30px;
+}
+.sidebar a {
+  line-height: 37px;
+  color: #44463f;
+  display: block;
+  padding-left: 25px;
+  font-weight: 300;
+}
+.sidebar a:hover {
+  background: #f5f5f5;
+}
+.sidebar .current a {
+  background: #f5f5f5;
+}
+@media (max-width: 990px) {
+  .sidebar {
+    display: none;
+  }
+}

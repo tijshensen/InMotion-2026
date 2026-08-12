@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { prisma } from "@/lib/db";
 import { requireUser } from "@/lib/auth";
 import { renderMenuHtml, type MenuPage } from "@/lib/menu";
+import { isFullThemeShell, renderBootstrapMenuHtml } from "@/lib/theme";
 import { PageEditor } from "./page-editor";
 
 type Props = { params: Promise<{ id: string }> };
@@ -69,8 +70,10 @@ export default async function EditPageAdmin({ params }: Props) {
     legacyId: p.legacyId,
   }));
 
-  const menuHtml = renderMenuHtml(page.site.slug, menuPages);
   const shellHtml = page.template?.coreHtml || "";
+  const menuHtml = isFullThemeShell(shellHtml)
+    ? renderBootstrapMenuHtml(page.site.slug, menuPages)
+    : renderMenuHtml(page.site.slug, menuPages);
   const siteTitle = page.site.siteTitle || page.site.name;
   const inserts = page.site.inserts.map((i) => ({
     tag: i.tag,

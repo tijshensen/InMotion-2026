@@ -16,6 +16,7 @@
     "db:fix-sections": "tsx scripts/fix-section-html.ts",
     "db:convert-tailwind": "tsx scripts/convert-bootstrap-to-tailwind.ts",
     "db:fix-links": "tsx scripts/fix-internal-links.ts",
+    "db:install-themes": "tsx scripts/install-full-themes.ts",
     "postinstall": "prisma generate"
   },
   "dependencies": {

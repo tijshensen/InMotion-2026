@@ -19,6 +19,9 @@ cd ~/Projects/cmsinmotion
 npm install
 npx prisma migrate dev
 npm run db:seed
+# After legacy import:
+# npm run db:import-legacy
+# npm run db:install-themes   # full Kiekeboe template + CSS/JS
 npm run dev
 ```
 
@@ -96,7 +99,10 @@ prisma/
 |---------|-------------|
 | `npm run dev` | Dev server (Turbopack) |
 | `npm run build` | Production build |
-| `npm run db:seed` | Seed admin + demo site |
+| `npm run db:seed
+# After legacy import:
+# npm run db:import-legacy
+# npm run db:install-themes   # full Kiekeboe template + CSS/JS` | Seed admin + demo site |
 | `npm run db:studio` | Prisma Studio |
 | `npm run db:migrate` | Create/apply migrations |
 

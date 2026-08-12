@@ -10,6 +10,11 @@ import {
 } from "./internal-links";
 import { renderMenuHtml, type MenuPage } from "./menu";
 import { renderAllSections } from "./sections";
+import {
+  isFullThemeShell,
+  renderBootstrapMenuHtml,
+  rewriteThemeAssetUrls,
+} from "./theme";
 
 type RenderPageInput = {
   siteSlug: string;
@@ -18,8 +23,8 @@ type RenderPageInput = {
 
 /**
  * Template tokens:
- * {{page.title}}, {{site.title}}, {{menu}}, {{sections}}, {{insert:tag}}
- * Also supports legacy {{block:name}} if present (ignored when using sections).
+ * {{page.title}}, {{site.title}}, {{site.slug}}, {{menu}}, {{sections}}, {{insert:tag}}
+ * Legacy (normalized on import): [repeatBlock_0], <insert menu/>, [FOOTER]
  */
 export async function renderPublicPage({
   siteSlug,
@@ -109,7 +114,19 @@ export async function renderPublicPage({
     menuTitle: p.menuTitle,
   }));
 
-  const menu = renderMenuHtml(site.slug, menuPages);
+  let html = page.template?.coreHtml?.trim() || TAILWIND_SHELL;
+  const fullTheme = isFullThemeShell(html);
+
+  // Full MotionCMS themes keep Bootstrap markup → Bootstrap menu.
+  // Minimal shells use Tailwind nav.
+  const menu = fullTheme
+    ? renderBootstrapMenuHtml(site.slug, menuPages)
+    : renderMenuHtml(site.slug, menuPages);
+
+  // Only force minimal shell when we have no real template
+  if (!page.template?.coreHtml?.trim()) {
+    html = TAILWIND_SHELL;
+  }
 
   let sectionsHtml = renderAllSections(
     page.blocks.map((b) => ({
@@ -119,14 +136,15 @@ export async function renderPublicPage({
       isHidden: b.isHidden,
     })),
   );
-  // Resolve #internalURI{legacyId} / #page:{id} inside section HTML
   sectionsHtml = resolveInternalLinks(sectionsHtml, site.slug, linkPages);
+  sectionsHtml = rewriteThemeAssetUrls(sectionsHtml, site.slug);
 
-  // Prefer stored shell; upgrade Bootstrap shells to Tailwind automatically
-  let html = page.template?.coreHtml || TAILWIND_SHELL;
-  if (/bootstrap/i.test(html) || !html.includes("cdn.tailwindcss.com")) {
-    html = TAILWIND_SHELL;
+  // Wrap sections so theme CSS spacing still applies
+  if (fullTheme && !sectionsHtml.includes("cms-page-sections")) {
+    sectionsHtml = `<div class="cms-page-sections">${sectionsHtml}</div>`;
   }
+
+  html = rewriteThemeAssetUrls(html, site.slug);
 
   html = html
     .replaceAll("{{page.title}}", escapeHtml(page.title))
@@ -150,26 +168,39 @@ export async function renderPublicPage({
   // Clear unused block placeholders
   html = html.replace(/\{\{block:[a-zA-Z0-9_-]+\}\}/g, "");
 
+  // Inserts: {{insert:tag}} and bare [TAG] leftovers
+  const resolveInsert = (tag: string) => {
+    const insert =
+      site.inserts.find((i) => i.tag === tag) ||
+      site.inserts.find((i) => i.tag === `[${tag}]`) ||
+      site.inserts.find((i) => i.tag === tag.replace(/^\[|\]$/g, ""));
+    if (!insert) return "";
+    let content = convertBootstrapHtml(normalizeInsertHtml(insert.content));
+    content = rewriteThemeAssetUrls(content, site.slug);
+    return content;
+  };
+
   html = html.replace(
     /\{\{insert:([a-zA-Z0-9_\[\]-]+)\}\}/g,
-    (_m, tag: string) => {
-      const insert = site.inserts.find((i) => i.tag === tag);
-      if (!insert) return "";
-      return convertBootstrapHtml(normalizeInsertHtml(insert.content));
-    },
+    (_m, tag: string) => resolveInsert(tag),
+  );
+  // Any remaining [FOOTER]-style tags
+  html = html.replace(/\[([A-Z][A-Z0-9_]*)\]/g, (_m, tag: string) =>
+    resolveInsert(`[${tag}]`) || resolveInsert(tag) || "",
   );
 
-  // Resolve any remaining internal link refs in shell / inserts
   html = resolveInternalLinks(html, site.slug, linkPages);
+
+  // Home / logo links in theme often point to index.html
+  html = html.replace(
+    /href=(["'])(?:index\.html|\.\.\/|\.\/)\1/gi,
+    `href=$1/s/${site.slug}$1`,
+  );
 
   const status =
     page.slug === slug || slug === "home" || page.isDefault ? 200 : 404;
 
   return { html, status };
-}
-
-function defaultShellHtml() {
-  return TAILWIND_SHELL;
 }
 
 function escapeHtml(s: string) {
