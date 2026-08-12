@@ -58,6 +58,7 @@ export function AdminShell({
   const [navCollapsed, setNavCollapsed] = useState(false);
   const [pageQuery, setPageQuery] = useState("");
   const [pageMenuOpen, setPageMenuOpen] = useState(false);
+  const [pageMenuPos, setPageMenuPos] = useState({ top: 0, left: 0, width: 320 });
   const [publishOpen, setPublishOpen] = useState(false);
   const [publishing, setPublishing] = useState(false);
   const [status, setStatus] = useState<string | null>(null);
@@ -112,11 +113,32 @@ export function AdminShell({
     });
   }, []);
 
+  // Position page dropdown in viewport coords (avoids header overflow clipping)
+  useEffect(() => {
+    if (!pageMenuOpen || !pageMenuRef.current) return;
+    const place = () => {
+      const r = pageMenuRef.current!.getBoundingClientRect();
+      setPageMenuPos({
+        top: r.bottom + 4,
+        left: r.left,
+        width: Math.max(r.width, 280),
+      });
+    };
+    place();
+    window.addEventListener("resize", place);
+    window.addEventListener("scroll", place, true);
+    return () => {
+      window.removeEventListener("resize", place);
+      window.removeEventListener("scroll", place, true);
+    };
+  }, [pageMenuOpen]);
+
   // Close menus on outside click
   useEffect(() => {
     function onDoc(e: MouseEvent) {
       const t = e.target as Node;
       if (pageMenuRef.current && !pageMenuRef.current.contains(t)) {
+        // also allow clicks inside the fixed list (rendered as child of pageMenuRef)
         setPageMenuOpen(false);
       }
       if (publishMenuRef.current && !publishMenuRef.current.contains(t)) {
@@ -193,7 +215,7 @@ export function AdminShell({
       {/* Top bar — always on top of canvas content */}
       <header
         ref={headerRef}
-        className="shrink-0 z-[60] flex items-center gap-2 sm:gap-3 border-b border-slate-800 bg-slate-950 px-3 py-2 text-sm overflow-x-auto"
+        className="shrink-0 z-[60] flex items-center gap-2 sm:gap-3 border-b border-slate-800 bg-slate-950 px-3 py-2 text-sm overflow-visible"
       >
         <button
           type="button"
@@ -233,22 +255,25 @@ export function AdminShell({
           </svg>
         </button>
 
-        <div className="min-w-0 hidden sm:block">
-          <p className="text-[10px] uppercase tracking-wide text-slate-500 leading-none">
-            {activeSite ? activeSite.name : "CMSinMotion"}
-          </p>
-          {activeSite && (
-            <p className="text-[11px] text-slate-500 truncate max-w-[10rem]">
-              /{activeSite.slug}
+        {/* Site name only outside the page canvas */}
+        {!isCanvas && (
+          <div className="min-w-0 hidden sm:block">
+            <p className="text-[10px] uppercase tracking-wide text-slate-500 leading-none">
+              {activeSite ? activeSite.name : "CMSinMotion"}
             </p>
-          )}
-        </div>
+            {activeSite && (
+              <p className="text-[11px] text-slate-500 truncate max-w-[10rem]">
+                /{activeSite.slug}
+              </p>
+            )}
+          </div>
+        )}
 
-        {/* Filterable page selector */}
+        {/* Filterable page selector — dropdown uses fixed positioning so header overflow doesn't clip it */}
         <div
           className={[
             "relative min-w-0 flex-1",
-            isCanvas ? "max-w-xs" : "max-w-md",
+            isCanvas ? "max-w-sm" : "max-w-md",
           ].join(" ")}
           ref={pageMenuRef}
         >
@@ -261,9 +286,9 @@ export function AdminShell({
             </span>
             <input
               id="admin-page-filter"
-              type="search"
+              type="text"
               autoComplete="off"
-              disabled={!activeSite || pages.length === 0}
+              disabled={!activeSite}
               value={
                 pageMenuOpen
                   ? pageQuery
@@ -275,6 +300,10 @@ export function AdminShell({
                 pages.length ? "Search pages…" : "No pages on this site"
               }
               onFocus={() => {
+                setPageMenuOpen(true);
+                setPageQuery("");
+              }}
+              onClick={() => {
                 setPageMenuOpen(true);
                 setPageQuery("");
               }}
@@ -299,9 +328,13 @@ export function AdminShell({
             <button
               type="button"
               disabled={!activeSite}
-              onClick={() => setPageMenuOpen((o) => !o)}
+              onClick={() => {
+                setPageMenuOpen((o) => !o);
+                if (!pageMenuOpen) setPageQuery("");
+              }}
               className="pr-2 text-slate-400 hover:text-white disabled:opacity-40"
               aria-label="Toggle page list"
+              aria-expanded={pageMenuOpen}
             >
               ▾
             </button>
@@ -309,8 +342,14 @@ export function AdminShell({
 
           {pageMenuOpen && activeSite && (
             <ul
-              className="absolute left-0 right-0 top-full z-50 mt-1 max-h-72 overflow-y-auto rounded-xl border border-slate-700 bg-slate-900 py-1 shadow-xl"
+              className="fixed z-[80] max-h-80 overflow-y-auto rounded-xl border border-slate-600 bg-slate-900 py-1 shadow-2xl"
               role="listbox"
+              style={{
+                top: pageMenuPos.top,
+                left: pageMenuPos.left,
+                width: pageMenuPos.width,
+                maxWidth: "calc(100vw - 1rem)",
+              }}
             >
               <li>
                 <Link
@@ -324,7 +363,12 @@ export function AdminShell({
                   All pages…
                 </Link>
               </li>
-              {filteredPages.length === 0 && (
+              {pages.length === 0 && (
+                <li className="px-3 py-3 text-xs text-slate-500">
+                  No pages for this site yet.
+                </li>
+              )}
+              {pages.length > 0 && filteredPages.length === 0 && (
                 <li className="px-3 py-3 text-xs text-slate-500">
                   No pages match “{pageQuery}”
                 </li>

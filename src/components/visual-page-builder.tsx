@@ -1151,49 +1151,73 @@ export function VisualPageBuilder({
         />
       )}
 
+      {/* Add section — slide in from the left (below top bar), like main nav */}
       {showAdd && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-slate-900/40 p-4">
-          <div className="max-h-[80vh] w-full max-w-lg overflow-hidden rounded-2xl bg-white shadow-2xl flex flex-col">
-            <div className="flex items-center justify-between border-b border-slate-100 px-4 py-3">
-              <h3 className="font-semibold">Add section</h3>
+        <button
+          type="button"
+          aria-label="Close add section"
+          className="fixed inset-0 z-[56] bg-slate-900/30"
+          style={
+            chromeMode
+              ? { top: "var(--admin-header-h, 56px)" }
+              : undefined
+          }
+          onClick={() => setShowAdd(false)}
+        />
+      )}
+      <aside
+        className={[
+          "fixed left-0 z-[57] flex w-full max-w-xs flex-col border-r border-slate-200 bg-slate-900 text-slate-100 shadow-2xl transition-transform duration-200 ease-out",
+          "bottom-0",
+          showAdd ? "translate-x-0" : "-translate-x-full pointer-events-none",
+        ].join(" ")}
+        style={{
+          top: chromeMode ? "var(--admin-header-h, 56px)" : 0,
+        }}
+        aria-hidden={!showAdd}
+      >
+        <div className="flex items-center justify-between border-b border-slate-800 px-4 py-3 shrink-0">
+          <div>
+            <p className="text-[11px] uppercase tracking-wide text-slate-500">
+              Layouts
+            </p>
+            <h3 className="font-semibold text-white">Add section</h3>
+          </div>
+          <button
+            type="button"
+            onClick={() => setShowAdd(false)}
+            className="rounded-lg border border-slate-700 px-2 py-1 text-xs text-slate-300 hover:bg-slate-800"
+          >
+            Close
+          </button>
+        </div>
+        <ul className="flex-1 overflow-y-auto p-3 space-y-1.5">
+          {catalog.map((tb) => (
+            <li key={tb.id}>
               <button
                 type="button"
-                onClick={() => setShowAdd(false)}
-                className="text-sm text-slate-500"
+                disabled={adding}
+                onClick={() => void addSection(tb.id)}
+                className="w-full rounded-lg border border-slate-700 bg-slate-800/60 px-3 py-3 text-left text-sm hover:border-blue-500/50 hover:bg-slate-800 disabled:opacity-50"
               >
-                Close
+                <span className="font-medium text-white">{tb.name}</span>
+                <span className="mt-0.5 block text-[11px] text-slate-400">
+                  {parseSectionFields(tb.defaultHtml).length} editable field(s)
+                </span>
               </button>
-            </div>
-            <ul className="overflow-y-auto p-3 space-y-1">
-              {catalog.map((tb) => (
-                <li key={tb.id}>
-                  <button
-                    type="button"
-                    disabled={adding}
-                    onClick={() => void addSection(tb.id)}
-                    className="w-full rounded-lg border border-slate-200 px-3 py-3 text-left text-sm hover:border-blue-300 hover:bg-blue-50/40 disabled:opacity-50"
-                  >
-                    <span className="font-medium">{tb.name}</span>
-                    <span className="mt-0.5 block text-[11px] text-slate-400">
-                      {parseSectionFields(tb.defaultHtml).length} editable field
-                      (s)
-                    </span>
-                  </button>
-                </li>
-              ))}
-              {catalog.length === 0 && (
-                <li className="px-2 py-8 text-center text-sm text-slate-500">
-                  No section layouts. Create them under{" "}
-                  <a href="/admin/sections" className="text-blue-600 underline">
-                    Sections
-                  </a>
-                  .
-                </li>
-              )}
-            </ul>
-          </div>
-        </div>
-      )}
+            </li>
+          ))}
+          {catalog.length === 0 && (
+            <li className="px-2 py-8 text-center text-sm text-slate-400">
+              No section layouts. Create them under{" "}
+              <a href="/admin/sections" className="text-blue-400 underline">
+                Sections
+              </a>
+              .
+            </li>
+          )}
+        </ul>
+      </aside>
     </div>
   );
 }
