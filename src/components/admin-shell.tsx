@@ -443,25 +443,6 @@ export function AdminShell({
             </div>
             <button
               type="button"
-              onClick={() =>
-                chrome.setLinksEnabled?.((v) => !v)
-              }
-              className={[
-                "rounded-lg border px-2.5 py-1.5 text-xs font-medium whitespace-nowrap",
-                chrome.linksEnabled
-                  ? "border-emerald-500 bg-emerald-600/20 text-emerald-200"
-                  : "border-slate-700 text-slate-300 hover:bg-slate-800",
-              ].join(" ")}
-              title={
-                chrome.linksEnabled
-                  ? "Link mode on — click internal links to open that page"
-                  : "Link mode off — clicks select sections"
-              }
-            >
-              {chrome.linksEnabled ? "Disable links" : "Enable links"}
-            </button>
-            <button
-              type="button"
               onClick={() => chrome.onAddSection?.()}
               className={[
                 "rounded-lg border px-2.5 py-1.5 text-xs font-medium whitespace-nowrap",
