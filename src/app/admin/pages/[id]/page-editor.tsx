@@ -67,6 +67,7 @@ export function PageEditor({
   const [loading, setLoading] = useState(false);
   const [showMeta, setShowMeta] = useState(false);
   const [device, setDevice] = useState<CanvasDevice>("desktop");
+  const [showAdd, setShowAdd] = useState(false);
 
   const onSubmit = useCallback(
     async (e?: FormEvent) => {
@@ -154,6 +155,7 @@ export function PageEditor({
       onDelete: () => {
         void onDelete();
       },
+      onAddSection: () => setShowAdd(true),
     }),
     [device, onSubmit, loading, status, showMeta, onDelete],
   );
@@ -161,9 +163,9 @@ export function PageEditor({
   useRegisterEditorChrome(chrome);
 
   return (
-    <div className="flex h-full min-h-0 flex-col bg-slate-100">
+    <div className="flex h-full min-h-0 w-full flex-col bg-slate-200 overflow-hidden">
       {showMeta && (
-        <div className="shrink-0 border-b border-slate-200 bg-white px-4 py-3 shadow-sm z-10">
+        <div className="shrink-0 border-b border-slate-200 bg-white px-4 py-3 shadow-sm z-10 overflow-y-auto max-h-[40vh]">
           <div className="mx-auto max-w-4xl grid sm:grid-cols-2 gap-3">
             <label className="space-y-1 text-sm sm:col-span-2">
               <span className="text-slate-600">Title</span>
@@ -227,7 +229,7 @@ export function PageEditor({
         </div>
       )}
 
-      <div className="flex-1 min-h-0">
+      <div className="relative flex-1 min-h-0 w-full">
         <VisualPageBuilder
           pageId={page.id}
           siteId={page.siteId}
@@ -245,6 +247,8 @@ export function PageEditor({
           device={device}
           onDeviceChange={setDevice}
           chromeMode
+          showAdd={showAdd}
+          onShowAddChange={setShowAdd}
         />
       </div>
     </div>

@@ -26,6 +26,8 @@ export type EditorChromeState = {
   showMeta: boolean;
   setShowMeta: (v: boolean | ((prev: boolean) => boolean)) => void;
   onDelete?: () => void;
+  /** Open the add-section picker (canvas only) */
+  onAddSection?: () => void;
 };
 
 type Ctx = {
