@@ -9,10 +9,7 @@
 import fs from "fs";
 import path from "path";
 import { PrismaClient } from "@prisma/client";
-import {
-  convertBootstrapHtml,
-  TAILWIND_SHELL,
-} from "../src/lib/bootstrap-to-tailwind";
+import { TAILWIND_SHELL } from "../src/lib/bootstrap-to-tailwind";
 import { normalizeInsertHtml } from "../src/lib/insert-html";
 import {
   emptyFieldsFromTemplate,
@@ -368,10 +365,8 @@ async function main() {
 
     let order = 0;
     for (const tb of tbs) {
-      // Repair legacy SQL escape loss + convert Bootstrap → Tailwind
-      const html = convertBootstrapHtml(
-        normalizeInsertHtml(String(tb.content || tb.original || "")),
-      );
+      // Repair legacy SQL escape loss only — keep Bootstrap classes for legacy themes
+      const html = normalizeInsertHtml(String(tb.content || tb.original || ""));
       const nb = await prisma.templateBlock.create({
         data: {
           templateId: created.id,

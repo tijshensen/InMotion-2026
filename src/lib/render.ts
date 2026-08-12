@@ -175,7 +175,12 @@ export async function renderPublicPage({
       site.inserts.find((i) => i.tag === `[${tag}]`) ||
       site.inserts.find((i) => i.tag === tag.replace(/^\[|\]$/g, ""));
     if (!insert) return "";
-    let content = convertBootstrapHtml(normalizeInsertHtml(insert.content));
+    // Only convert Bootstrap→Tailwind when the site is explicitly Tailwind.
+    // Kiekeboe / Bootstrap themes keep original classes.
+    let content = normalizeInsertHtml(insert.content);
+    if ((site.cssFramework || "").toLowerCase() === "tailwind") {
+      content = convertBootstrapHtml(content);
+    }
     content = rewriteThemeAssetUrls(content, site.slug);
     return content;
   };

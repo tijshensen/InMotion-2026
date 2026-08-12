@@ -16,10 +16,7 @@
  *   - Click a block → parent.openSidebar() + field editors from Templater::edit()
  */
 
-import {
-  convertBootstrapHtml,
-  TAILWIND_SHELL,
-} from "./bootstrap-to-tailwind";
+import { TAILWIND_SHELL } from "./bootstrap-to-tailwind";
 import { normalizeInsertHtml } from "./insert-html";
 import {
   resolveInternalLinks,
@@ -367,12 +364,12 @@ export function renderSectionHtml(
 
   html = html
     .replace(SINGLE_RE, (_m, _a, inner) => stripTags(inner || ""))
-    .replace(MULTI_RE, (_m, _a, inner) => convertBootstrapHtml(inner || ""))
+    .replace(MULTI_RE, (_m, _a, inner) => inner || "")
     .replace(FILE_RE, (_m, _a, inner) => stripTags(inner || ""))
     .replace(/\s*editable\s*=\s*["']true["']/gi, "");
 
-  // Bootstrap → Tailwind on the assembled section markup
-  html = convertBootstrapHtml(html);
+  // Do NOT auto-convert Bootstrap→Tailwind here — framework is per-site.
+  // Bootstrap sites (e.g. Kiekeboe) keep col-md-*, container, navbar, etc.
 
   if (sectionCss?.trim()) {
     html = `<div class="cms-section"><style>${sectionCss}</style>${html}</div>`;

@@ -19,6 +19,7 @@
     "db:install-themes": "tsx scripts/install-full-themes.ts",
     "theme:compile-less": "tsx scripts/compile-theme-less.ts",
     "site:generate": "tsx scripts/generate-site-cli.ts",
+    "db:restore-kiekeboe-bs": "tsx scripts/restore-kiekeboe-bootstrap.ts",
     "postinstall": "prisma generate"
   },
   "dependencies": {
