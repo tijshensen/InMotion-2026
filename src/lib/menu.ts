@@ -12,6 +12,31 @@ export type MenuPage = {
 
 export type MenuNode = MenuPage & { children: MenuNode[] };
 
+/**
+ * Pages allowed in navigation:
+ * - not hidden, marked inMenu
+ * - ancestors must also be in the set (children of hidden parents
+ *   must not float up as top-level items)
+ */
+export function filterPagesForMenu(pages: MenuPage[]): MenuPage[] {
+  let visible = pages.filter((p) => !p.isHidden && p.inMenu !== false);
+
+  let changed = true;
+  while (changed) {
+    changed = false;
+    const ids = new Set(visible.map((p) => p.id));
+    const next = visible.filter((p) => {
+      if (!p.parentId || p.parentId === p.id) return true;
+      return ids.has(p.parentId);
+    });
+    if (next.length !== visible.length) {
+      changed = true;
+      visible = next;
+    }
+  }
+  return visible;
+}
+
 /** Build a forest of menu nodes from a flat page list. */
 export function buildMenuTree(pages: MenuPage[]): MenuNode[] {
   const byId = new Map<string, MenuNode>();
@@ -26,7 +51,8 @@ export function buildMenuTree(pages: MenuPage[]): MenuNode[] {
     const node = byId.get(p.id)!;
     if (p.parentId && byId.has(p.parentId) && p.parentId !== p.id) {
       byId.get(p.parentId)!.children.push(node);
-    } else {
+    } else if (!p.parentId || p.parentId === p.id) {
+      // True roots only — never promote orphans to top level
       roots.push(node);
     }
   }
@@ -70,9 +96,9 @@ export function renderMenuHtml(
   opts?: { onlyInMenu?: boolean },
 ): string {
   const onlyInMenu = opts?.onlyInMenu !== false;
-  const visible = pages.filter(
-    (p) => !p.isHidden && (onlyInMenu ? p.inMenu !== false : true),
-  );
+  const visible = onlyInMenu
+    ? filterPagesForMenu(pages)
+    : pages.filter((p) => !p.isHidden);
   const tree = buildMenuTree(visible);
   if (!tree.length) {
     return `<nav class="cms-nav" aria-label="Hoofdmenu"></nav>`;

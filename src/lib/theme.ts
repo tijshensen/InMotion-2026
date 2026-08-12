@@ -10,6 +10,7 @@
 
 import {
   buildMenuTree,
+  filterPagesForMenu,
   pageHref,
   type MenuPage,
 } from "./menu";
@@ -135,7 +136,8 @@ export function renderBootstrapMenuHtml(
   siteSlug: string,
   pages: MenuPage[],
 ): string {
-  const visible = pages.filter((p) => !p.isHidden && p.inMenu !== false);
+  // Same rules as Tailwind menu: no hidden pages, no orphans under hidden parents
+  const visible = filterPagesForMenu(pages);
   const tree = buildMenuTree(visible);
   if (!tree.length) return "";
 

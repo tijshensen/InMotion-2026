@@ -60,7 +60,8 @@ export default async function EditPageAdmin({ params }: Props) {
     },
   });
 
-  const menuPages = allPages.filter((p) => !p.isHidden) as MenuPage[];
+  // Full list — menu HTML builders exclude isHidden / !inMenu / orphans
+  const menuPages = allPages as MenuPage[];
   const linkPages = allPages.map((p) => ({
     id: p.id,
     title: p.title,

@@ -104,7 +104,8 @@ export async function renderPublicPage({
     },
   });
 
-  const menuPages = allPages.filter((p) => !p.isHidden) as MenuPage[];
+  // Pass full page list; menu renderers filter hidden / out-of-menu / orphan children
+  const menuPages = allPages as MenuPage[];
   const linkPages: LinkablePage[] = allPages.map((p) => ({
     id: p.id,
     slug: p.slug,
@@ -118,7 +119,7 @@ export async function renderPublicPage({
   const fullTheme = isFullThemeShell(html);
 
   // Full MotionCMS themes keep Bootstrap markup → Bootstrap menu.
-  // Minimal shells use Tailwind nav.
+  // Minimal shells use Tailwind nav. Both exclude hidden pages.
   const menu = fullTheme
     ? renderBootstrapMenuHtml(site.slug, menuPages)
     : renderMenuHtml(site.slug, menuPages);
