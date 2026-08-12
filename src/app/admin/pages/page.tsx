@@ -38,7 +38,7 @@ export default async function PagesAdminPage() {
           <p className="text-slate-500 mt-1">
             {active
               ? `Editing pages for ${active.name}`
-              : "Select a website from the top bar."}
+              : "No website selected. Open Websites to choose or create one."}
           </p>
         </div>
       </div>
