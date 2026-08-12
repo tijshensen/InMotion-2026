@@ -14,7 +14,8 @@ const nav = [
   { href: "/admin/menus", label: "Menus" },
   { href: "/admin/media", label: "Media" },
   { href: "/admin/inserts", label: "Inserts" },
-  { href: "/admin/sites", label: "All sites" },
+  { href: "/admin/sites", label: "Websites" },
+  { href: "/admin/users", label: "Users" },
 ];
 
 export default async function AdminLayout({
@@ -92,6 +93,9 @@ export default async function AdminLayout({
               {user.firstName} {user.lastName}
             </p>
             <p className="text-xs text-slate-500 truncate">{user.email}</p>
+            <p className="text-[10px] uppercase tracking-wide text-slate-600 mt-0.5">
+              {user.role}
+            </p>
             <form action="/api/auth/logout" method="post" className="mt-3">
               <LogoutButton />
             </form>

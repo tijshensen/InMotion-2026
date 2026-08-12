@@ -9,11 +9,19 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+/// Platform role (SUPERADMIN = agency-wide). Site access is primarily
+/// OrganizationMember + SiteMember; see src/lib/access.ts.
 enum Role {
   SUPERADMIN
   ADMIN
   EDITOR
   VIEWER
+}
+
+/// Role within a client organization (workspace).
+enum OrgRole {
+  OWNER
+  MEMBER
 }
 
 model User {
@@ -23,12 +31,38 @@ model User {
   firstName    String
   lastName     String
   role         Role      @default(EDITOR)
+  isActive     Boolean   @default(true)
   createdAt    DateTime  @default(now())
   updatedAt    DateTime  @updatedAt
   memberships  SiteMember[]
+  orgMemberships OrganizationMember[]
   pages        Page[]    @relation("PageAuthor")
   sessions     Session[]
   logs         AuditLog[]
+}
+
+/// Client workspace: an owner can create multiple sites under one org.
+model Organization {
+  id        String   @id @default(cuid())
+  name      String
+  slug      String   @unique
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  members   OrganizationMember[]
+  sites     Site[]
+}
+
+model OrganizationMember {
+  id             String       @id @default(cuid())
+  organizationId String
+  userId         String
+  role           OrgRole      @default(MEMBER)
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([organizationId, userId])
+  @@index([userId])
 }
 
 model Session {
@@ -54,6 +88,9 @@ model Site {
   themeSlug   String   @default("")
   /// When the static site was last generated
   lastGeneratedAt DateTime?
+  /// Client organization that owns this site (multi-site owners)
+  organizationId String?
+  organization   Organization? @relation(fields: [organizationId], references: [id], onDelete: SetNull)
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
@@ -64,6 +101,8 @@ model Site {
   inserts     Insert[]
   settings    SiteSetting[]
   media       MediaAsset[]
+
+  @@index([organizationId])
 }
 
 model SiteMember {

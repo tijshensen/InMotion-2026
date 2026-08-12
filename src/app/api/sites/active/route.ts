@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { getSessionUser } from "@/lib/auth";
 import { prisma } from "@/lib/db";
+import { canAccessSite } from "@/lib/access";
 import { setActiveSiteId } from "@/lib/site-context";
 
 export async function POST(req: Request) {
@@ -18,6 +19,10 @@ export async function POST(req: Request) {
     const site = await prisma.site.findUnique({ where: { id: body.siteId } });
     if (!site) {
       return NextResponse.json({ error: "Site not found" }, { status: 404 });
+    }
+
+    if (!(await canAccessSite(user.id, site.id, "VIEWER"))) {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
     await setActiveSiteId(site.id);

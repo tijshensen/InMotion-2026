@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { getSessionUser } from "@/lib/auth";
+import { assertSiteAccess } from "@/lib/access";
 import { saveUploadedImage } from "@/lib/media";
 
 export async function GET(req: Request) {
@@ -14,6 +15,9 @@ export async function GET(req: Request) {
   if (!siteId) {
     return NextResponse.json({ error: "siteId required" }, { status: 400 });
   }
+
+  const denied = await assertSiteAccess(user, siteId, "VIEWER");
+  if (denied) return denied;
 
   const assets = await prisma.mediaAsset.findMany({
     where: { siteId },
@@ -41,6 +45,9 @@ export async function POST(req: Request) {
     if (!(file instanceof File) || file.size === 0) {
       return NextResponse.json({ error: "file required" }, { status: 400 });
     }
+
+    const denied = await assertSiteAccess(user, siteId, "EDITOR");
+    if (denied) return denied;
 
     const site = await prisma.site.findUnique({ where: { id: siteId } });
     if (!site) {

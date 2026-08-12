@@ -18,16 +18,45 @@ async function main() {
     },
   });
 
+  const org = await prisma.organization.upsert({
+    where: { slug: "default" },
+    update: { name: "Default organization" },
+    create: {
+      name: "Default organization",
+      slug: "default",
+      members: {
+        create: { userId: user.id, role: "OWNER" },
+      },
+    },
+  });
+
+  // Ensure superadmin is org owner even if org already existed
+  await prisma.organizationMember.upsert({
+    where: {
+      organizationId_userId: {
+        organizationId: org.id,
+        userId: user.id,
+      },
+    },
+    create: {
+      organizationId: org.id,
+      userId: user.id,
+      role: "OWNER",
+    },
+    update: { role: "OWNER" },
+  });
+
   const site = await prisma.site.upsert({
     where: { slug: "demo" },
-    update: {},
+    update: { organizationId: org.id },
     create: {
       name: "Demo Site",
       slug: "demo",
       siteTitle: "CMSinMotion Demo",
       domain: "localhost",
+      organizationId: org.id,
       members: {
-        create: { userId: user.id, role: Role.SUPERADMIN },
+        create: { userId: user.id, role: Role.ADMIN },
       },
       languages: {
         create: {

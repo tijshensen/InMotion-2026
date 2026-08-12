@@ -54,7 +54,7 @@ export async function destroySession() {
 
 export type SessionUser = Pick<
   User,
-  "id" | "email" | "firstName" | "lastName" | "role"
+  "id" | "email" | "firstName" | "lastName" | "role" | "isActive"
 >;
 
 export async function getSessionUser(): Promise<SessionUser | null> {
@@ -77,6 +77,7 @@ export async function getSessionUser(): Promise<SessionUser | null> {
             firstName: true,
             lastName: true,
             role: true,
+            isActive: true,
           },
         },
       },
@@ -86,6 +87,11 @@ export async function getSessionUser(): Promise<SessionUser | null> {
       if (session) {
         await prisma.session.delete({ where: { id: session.id } }).catch(() => {});
       }
+      return null;
+    }
+
+    if (!session.user.isActive) {
+      await prisma.session.deleteMany({ where: { userId: session.user.id } }).catch(() => {});
       return null;
     }
 

@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { prisma } from "@/lib/db";
 import { getSessionUser } from "@/lib/auth";
+import { assertSiteAccess } from "@/lib/access";
 
 export async function GET(req: Request) {
   const user = await getSessionUser();
@@ -12,6 +13,9 @@ export async function GET(req: Request) {
   if (!siteId) {
     return NextResponse.json({ error: "siteId required" }, { status: 400 });
   }
+
+  const denied = await assertSiteAccess(user, siteId, "VIEWER");
+  if (denied) return denied;
 
   const pages = await prisma.page.findMany({
     where: { siteId },
@@ -45,6 +49,9 @@ export async function POST(req: Request) {
 
   try {
     const data = createSchema.parse(await req.json());
+
+    const denied = await assertSiteAccess(user, data.siteId, "EDITOR");
+    if (denied) return denied;
 
     // New pages start empty — user adds sections from the catalog (MotionCMS-style)
     const page = await prisma.page.create({

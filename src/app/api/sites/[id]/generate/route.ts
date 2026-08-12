@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { getSessionUser } from "@/lib/auth";
+import { assertSiteAccess } from "@/lib/access";
 import { generateStaticSite } from "@/lib/generate-site";
 
 type Ctx = { params: Promise<{ id: string }> };
@@ -11,6 +12,9 @@ export async function POST(_req: Request, ctx: Ctx) {
   }
 
   const { id } = await ctx.params;
+  const denied = await assertSiteAccess(user, id, "ADMIN");
+  if (denied) return denied;
+
   try {
     const result = await generateStaticSite(id);
     return NextResponse.json(result);

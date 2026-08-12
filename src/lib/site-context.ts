@@ -1,10 +1,13 @@
 /**
  * Active website context for multi-site admin.
  * Cookie stores the selected site id so every admin screen focuses on one site.
+ * Site lists are filtered by the current user's access (org owner / membership).
  */
 
 import { cookies } from "next/headers";
 import { prisma } from "./db";
+import { getSessionUser } from "./auth";
+import { listAccessibleSites } from "./access";
 
 export const ACTIVE_SITE_COOKIE = "cms_active_site";
 
@@ -18,6 +21,7 @@ export type ActiveSite = {
   themeSlug: string;
   lastGeneratedAt: Date | null;
   isActive: boolean;
+  organizationId: string | null;
 };
 
 export function themePublicPath(site: { slug: string; themeSlug?: string | null }) {
@@ -49,18 +53,18 @@ export async function setActiveSiteId(siteId: string) {
   });
 }
 
-export async function getActiveSite(): Promise<ActiveSite | null> {
-  const sites = await prisma.site.findMany({
-    orderBy: { name: "asc" },
-  });
-  if (!sites.length) return null;
-
-  const cookieId = await getActiveSiteId();
-  const active =
-    sites.find((s) => s.id === cookieId) ||
-    sites.find((s) => s.slug === "kiekeboe") ||
-    sites[0];
-
+function toActiveSite(active: {
+  id: string;
+  name: string;
+  slug: string;
+  domain: string | null;
+  siteTitle: string;
+  cssFramework: string;
+  themeSlug: string;
+  lastGeneratedAt: Date | null;
+  isActive: boolean;
+  organizationId: string | null;
+}): ActiveSite {
   return {
     id: active.id,
     name: active.name,
@@ -71,20 +75,38 @@ export async function getActiveSite(): Promise<ActiveSite | null> {
     themeSlug: active.themeSlug || active.slug,
     lastGeneratedAt: active.lastGeneratedAt,
     isActive: active.isActive,
+    organizationId: active.organizationId,
   };
 }
 
+export async function getActiveSite(): Promise<ActiveSite | null> {
+  const user = await getSessionUser();
+  if (!user) return null;
+
+  const sites = await listAccessibleSites(user.id);
+  if (!sites.length) return null;
+
+  const cookieId = await getActiveSiteId();
+  const active =
+    sites.find((s) => s.id === cookieId) ||
+    sites.find((s) => s.slug === "kiekeboe") ||
+    sites[0];
+
+  return toActiveSite(active);
+}
+
 export async function listSitesForSwitcher() {
-  return prisma.site.findMany({
-    orderBy: { name: "asc" },
-    select: {
-      id: true,
-      name: true,
-      slug: true,
-      cssFramework: true,
-      lastGeneratedAt: true,
-    },
-  });
+  const user = await getSessionUser();
+  if (!user) return [];
+
+  const sites = await listAccessibleSites(user.id);
+  return sites.map((s) => ({
+    id: s.id,
+    name: s.name,
+    slug: s.slug,
+    cssFramework: s.cssFramework,
+    lastGeneratedAt: s.lastGeneratedAt,
+  }));
 }
 
 /**
@@ -104,14 +126,11 @@ export function siteStylesheetHrefs(site: {
     hrefs.push(`${theme}/css/bootstrap.min.css`);
     hrefs.push(`${theme}/css/font-awesome.min.css`);
   } else if (fw === "tailwind") {
-    // Tailwind via CDN for generated/preview (admin already has Tailwind)
     hrefs.push("https://cdn.tailwindcss.com");
   }
 
-  // Site-specific compiled CSS (always, if present as convention)
-  hrefs.push(`${theme}/css/kiekeboe.css`); // legacy name; also try style.css
+  hrefs.push(`${theme}/css/kiekeboe.css`);
   hrefs.push(`${theme}/css/style.css`);
 
-  // Unique + keep order
   return [...new Set(hrefs)];
 }
