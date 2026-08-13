@@ -25,6 +25,7 @@ type Preview = {
   siteFramework: CssFramework;
   match: boolean;
   needsRewrite: boolean;
+  isFirstPage?: boolean;
   guessedTitle: string;
   evidence: string[];
   confidence: "high" | "medium" | "low";
@@ -33,9 +34,11 @@ type Preview = {
 export function CreatePageSlide({
   site,
   cssFramework,
+  isFirstPage = false,
 }: {
   site: Site | null;
   cssFramework: string;
+  isFirstPage?: boolean;
 }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
@@ -121,7 +124,10 @@ export function CreatePageSlide({
     setError(null);
 
     if (fromUrl && sourceUrl.trim()) {
-      if (!preview || preview.sourceUrl !== sourceUrl.trim()) {
+      if (
+        !isFirstPage &&
+        (!preview || preview.sourceUrl !== sourceUrl.trim())
+      ) {
         await checkUrl();
         return;
       }
@@ -139,7 +145,7 @@ export function CreatePageSlide({
             slug: slug || undefined,
             menuTitle: menuTitle || undefined,
             sourceUrl: sourceUrl.trim(),
-            rewrite: preview.needsRewrite,
+            rewrite: Boolean(preview?.needsRewrite) && !isFirstPage,
           }),
         });
         const data = await res.json().catch(() => ({}));
@@ -185,20 +191,23 @@ export function CreatePageSlide({
     router.refresh();
   }
 
-  const importReady = Boolean(preview && preview.sourceUrl === sourceUrl.trim());
+  const importReady =
+    isFirstPage || Boolean(preview && preview.sourceUrl === sourceUrl.trim());
   const submitLabel = loading
     ? fromUrl
-      ? preview?.needsRewrite
+      ? preview?.needsRewrite && !isFirstPage
         ? "Rewriting…"
         : "Importing…"
       : "Creating…"
     : !fromUrl
       ? "Create page"
-      : !importReady
-        ? "Check URL"
-        : preview?.needsRewrite
-          ? "Rewrite & create page"
-          : "Create page from URL";
+      : isFirstPage
+        ? "Create page from URL"
+        : !importReady
+          ? "Check URL"
+          : preview?.needsRewrite
+            ? "Rewrite & create page"
+            : "Create page from URL";
 
   return (
     <>
@@ -278,8 +287,9 @@ export function CreatePageSlide({
                   Start from a URL
                 </span>
                 <span className="block text-xs text-slate-500 mt-0.5">
-                  Paste a public page. We check its CSS framework before
-                  importing the content into this site.
+                  {isFirstPage
+                    ? "This is the first page, so we’ll build the template from the URL. No framework check needed."
+                    : "Paste a public page. We check its CSS framework before importing the content into this site."}
                 </span>
               </span>
             </label>
@@ -300,6 +310,7 @@ export function CreatePageSlide({
                     required={fromUrl}
                   />
                 </label>
+                {!isFirstPage && (
                 <button
                   type="button"
                   onClick={() => void checkUrl()}
@@ -308,8 +319,9 @@ export function CreatePageSlide({
                 >
                   {checking ? "Checking…" : "Check framework"}
                 </button>
+                )}
 
-                {preview && (
+                {preview && !isFirstPage && (
                   <div
                     className={[
                       "rounded-lg border px-3 py-2 text-sm",
@@ -404,6 +416,7 @@ export function CreatePageSlide({
                 className="w-full rounded-lg border border-slate-200 px-3 py-2"
               />
             </label>
+            {!(isFirstPage && fromUrl) && (
             <label className="space-y-1 text-sm block">
               <span className="text-slate-600">Template</span>
               <select
@@ -419,6 +432,7 @@ export function CreatePageSlide({
                 ))}
               </select>
             </label>
+            )}
 
             {error && <p className="text-sm text-red-600">{error}</p>}
 
@@ -431,8 +445,9 @@ export function CreatePageSlide({
             </button>
             {fromUrl && importReady && (
               <p className="text-[11px] text-slate-400">
-                Import can take up to a minute. Header and footer stay this
-                site’s template.
+                {isFirstPage
+                  ? "Import can take up to a minute. We’ll create the Home template from this page."
+                  : "Import can take up to a minute. Header and footer stay this site’s template."}
               </p>
             )}
           </form>

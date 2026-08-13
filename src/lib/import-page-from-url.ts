@@ -26,6 +26,7 @@ export type PageImportPreview = {
   siteFramework: CssFramework;
   match: boolean;
   needsRewrite: boolean;
+  isFirstPage: boolean;
   guessedTitle: string;
   evidence: string[];
   confidence: "high" | "medium" | "low";
@@ -98,17 +99,21 @@ async function fetchPublicHtml(url: string): Promise<string> {
 export async function previewPageImport(opts: {
   sourceUrl: string;
   siteFramework: string;
+  isFirstPage?: boolean;
 }): Promise<PageImportPreview> {
   const html = await fetchPublicHtml(opts.sourceUrl);
   const detected = detectCssFramework(html);
   const siteFramework = normalizeFramework(opts.siteFramework);
-  const rewrite = needsFrameworkRewrite(detected.framework, siteFramework);
+  const isFirstPage = Boolean(opts.isFirstPage);
+  const rewrite =
+    !isFirstPage && needsFrameworkRewrite(detected.framework, siteFramework);
   return {
     sourceUrl: opts.sourceUrl,
     sourceFramework: detected.framework,
     siteFramework,
     match: !rewrite,
     needsRewrite: rewrite,
+    isFirstPage,
     guessedTitle: extractTitle(html).slice(0, 160),
     evidence: detected.evidence,
     confidence: detected.confidence,
@@ -119,7 +124,23 @@ type PlannedPage = {
   title: string;
   slug: string;
   sections: { name: string; html: string }[];
+  coreHtml?: string;
 };
+
+const FALLBACK_SHELL = `<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{page.title}}</title>
+  <meta name="description" content="{{page.metaDescription}}">
+</head>
+<body>
+  <header>{{site.title}} {{menu}}</header>
+  {{sections}}
+  <footer></footer>
+</body>
+</html>`;
 
 function frameworkRules(opts: {
   siteFramework: CssFramework;
@@ -143,6 +164,7 @@ async function planPageFromUrl(opts: {
   siteFramework: CssFramework;
   sourceFramework: CssFramework;
   rewrite: boolean;
+  bootstrap: boolean;
 }): Promise<PlannedPage> {
   if (!xaiApiKey()) {
     throw new Error(
@@ -152,8 +174,44 @@ async function planPageFromUrl(opts: {
 
   const raw = await fetchPublicHtml(opts.sourceUrl);
   const sourceHtml = stripNoise(raw).slice(0, 80_000);
+  const stylesheets = Array.from(
+    raw.matchAll(/<link\b[^>]*rel=["']stylesheet["'][^>]*>/gi),
+  )
+    .map((m) => m[0].match(/href=["']([^"']+)/i)?.[1] || "")
+    .filter((h) => /^https?:\/\//i.test(h))
+    .slice(0, 8);
 
-  const system = `You convert a web page's MAIN CONTENT into CMSinMotion sections.
+  const system = opts.bootstrap
+    ? `You convert a web page into the first CMSinMotion page for a new site.
+
+Return ONLY valid JSON (no markdown) with this shape:
+{
+  "title": "Page title",
+  "slug": "page-slug",
+  "coreHtml": "full HTML document for the site template (header + footer + tokens)",
+  "sections": [
+    { "name": "Hero", "html": "section markup with CMS markers" }
+  ]
+}
+
+Rules:
+- This is the first page: there is no existing template and no framework to match.
+- Keep the source page's CSS framework and class names. Do not convert Bootstrap ↔ Tailwind.
+- Detected source framework: ${frameworkLabel(opts.sourceFramework)}.
+- coreHtml MUST include exactly these tokens:
+  {{page.title}} {{page.metaDescription}} {{site.title}} {{menu}} {{sections}}
+- Put site-wide header (logo, nav) and footer in coreHtml. Use {{menu}} for the nav.
+- If the source uses Bootstrap, include a Bootstrap CSS CDN in <head>. If Tailwind, include https://cdn.tailwindcss.com. Also keep these stylesheet hrefs when useful: ${stylesheets.join(" ") || "(none)"}.
+- Split the main content into 2–8 named sections. Each section is a self-contained HTML fragment (no html/head/body).
+- Wrap EVERY editable headline, short line, body copy, and image with CMS markers:
+  <singleline name="Headline">Example headline</singleline>
+  <multiline name="Body"><p>Example paragraph</p></multiline>
+  <img editable="true" name="Photo" src="" width="800" height="500" alt="Photo" />
+- Use unique name= values within a section.
+- Keep real copy from the source page.
+- Images: keep absolute http(s) src when present; otherwise src="".
+- No React/Vue. Semantic HTML only.`
+    : `You convert a web page's MAIN CONTENT into CMSinMotion sections.
 
 Return ONLY valid JSON (no markdown) with this shape:
 {
@@ -207,7 +265,53 @@ ${sourceHtml}`,
     throw new Error("Grok did not return any sections for this page");
   }
 
-  return { title, slug, sections };
+  let coreHtml: string | undefined;
+  if (opts.bootstrap) {
+    const fromGrok = String(parsed.coreHtml || "").trim();
+    coreHtml = fromGrok.includes("{{sections}}") ? fromGrok : FALLBACK_SHELL;
+  }
+
+  return { title, slug, sections, coreHtml };
+}
+
+async function createTemplateFromImport(opts: {
+  siteId: string;
+  siteName: string;
+  coreHtml: string;
+}): Promise<string> {
+  let set = await prisma.templateSet.findFirst({
+    where: { siteId: opts.siteId },
+    orderBy: { name: "asc" },
+  });
+  if (!set) {
+    set = await prisma.templateSet.create({
+      data: {
+        siteId: opts.siteId,
+        name: `${opts.siteName} templates`,
+      },
+    });
+  }
+  const existing = await prisma.template.findFirst({
+    where: { templateSetId: set.id, name: "Home" },
+    select: { id: true },
+  });
+  if (existing) {
+    await prisma.template.update({
+      where: { id: existing.id },
+      data: { coreHtml: opts.coreHtml },
+    });
+    return existing.id;
+  }
+  const template = await prisma.template.create({
+    data: {
+      templateSetId: set.id,
+      name: "Home",
+      coreHtml: opts.coreHtml,
+      menuHtml: "",
+      submenuHtml: "",
+    },
+  });
+  return template.id;
 }
 
 async function uniquePageSlug(
@@ -249,13 +353,15 @@ export async function importPageFromUrl(opts: {
   });
   if (!site) throw new Error("Site not found");
 
+  const pageCount = await prisma.page.count({ where: { siteId: opts.siteId } });
+  const isFirstPage = pageCount === 0;
+
   const html = await fetchPublicHtml(opts.sourceUrl);
   const detected = detectCssFramework(html);
   const siteFramework = normalizeFramework(site.cssFramework);
-  const rewriteNeeded = needsFrameworkRewrite(
-    detected.framework,
-    siteFramework,
-  );
+  const rewriteNeeded =
+    !isFirstPage &&
+    needsFrameworkRewrite(detected.framework, siteFramework);
 
   if (rewriteNeeded && !opts.rewrite) {
     const err = new Error("FRAMEWORK_MISMATCH") as Error & {
@@ -267,6 +373,7 @@ export async function importPageFromUrl(opts: {
       siteFramework,
       match: false,
       needsRewrite: true,
+      isFirstPage: false,
       guessedTitle: extractTitle(html).slice(0, 160),
       evidence: detected.evidence,
       confidence: detected.confidence,
@@ -276,15 +383,31 @@ export async function importPageFromUrl(opts: {
 
   const plan = await planPageFromUrl({
     sourceUrl: opts.sourceUrl,
-    siteFramework,
+    siteFramework: isFirstPage ? detected.framework : siteFramework,
     sourceFramework: detected.framework,
     rewrite: rewriteNeeded,
+    bootstrap: isFirstPage,
   });
 
-  const templateId =
+  let templateId =
     opts.templateId ||
     site.templateSets.flatMap((ts) => ts.templates)[0]?.id ||
     null;
+
+  if (isFirstPage) {
+    templateId = await createTemplateFromImport({
+      siteId: site.id,
+      siteName: site.name,
+      coreHtml: plan.coreHtml || FALLBACK_SHELL,
+    });
+    if (detected.framework !== "none" || siteFramework === "none") {
+      await prisma.site.update({
+        where: { id: site.id },
+        data: { cssFramework: detected.framework },
+      });
+    }
+  }
+
   if (!templateId) {
     throw new Error("This site needs a template before you can import a page");
   }
@@ -342,6 +465,7 @@ export async function importPageFromUrl(opts: {
       slug,
       menuTitle: (opts.menuTitle || title).trim(),
       metaDescription: "",
+      isDefault: isFirstPage,
       blocks: {
         create: createdBlocks.map((b, i) => ({
           templateBlockId: b.id,

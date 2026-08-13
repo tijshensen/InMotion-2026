@@ -31,9 +31,14 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Site not found" }, { status: 404 });
     }
 
+    const pageCount = await prisma.page.count({
+      where: { siteId: body.siteId },
+    });
+
     const preview = await previewPageImport({
       sourceUrl: body.sourceUrl,
       siteFramework: site.cssFramework,
+      isFirstPage: pageCount === 0,
     });
     return NextResponse.json(preview);
   } catch (e) {
