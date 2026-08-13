@@ -56,27 +56,19 @@ export async function POST(req: Request, ctx: Ctx) {
       );
     }
 
-    const { apex, recordName, isApex } = apexFromHostname(name);
     const pagesHost = pagesHostForSite(site);
+    const dns = dnsHintForDomain(name, pagesHost);
+    const { apex } = apexFromHostname(dns.connectHost);
 
     await prisma.site.update({
       where: { id: site.id },
-      data: { domain: name },
+      data: { domain: dns.connectHost },
     });
 
     if (body.mode === "cname") {
-      if (isApex) {
-        return NextResponse.json(
-          {
-            error:
-              "An apex domain (example.com) cannot use a plain CNAME at most registrars. Use www.example.com, or switch nameservers to Cloudflare.",
-          },
-          { status: 400 },
-        );
-      }
       await upsertTransipCname({
         apex,
-        recordName,
+        recordName: dns.name,
         target: pagesHost,
       });
       let attached = null;
@@ -85,7 +77,7 @@ export async function POST(req: Request, ctx: Ctx) {
         try {
           attached = await addPagesDomain(
             site.cloudflareProject || site.slug,
-            name,
+            dns.connectHost,
           );
         } catch (e) {
           attachError = e instanceof Error ? e.message : String(e);
@@ -94,12 +86,12 @@ export async function POST(req: Request, ctx: Ctx) {
       return NextResponse.json({
         ok: true,
         mode: "cname",
-        domain: name,
+        domain: dns.connectHost,
         pagesHost,
-        message: `CNAME ${recordName} → ${pagesHost} saved at TransIP.`,
+        message: `CNAME ${dns.name} → ${pagesHost} saved at TransIP for ${dns.connectHost}.`,
         attached,
         attachError,
-        dns: dnsHintForDomain(name, pagesHost),
+        dns,
       });
     }
 

@@ -206,6 +206,9 @@ export function PublishModal({
       } else {
         setConnectNote("Domain saved. Add the DNS record, then publish.");
       }
+      if (hasTransip) {
+        await applyAtTransip("cname");
+      }
     } catch (err) {
       setConnectError(err instanceof Error ? err.message : "Could not save domain");
     } finally {
