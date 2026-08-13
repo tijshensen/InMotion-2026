@@ -51,16 +51,56 @@ function fileHref(abs: string) {
   return pathToFileURL(abs).href;
 }
 
-function rewriteLocalUrls(html: string) {
-  const publicRoot = path.join(process.cwd(), "public");
-  return html.replace(
+function placeholderSvg(w: number, h: number) {
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}" viewBox="0 0 ${w} ${h}"><rect fill="#e4e4e7" width="100%" height="100%"/><rect fill="#d4d4d8" x="${w * 0.15}" y="${h * 0.2}" width="${w * 0.7}" height="${h * 0.6}" rx="8"/><text x="50%" y="50%" fill="#71717a" text-anchor="middle" dy=".35em" font-family="Arial,sans-serif" font-size="${Math.max(14, Math.round(w / 18))}">${w}×${h}</text></svg>`;
+  return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
+}
+
+function rewritePreviewAssets(html: string) {
+  let s = html.replace(
+    /https?:\/\/(?:www\.)?placehold\.it\/(\d+)x(\d+)/gi,
+    (_m, w: string, h: string) => placeholderSvg(Number(w) || 400, Number(h) || 300),
+  );
+  s = s.replace(
+    /https?:\/\/(?:via\.)?placeholder\.com\/(\d+)x(\d+)/gi,
+    (_m, w: string, h: string) => placeholderSvg(Number(w) || 400, Number(h) || 300),
+  );
+  s = s.replace(
     /(src|href)=(["'])\/(theme|uploads)\/([^"']+)\2/gi,
     (_m, attr: string, q: string, folder: string, rest: string) => {
+      const publicRoot = path.join(process.cwd(), "public");
       const abs =
         folder === "uploads"
           ? path.join(uploadsRoot(), rest)
           : path.join(publicRoot, folder, rest);
       return `${attr}=${q}${fileHref(abs)}${q}`;
+    },
+  );
+  return s;
+}
+
+function rewriteCssUrls(css: string, cssDir: string) {
+  return css.replace(/url\((['"]?)([^'")]+)\1\)/g, (full, _q: string, url: string) => {
+    if (/^(data:|https?:|file:)/i.test(url)) return full;
+    const abs = path.resolve(cssDir, url.split("?")[0] || url);
+    if (!fs.existsSync(abs)) return full;
+    return `url("${fileHref(abs)}")`;
+  });
+}
+
+function inlineLocalStylesheets(html: string) {
+  const publicRoot = path.join(process.cwd(), "public");
+  return html.replace(
+    /<link[^>]+rel=["']stylesheet["'][^>]*>/gi,
+    (tag) => {
+      const href = tag.match(/href=["']([^"']+)["']/i)?.[1];
+      if (!href || href.startsWith("http") || href.startsWith("data:")) return tag;
+      const abs = href.startsWith("file:")
+        ? new URL(href).pathname
+        : path.join(publicRoot, href.replace(/^\//, ""));
+      if (!fs.existsSync(abs)) return tag;
+      const css = rewriteCssUrls(fs.readFileSync(abs, "utf8"), path.dirname(abs));
+      return `<style>${css}</style>`;
     },
   );
 }
@@ -125,7 +165,8 @@ function fillShell(opts: {
     resolveInsert(`[${tag}]`) || resolveInsert(tag) || "",
   );
 
-  html = rewriteLocalUrls(html);
+  html = rewritePreviewAssets(html);
+  html = inlineLocalStylesheets(html);
   return html;
 }
 
@@ -186,7 +227,20 @@ export async function generateSectionPreview(blockId: string): Promise<string | 
       deviceScaleFactor: 1,
     });
     await page.setContent(html, { waitUntil: "load", timeout: 25_000 });
-    await new Promise((r) => setTimeout(r, 250));
+    await page.evaluate(async () => {
+      const imgs = Array.from(document.images);
+      await Promise.all(
+        imgs.map(
+          (img) =>
+            img.complete ||
+            new Promise<void>((resolve) => {
+              img.onload = () => resolve();
+              img.onerror = () => resolve();
+            }),
+        ),
+      );
+    });
+    await new Promise((r) => setTimeout(r, 150));
     const el = await page.$("#cms-preview-section");
     if (el) {
       await el.screenshot({ path: tmpPng, type: "png" });
