@@ -15,6 +15,7 @@ type TemplateBlock = {
   defaultHtml: string;
   isRepeatable: boolean;
   sortOrder: number;
+  previewPath?: string;
 };
 
 type PageSection = {
@@ -275,6 +276,14 @@ export function SectionBuilder({
                       onClick={() => void addSection(tb.id)}
                       className="w-full text-left rounded-lg border border-slate-200 px-3 py-3 hover:border-blue-300 hover:bg-blue-50/40 disabled:opacity-50"
                     >
+                      {tb.previewPath && (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img
+                          src={tb.previewPath}
+                          alt=""
+                          className="mb-2 h-20 w-full rounded object-cover object-top"
+                        />
+                      )}
                       <span className="font-medium text-sm text-slate-900">
                         {tb.name}
                       </span>

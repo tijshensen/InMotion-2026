@@ -34,6 +34,7 @@ type TemplateBlock = {
   defaultHtml: string;
   isRepeatable: boolean;
   sortOrder: number;
+  previewPath?: string;
 };
 
 export type PageSection = {
@@ -1167,7 +1168,7 @@ export function VisualPageBuilder({
       )}
       <aside
         className={[
-          "fixed left-0 z-[57] flex w-full max-w-xs flex-col border-r border-slate-200 bg-slate-900 text-slate-100 shadow-2xl transition-transform duration-200 ease-out",
+          "fixed left-0 z-[57] flex w-full max-w-sm flex-col border-r border-slate-200 bg-slate-900 text-slate-100 shadow-2xl transition-transform duration-200 ease-out",
           "bottom-0",
           showAdd ? "translate-x-0" : "-translate-x-full pointer-events-none",
         ].join(" ")}
@@ -1191,18 +1192,34 @@ export function VisualPageBuilder({
             Close
           </button>
         </div>
-        <ul className="flex-1 overflow-y-auto p-3 space-y-1.5">
+        <ul className="flex-1 overflow-y-auto p-3 space-y-2">
           {catalog.map((tb) => (
             <li key={tb.id}>
               <button
                 type="button"
                 disabled={adding}
                 onClick={() => void addSection(tb.id)}
-                className="w-full rounded-lg border border-slate-700 bg-slate-800/60 px-3 py-3 text-left text-sm hover:border-blue-500/50 hover:bg-slate-800 disabled:opacity-50"
+                className="w-full overflow-hidden rounded-lg border border-slate-700 bg-slate-800/60 text-left text-sm hover:border-blue-500/50 hover:bg-slate-800 disabled:opacity-50"
               >
-                <span className="font-medium text-white">{tb.name}</span>
-                <span className="mt-0.5 block text-[11px] text-slate-400">
-                  {parseSectionFields(tb.defaultHtml).length} editable field(s)
+                <div className="aspect-[16/8] w-full overflow-hidden bg-slate-950">
+                  {tb.previewPath ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                      src={tb.previewPath}
+                      alt=""
+                      className="h-full w-full object-cover object-top"
+                    />
+                  ) : (
+                    <div className="flex h-full items-center justify-center text-[11px] text-slate-500">
+                      Preview pending
+                    </div>
+                  )}
+                </div>
+                <span className="block px-3 py-2">
+                  <span className="font-medium text-white">{tb.name}</span>
+                  <span className="mt-0.5 block text-[11px] text-slate-400">
+                    {parseSectionFields(tb.defaultHtml).length} editable field(s)
+                  </span>
                 </span>
               </button>
             </li>

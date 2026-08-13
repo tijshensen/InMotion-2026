@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { prisma } from "@/lib/db";
 import { getSessionUser } from "@/lib/auth";
+import { scheduleSectionPreview } from "@/lib/section-preview";
 
 type Ctx = { params: Promise<{ id: string }> };
 
@@ -40,6 +41,9 @@ export async function PATCH(req: Request, ctx: Ctx) {
       where: { id },
       data,
     });
+    if (data.defaultHtml !== undefined) {
+      scheduleSectionPreview(block.id);
+    }
     return NextResponse.json(block);
   } catch (e) {
     if (e instanceof z.ZodError) {

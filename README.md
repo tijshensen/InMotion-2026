@@ -105,6 +105,7 @@ prisma/
 # npm run db:install-themes   # full Kiekeboe template + CSS/JS` | Seed admin + demo site |
 | `npm run db:studio` | Prisma Studio |
 | `npm run db:migrate` | Create/apply migrations |
+| `npm run db:preview-sections` | Generate Add-section thumbnails (Puppeteer, background) |
 
 ## Reference codebase
 

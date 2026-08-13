@@ -3,6 +3,7 @@ import { z } from "zod";
 import { prisma } from "@/lib/db";
 import { getSessionUser } from "@/lib/auth";
 import { SECTION_LAYOUT_EXAMPLES } from "@/lib/sections";
+import { scheduleSectionPreview } from "@/lib/section-preview";
 
 export async function GET(req: Request) {
   const user = await getSessionUser();
@@ -78,6 +79,7 @@ export async function POST(req: Request) {
       },
     });
 
+    scheduleSectionPreview(block.id);
     return NextResponse.json(block, { status: 201 });
   } catch (e) {
     if (e instanceof z.ZodError) {

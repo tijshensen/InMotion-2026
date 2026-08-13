@@ -24,6 +24,7 @@
     "theme:compile-less": "tsx scripts/compile-theme-less.ts",
     "site:generate": "tsx scripts/generate-site-cli.ts",
     "db:restore-kiekeboe-bs": "tsx scripts/restore-kiekeboe-bootstrap.ts",
+    "db:preview-sections": "tsx scripts/backfill-section-previews.ts",
     "postinstall": "prisma generate"
   },
   "dependencies": {
@@ -45,6 +46,7 @@
     "nanoid": "^6.0.1",
     "next": "15.5.23",
     "prisma": "^6.19.3",
+    "puppeteer": "^25.7.0",
     "react": "19.1.0",
     "react-dom": "19.1.0",
     "sharp": "^0.35.3",

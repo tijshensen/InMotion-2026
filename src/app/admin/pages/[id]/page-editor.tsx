@@ -19,6 +19,7 @@ type TemplateBlock = {
   defaultHtml: string;
   isRepeatable: boolean;
   sortOrder: number;
+  previewPath?: string;
 };
 
 type Page = {

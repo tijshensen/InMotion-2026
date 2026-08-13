@@ -167,6 +167,8 @@ model TemplateBlock {
   defaultHtml String   @default("")
   isRepeatable Boolean @default(false)
   sortOrder   Int      @default(0)
+  /// Public URL of cached Puppeteer thumb, e.g. /uploads/_thumbs/sections/{id}.jpg
+  previewPath String   @default("")
   pageBlocks  PageBlock[]
 }
 
