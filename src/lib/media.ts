@@ -1,6 +1,9 @@
 import path from "path";
 import { mkdir, writeFile, unlink } from "fs/promises";
 import { randomBytes } from "crypto";
+import { uploadsRoot } from "./paths";
+
+export { uploadsRoot };
 
 export const MAX_UPLOAD_BYTES = 5 * 1024 * 1024; // 5 MB
 
@@ -19,10 +22,6 @@ const EXT_BY_MIME: Record<string, string> = {
   "image/webp": ".webp",
   "image/svg+xml": ".svg",
 };
-
-export function uploadsRoot() {
-  return path.join(process.cwd(), "public", "uploads");
-}
 
 export function publicUrlFor(relativePath: string) {
   // relativePath is like "demo/abc.jpg" or already "/uploads/..."

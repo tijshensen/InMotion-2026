@@ -7,6 +7,7 @@
 import { cookies } from "next/headers";
 import { getSessionUser } from "./auth";
 import { listAccessibleSites } from "./access";
+import { generatedSiteAbsDir } from "./paths";
 
 export const ACTIVE_SITE_COOKIE = "cms_active_site";
 
@@ -34,7 +35,7 @@ export function generatedSitePath(site: { slug: string }) {
 }
 
 export function generatedSiteFsDir(site: { slug: string }) {
-  return `public/sites/${site.slug}`;
+  return generatedSiteAbsDir(site);
 }
 
 export async function getActiveSiteId(): Promise<string | null> {

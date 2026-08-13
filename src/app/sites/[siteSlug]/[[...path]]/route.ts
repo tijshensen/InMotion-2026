@@ -1,5 +1,5 @@
 /**
- * Serve statically generated websites from public/sites/{slug}/.
+ * Serve statically generated websites from generatedSitesRoot()/{slug}/.
  * Fixes Next.js not mapping /sites/foo → /sites/foo/index.html
  * (which previously 404'd and trailing-slash redirected into a loop).
  */
@@ -7,6 +7,7 @@
 import fs from "fs";
 import path from "path";
 import { NextResponse } from "next/server";
+import { generatedSiteAbsDir } from "@/lib/paths";
 
 type Ctx = { params: Promise<{ siteSlug: string; path?: string[] }> };
 
@@ -55,7 +56,7 @@ export async function GET(_req: Request, ctx: Ctx) {
     return new NextResponse("Not found", { status: 404 });
   }
 
-  const siteRoot = path.join(process.cwd(), "public", "sites", siteSlug);
+  const siteRoot = generatedSiteAbsDir({ slug: siteSlug });
   if (!fs.existsSync(siteRoot)) {
     return new NextResponse(
       `Generated site not found for "${siteSlug}". Run Generate site in admin first.`,

@@ -1,13 +1,14 @@
 /**
  * Static site generator (legacy "render all pages").
- * Writes HTML + copies theme assets into public/sites/{slug}/
+ * Writes HTML + copies theme assets into generatedSitesRoot()/{slug}/
+ * (public/sites locally, or $DATA_DIR/sites on Railway).
  */
 
 import fs from "fs";
 import path from "path";
 import { prisma } from "./db";
 import { renderPublicPage } from "./render";
-import { generatedSiteFsDir } from "./site-context";
+import { generatedSiteAbsDir, themeAbsDir } from "./paths";
 
 export type GenerateResult = {
   siteSlug: string;
@@ -79,8 +80,7 @@ export async function generateStaticSite(
     orderBy: { sortOrder: "asc" },
   });
 
-  const outRel = generatedSiteFsDir(site);
-  const outAbs = path.join(process.cwd(), outRel);
+  const outAbs = generatedSiteAbsDir(site);
   const files: string[] = [];
   const errors: string[] = [];
 
@@ -90,7 +90,7 @@ export async function generateStaticSite(
 
   // Copy theme assets → sites/{slug}/assets
   const themeSlug = site.themeSlug || site.slug;
-  const themeSrc = path.join(process.cwd(), "public", "theme", themeSlug);
+  const themeSrc = themeAbsDir(themeSlug);
   const assetsDest = path.join(outAbs, "assets");
   if (fs.existsSync(themeSrc)) {
     copyDir(themeSrc, assetsDest);
@@ -152,7 +152,7 @@ export async function generateStaticSite(
   return {
     siteSlug: site.slug,
     pagesWritten,
-    outputDir: outRel,
+    outputDir: outAbs,
     files,
     errors,
   };

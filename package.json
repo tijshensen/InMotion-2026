@@ -2,10 +2,14 @@
   "name": "cmsinmotion",
   "version": "0.1.0",
   "private": true,
+  "engines": {
+    "node": ">=22"
+  },
   "scripts": {
     "dev": "next dev --turbopack",
     "build": "next build --turbopack",
     "start": "next start",
+    "start:prod": "bash scripts/start-prod.sh",
     "lint": "eslint",
     "db:migrate": "prisma migrate dev",
     "db:push": "prisma db push",
@@ -40,6 +44,7 @@
     "less": "^4.8.1",
     "nanoid": "^6.0.1",
     "next": "15.5.23",
+    "prisma": "^6.19.3",
     "react": "19.1.0",
     "react-dom": "19.1.0",
     "sharp": "^0.35.3",
@@ -55,7 +60,6 @@
     "dotenv": "^17.4.2",
     "eslint": "^9",
     "eslint-config-next": "15.5.23",
-    "prisma": "^6.19.3",
     "tailwindcss": "^4",
     "tsx": "^4.23.12",
     "typescript": "^5"

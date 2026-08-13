@@ -110,9 +110,59 @@ prisma/
 
 Legacy clone (read-only reference): `~/Projects/cmsinmotion2`
 
+## Deploy on Railway
+
+This app is a Node 22 Next.js server with Prisma + SQLite, disk uploads, and
+static site generation. Railway’s container filesystem is wiped on each deploy,
+so you **must** attach a persistent volume.
+
+The GitHub repo is already wired for auto-deploy (`railway.json` + `scripts/start-prod.sh`).
+
+### 1. Volume
+
+In the Railway canvas:
+
+1. Right-click → **Volume** (or `⌘K` → “volume”).
+2. Connect it to this service.
+3. Mount path: `/data`
+
+Railway will inject `RAILWAY_VOLUME_MOUNT_PATH=/data`. The start script uses
+that (or `DATA_DIR`) for:
+
+| Path | Contents |
+|------|----------|
+| `/data/prisma/prod.db` | SQLite database |
+| `/data/uploads` | Media library |
+| `/data/sites` | Generated static sites |
+
+### 2. Variables
+
+In the service → **Variables**:
+
+| Name | Value |
+|------|--------|
+| `AUTH_SECRET` | `openssl rand -base64 32` (required) |
+| `DATA_DIR` | `/data` (optional if the volume is mounted at `/data`) |
+| `DATABASE_URL` | `file:/data/prisma/prod.db` (set automatically when `DATA_DIR` is set) |
+| `XAI_API_KEY` | from [console.x.ai](https://console.x.ai) (Import from URL) |
+| `ADMIN_EMAIL` | first-boot login (default `admin@cmsinmotion.local`) |
+| `ADMIN_PASSWORD` | first-boot password (random + printed in logs if omitted) |
+
+Do **not** copy the local `file:./prisma/dev.db` URL into Railway.
+
+### 3. Domain
+
+Service → **Settings** → **Networking** → **Generate domain**.
+
+After the first successful deploy, open `/login` with the admin you set (or
+the password printed once in the deploy logs). Change it immediately.
+
+`prisma db push` and admin bootstrap run on **start**, not pre-deploy —
+volumes are not mounted until the container starts.
+
 ## Production notes
 
 1. Set a strong `AUTH_SECRET`.
-2. Switch `DATABASE_URL` to Postgres when ready.
+2. Persist SQLite + uploads + generated sites on a Railway volume (`DATA_DIR`).
 3. Do not commit `.env` or SQLite files.
 4. Rehash any migrated passwords with bcrypt (old dump used weak hashes).
