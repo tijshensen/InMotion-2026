@@ -147,8 +147,10 @@ In the service → **Variables**:
 | `XAI_API_KEY` | from [console.x.ai](https://console.x.ai) (Import from URL) |
 | `ADMIN_EMAIL` | first-boot login (default `admin@cmsinmotion.local`) |
 | `ADMIN_PASSWORD` | first-boot password (random + printed in logs if omitted) |
-| `CLOUDFLARE_API_TOKEN` | Pages **Edit** token — Publish deploys to `*.pages.dev` |
+| `CLOUDFLARE_API_TOKEN` | Pages **Edit** token — Publish deploys to `*.pages.dev`. For apex domains also add **Zone → Edit**. |
 | `CLOUDFLARE_ACCOUNT_ID` | from the Cloudflare dashboard URL / Workers overview |
+| `TRANSIP_LOGIN` | TransIP username — optional auto CNAME / nameserver change |
+| `TRANSIP_PRIVATE_KEY` | PEM from TransIP control panel → API |
 
 Do **not** copy the local `file:./prisma/dev.db` URL into Railway.
 

@@ -589,6 +589,39 @@ export function pagesHostForSite(site: { slug: string; cloudflareProject?: strin
   return `${sanitizePagesProjectName(site.cloudflareProject || site.slug)}.pages.dev`;
 }
 
+export async function ensureCloudflareZone(apex: string): Promise<{
+  id: string;
+  nameServers: string[];
+}> {
+  const accountId = cloudflareAccountId();
+  const listed = await cfFetch<{ id: string; name_servers?: string[] }[]>(
+    `/zones?name=${encodeURIComponent(apex)}&account.id=${accountId}`,
+  );
+  if (Array.isArray(listed) && listed[0]?.id) {
+    const z = listed[0];
+    if (z.name_servers?.length) {
+      return { id: z.id, nameServers: z.name_servers };
+    }
+    const detail = await cfFetch<{ id: string; name_servers?: string[] }>(
+      `/zones/${z.id}`,
+    );
+    return { id: detail.id, nameServers: detail.name_servers || [] };
+  }
+  const created = await cfFetch<{ id: string; name_servers?: string[] }>(
+    `/zones`,
+    {
+      method: "POST",
+      body: JSON.stringify({
+        name: apex,
+        account: { id: accountId },
+        type: "full",
+        jump_start: false,
+      }),
+    },
+  );
+  return { id: created.id, nameServers: created.name_servers || [] };
+}
+
 export async function listPagesDomains(projectName: string): Promise<PagesDomain[]> {
   const accountId = cloudflareAccountId();
   const project = sanitizePagesProjectName(projectName);

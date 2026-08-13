@@ -43,6 +43,8 @@ export function PublishModal({
   const [connectNote, setConnectNote] = useState<string | null>(null);
   const [dns, setDns] = useState<DnsHint | null>(null);
   const [cfStatus, setCfStatus] = useState<string | null>(null);
+  const [hasTransip, setHasTransip] = useState(false);
+  const [applying, setApplying] = useState<"cname" | "nameservers" | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -51,6 +53,7 @@ export function PublishModal({
         const res = await fetch(`/api/sites/${site.id}/cloudflare/domains`);
         const data = await res.json().catch(() => ({}));
         if (cancelled) return;
+        setHasTransip(Boolean(data.hasTransip));
         if (data.domain) {
           setSavedDomain(data.domain);
           setDomainInput(data.domain);
@@ -86,6 +89,36 @@ export function PublishModal({
     const typed = domainInput.trim().toLowerCase().replace(/^https?:\/\//, "");
     return typed || "domain.com";
   }, [domainInput]);
+
+  async function applyAtTransip(mode: "cname" | "nameservers") {
+    setApplying(mode);
+    setConnectError(null);
+    setConnectNote(null);
+    try {
+      const res = await fetch(`/api/sites/${site.id}/cloudflare/domains/apply`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: domainInput, mode }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || "TransIP update failed");
+      if (data.domain) {
+        setSavedDomain(data.domain);
+        setDomainInput(data.domain);
+      }
+      if (data.dns) setDns(data.dns);
+      setConnectNote(data.message || "Updated at TransIP.");
+      if (data.attachError) {
+        setConnectNote(
+          `${data.message || "Updated at TransIP."} ${data.attachError}`,
+        );
+      }
+    } catch (err) {
+      setConnectError(err instanceof Error ? err.message : "TransIP update failed");
+    } finally {
+      setApplying(null);
+    }
+  }
 
   async function connectDomain(e: React.FormEvent) {
     e.preventDefault();
@@ -253,6 +286,54 @@ export function PublishModal({
                 issued automatically after DNS is live.
               </p>
             </div>
+          )}
+
+          {hasTransip ? (
+            <div className="space-y-1.5">
+              <p className="text-[11px] font-medium text-slate-300">
+                Apply at TransIP
+              </p>
+              <button
+                type="button"
+                disabled={!domainInput.trim() || applying !== null}
+                onClick={() => void applyAtTransip("cname")}
+                className="w-full rounded-md bg-slate-800 px-2 py-1.5 text-[11px] font-medium text-slate-100 hover:bg-slate-700 disabled:opacity-50"
+              >
+                {applying === "cname"
+                  ? "Adding CNAME…"
+                  : "Add CNAME at TransIP (keep TransIP DNS)"}
+              </button>
+              <button
+                type="button"
+                disabled={!domainInput.trim() || applying !== null}
+                onClick={() => {
+                  if (
+                    !window.confirm(
+                      "This points the domain’s nameservers to Cloudflare. Mail and other DNS at TransIP will stop unless those records are copied to Cloudflare first. Continue?",
+                    )
+                  ) {
+                    return;
+                  }
+                  void applyAtTransip("nameservers");
+                }}
+                className="w-full rounded-md border border-amber-700/70 px-2 py-1.5 text-[11px] font-medium text-amber-200 hover:bg-amber-950/40 disabled:opacity-50"
+              >
+                {applying === "nameservers"
+                  ? "Updating nameservers…"
+                  : "Set Cloudflare nameservers at TransIP"}
+              </button>
+              <p className="text-[10px] leading-snug text-slate-500">
+                Prefer CNAME for www. Nameserver change is only needed for a
+                bare domain (example.com) and moves all DNS to Cloudflare.
+              </p>
+            </div>
+          ) : (
+            <p className="text-[10px] leading-snug text-slate-500">
+              To apply this automatically at TransIP, add{" "}
+              <code className="text-slate-400">TRANSIP_LOGIN</code> and{" "}
+              <code className="text-slate-400">TRANSIP_PRIVATE_KEY</code> to
+              .env and restart.
+            </p>
           )}
 
           {connectNote && (

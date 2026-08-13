@@ -12,6 +12,7 @@ import {
   normalizeHostname,
   pagesHostForSite,
 } from "@/lib/cloudflare-pages";
+import { transipConfigured } from "@/lib/transip";
 
 type Ctx = { params: Promise<{ id: string }> };
 
@@ -35,6 +36,7 @@ export async function GET(_req: Request, ctx: Ctx) {
         pagesHost,
         domain: site.domain,
         domains,
+        hasTransip: transipConfigured(),
         error: e instanceof Error ? e.message : "Could not list domains",
       });
     }
@@ -44,6 +46,7 @@ export async function GET(_req: Request, ctx: Ctx) {
     pagesHost,
     domain: site.domain,
     domains,
+    hasTransip: transipConfigured(),
   });
 }
 
