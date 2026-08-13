@@ -53,6 +53,7 @@ export function PublishModal({
   const [applying, setApplying] = useState<"cname" | "nameservers" | null>(null);
   const [guide, setGuide] = useState<DnsGuide | null>(null);
   const [guideLoading, setGuideLoading] = useState(false);
+  const [guideError, setGuideError] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -96,6 +97,7 @@ export function PublishModal({
 
   async function loadGuide(domain: string) {
     setGuideLoading(true);
+    setGuideError(null);
     try {
       const res = await fetch(
         `/api/sites/${site.id}/dns-instructions?domain=${encodeURIComponent(domain)}`,
@@ -107,12 +109,32 @@ export function PublishModal({
         cached: data.cached,
         instructions: data.instructions,
       });
-    } catch {
+    } catch (e) {
       setGuide(null);
+      setGuideError(
+        e instanceof Error ? e.message : "Could not load DNS instructions",
+      );
     } finally {
       setGuideLoading(false);
     }
   }
+
+  useEffect(() => {
+    if (dest !== "custom") return;
+    const host = domainInput
+      .trim()
+      .toLowerCase()
+      .replace(/^https?:\/\//, "")
+      .replace(/\/.*$/, "");
+    if (!/^(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,}$/.test(host)) {
+      return;
+    }
+    const t = setTimeout(() => {
+      void loadGuide(host);
+    }, 500);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dest, domainInput, site.id]);
 
   const previewHost = useMemo(() => {
     const typed = domainInput.trim().toLowerCase().replace(/^https?:\/\//, "");
@@ -326,17 +348,20 @@ export function PublishModal({
             </div>
           )}
 
-          {(guideLoading || guide) && (
+          {(guideLoading || guide || guideError) && (
             <div className="rounded-md border border-slate-800 bg-slate-900 px-2.5 py-2 space-y-1.5">
               <p className="text-[11px] font-medium text-slate-200">
                 {guide
                   ? `How to add this at ${guide.registrar}`
                   : "Looking up your registrar…"}
               </p>
-              {guideLoading && !guide && (
+              {guideLoading && (
                 <p className="text-[11px] text-slate-500">
                   Checking WHOIS and preparing steps…
                 </p>
+              )}
+              {guideError && !guide && (
+                <p className="text-[11px] text-red-400">{guideError}</p>
               )}
               {guide && (
                 <ol className="list-decimal space-y-1 pl-4 text-[11px] leading-snug text-slate-300">

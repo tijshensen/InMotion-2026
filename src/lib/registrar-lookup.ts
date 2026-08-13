@@ -11,6 +11,7 @@ export type RegistrarInfo = {
 };
 
 const NS_HINTS: { match: RegExp; name: string }[] = [
+  { match: /transip\.(nl|net|eu)/i, name: "TransIP" },
   { match: /transip\./i, name: "TransIP" },
   { match: /registrar-servers\.com/i, name: "Namecheap" },
   { match: /domaincontrol\.com/i, name: "GoDaddy" },
@@ -93,11 +94,29 @@ function nameFromRdap(data: unknown): string | null {
   return null;
 }
 
-async function lookupRdap(apex: string): Promise<string | null> {
-  const data = await fetchJson(`https://rdap.org/domain/${encodeURIComponent(apex)}`, {
-    Accept: "application/rdap+json, application/json",
-  });
-  return nameFromRdap(data);
+function nameserversFromRdap(data: unknown): string[] {
+  if (!data || typeof data !== "object") return [];
+  const list = (data as { nameservers?: { ldhName?: string }[] }).nameservers;
+  if (!Array.isArray(list)) return [];
+  return list
+    .map((n) => String(n.ldhName || "").replace(/\.$/, "").toLowerCase())
+    .filter(Boolean);
+}
+
+async function lookupRdap(apex: string): Promise<unknown | null> {
+  const urls = [
+    `https://rdap.org/domain/${encodeURIComponent(apex)}`,
+    apex.endsWith(".com")
+      ? `https://rdap.verisign.com/com/v1/domain/${encodeURIComponent(apex)}`
+      : "",
+  ].filter(Boolean);
+  for (const url of urls) {
+    const data = await fetchJson(url, {
+      Accept: "application/rdap+json, application/json",
+    });
+    if (data) return data;
+  }
+  return null;
 }
 
 async function lookupNameservers(apex: string): Promise<string[]> {
@@ -123,14 +142,20 @@ function registrarFromNs(nameservers: string[]): string | null {
 
 export async function detectRegistrar(hostname: string): Promise<RegistrarInfo> {
   const apex = apexDomain(hostname);
-  const rdapName = await lookupRdap(apex);
-  if (rdapName) {
-    return { name: rdapName, key: registrarCacheKey(rdapName), source: "rdap" };
-  }
-  const ns = await lookupNameservers(apex);
+  const rdap = await lookupRdap(apex);
+  // DNS host (nameservers) is where the user actually adds a CNAME.
+  // IANA registrar is often a wholesale (e.g. Key-Systems) while DNS is TransIP.
+  const ns = [
+    ...nameserversFromRdap(rdap),
+    ...(await lookupNameservers(apex)),
+  ];
   const fromNs = registrarFromNs(ns);
   if (fromNs) {
     return { name: fromNs, key: registrarCacheKey(fromNs), source: "nameserver" };
+  }
+  const rdapName = nameFromRdap(rdap);
+  if (rdapName) {
+    return { name: rdapName, key: registrarCacheKey(rdapName), source: "rdap" };
   }
   return {
     name: "your domain registrar",
