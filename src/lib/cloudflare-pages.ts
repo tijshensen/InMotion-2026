@@ -545,6 +545,95 @@ async function createDeployment(
   );
 }
 
+export type PagesDomain = {
+  name: string;
+  status: string;
+};
+
+export function normalizeHostname(raw: string): string {
+  return raw
+    .trim()
+    .toLowerCase()
+    .replace(/^https?:\/\//, "")
+    .replace(/\/.*$/, "")
+    .replace(/\.$/, "");
+}
+
+export function isValidHostname(host: string): boolean {
+  return /^(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,}$/.test(host);
+}
+
+export function isApexHostname(host: string): boolean {
+  const parts = host.split(".").filter(Boolean);
+  if (parts[0] === "www") return false;
+  return parts.length <= 2;
+}
+
+export function dnsHintForDomain(host: string, pagesHost: string): {
+  apex: boolean;
+  type: string;
+  name: string;
+  target: string;
+} {
+  const parts = host.split(".").filter(Boolean);
+  const apex = isApexHostname(host);
+  return {
+    apex,
+    type: "CNAME",
+    name: apex ? "@" : parts[0] || "www",
+    target: pagesHost,
+  };
+}
+
+export function pagesHostForSite(site: { slug: string; cloudflareProject?: string | null }) {
+  return `${sanitizePagesProjectName(site.cloudflareProject || site.slug)}.pages.dev`;
+}
+
+export async function listPagesDomains(projectName: string): Promise<PagesDomain[]> {
+  const accountId = cloudflareAccountId();
+  const project = sanitizePagesProjectName(projectName);
+  try {
+    const result = await cfFetch<PagesDomain[] | { name?: string; status?: string }[]>(
+      `/accounts/${accountId}/pages/projects/${project}/domains`,
+    );
+    if (!Array.isArray(result)) return [];
+    return result.map((d) => ({
+      name: d.name || "",
+      status: d.status || "unknown",
+    })).filter((d) => d.name);
+  } catch (e) {
+    if (e instanceof CloudflareApiError && (e.code === 8000007 || /not found/i.test(e.message))) {
+      return [];
+    }
+    throw e;
+  }
+}
+
+export async function addPagesDomain(
+  projectName: string,
+  hostname: string,
+): Promise<PagesDomain> {
+  const accountId = cloudflareAccountId();
+  const project = sanitizePagesProjectName(projectName);
+  const name = normalizeHostname(hostname);
+  if (!isValidHostname(name)) {
+    throw new Error("Enter a valid domain, e.g. www.example.com");
+  }
+  try {
+    const result = await cfFetch<PagesDomain>(
+      `/accounts/${accountId}/pages/projects/${project}/domains`,
+      { method: "POST", body: JSON.stringify({ name }) },
+    );
+    return { name: result.name || name, status: result.status || "pending" };
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    if (/already exists|already been added|taken/i.test(msg)) {
+      return { name, status: "active" };
+    }
+    throw e;
+  }
+}
+
 export async function publishSiteToCloudflare(siteId: string): Promise<CloudflarePublishResult> {
   if (!cloudflareConfigured()) {
     throw new Error(
@@ -573,6 +662,13 @@ export async function publishSiteToCloudflare(siteId: string): Promise<Cloudflar
     );
 
     const url = `https://${project}.pages.dev`;
+    if (site.domain) {
+      try {
+        await addPagesDomain(project, site.domain);
+      } catch (e) {
+        console.warn("[cloudflare] attach domain", e);
+      }
+    }
     await prisma.site.update({
       where: { id: site.id },
       data: {

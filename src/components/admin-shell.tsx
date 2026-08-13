@@ -11,6 +11,7 @@ import {
   useTransition,
 } from "react";
 import { useEditorChrome, type CanvasDevice } from "@/components/editor-chrome-context";
+import { PublishModal } from "@/components/publish-modal";
 
 export type AdminPageOption = {
   id: string;
@@ -34,6 +35,7 @@ export type AdminShellProps = {
     slug: string;
     cssFramework: string;
     lastGeneratedAt: string | null;
+    domain: string | null;
     cloudflareProject: string;
     cloudflareUrl: string;
   } | null;
@@ -213,10 +215,6 @@ export function AdminShell({
   const canPublish = Boolean(
     activeSite && (localHasChanges || hasCloudflare),
   );
-
-  const liveHref = activeSite ? `/s/${activeSite.slug}/` : null;
-  const publishedHref = activeSite ? `/sites/${activeSite.slug}` : null;
-  const hasPublished = Boolean(activeSite?.lastGeneratedAt);
 
   return (
     <div
@@ -525,11 +523,7 @@ export function AdminShell({
                     : "No changes since last publish"
             }
           >
-            {publishing
-              ? "Publishing…"
-              : hasCloudflare
-                ? "Publish to Cloudflare"
-                : "Publish"}
+            {publishing ? "Publishing…" : "Publish"}
             <span className="text-[10px] opacity-80">▾</span>
             {localHasChanges && activeSite && !publishing && (
               <span
@@ -540,92 +534,19 @@ export function AdminShell({
           </button>
 
           {publishOpen && activeSite && (
-            <div className="absolute right-0 top-full z-50 mt-1 w-64 rounded-xl border border-slate-700 bg-slate-900 py-1 shadow-xl">
-              <button
-                type="button"
-                disabled={!canPublish || publishing}
-                onClick={() => void onPublish()}
-                className="flex w-full flex-col items-start px-3 py-2.5 text-left hover:bg-slate-800 disabled:opacity-40 disabled:hover:bg-transparent"
-              >
-                <span className="text-sm font-medium text-white">
-                  {hasCloudflare ? "Publish to Cloudflare" : "Publish site"}
-                </span>
-                <span className="text-[11px] text-slate-500">
-                  {hasCloudflare
-                    ? "Generate static HTML and deploy to Pages"
-                    : localHasChanges
-                      ? "Generate static HTML from current content"
-                      : "Already up to date — no changes since last publish"}
-                </span>
-              </button>
-              <div className="my-1 border-t border-slate-800" />
-              <a
-                href={liveHref || "#"}
-                target="_blank"
-                rel="noreferrer"
-                className="flex w-full flex-col items-start px-3 py-2.5 text-left hover:bg-slate-800"
-                onClick={() => setPublishOpen(false)}
-              >
-                <span className="text-sm font-medium text-slate-200">
-                  View live preview ↗
-                </span>
-                <span className="text-[11px] text-slate-500">
-                  Dynamic preview (/s/{activeSite.slug})
-                </span>
-              </a>
-              <a
-                href={
-                  hasPublished && publishedHref
-                    ? publishedHref
-                    : liveHref || "#"
-                }
-                target="_blank"
-                rel="noreferrer"
-                className={[
-                  "flex w-full flex-col items-start px-3 py-2.5 text-left hover:bg-slate-800",
-                  !hasPublished ? "opacity-60" : "",
-                ].join(" ")}
-                onClick={() => setPublishOpen(false)}
-                title={
-                  hasPublished
-                    ? "Open last published static site"
-                    : "Publish once to generate static files"
-                }
-              >
-                <span className="text-sm font-medium text-slate-200">
-                  View published site ↗
-                </span>
-                <span className="text-[11px] text-slate-500">
-                  {hasPublished
-                    ? `On this server · last ${new Date(activeSite.lastGeneratedAt!).toLocaleString()}`
-                    : "Not published yet"}
-                </span>
-              </a>
-              {activeSite.cloudflareUrl ? (
-                <a
-                  href={activeSite.cloudflareUrl}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="flex w-full flex-col items-start px-3 py-2.5 text-left hover:bg-slate-800"
-                  onClick={() => setPublishOpen(false)}
-                >
-                  <span className="text-sm font-medium text-orange-200">
-                    View on Cloudflare ↗
-                  </span>
-                  <span className="text-[11px] text-slate-500 truncate w-full">
-                    {activeSite.cloudflareUrl.replace(/^https?:\/\//, "")}
-                  </span>
-                </a>
-              ) : hasCloudflare ? (
-                <p className="px-3 py-2 text-[11px] text-slate-500">
-                  Publish once to create {activeSite.cloudflareProject || activeSite.slug}.pages.dev
-                </p>
-              ) : (
-                <p className="px-3 py-2 text-[11px] text-slate-500">
-                  Add CLOUDFLARE_API_TOKEN + ACCOUNT_ID to deploy to Pages
-                </p>
-              )}
-            </div>
+            <PublishModal
+              site={{
+                id: activeSite.id,
+                slug: activeSite.slug,
+                domain: activeSite.domain,
+                cloudflareProject: activeSite.cloudflareProject,
+                cloudflareUrl: activeSite.cloudflareUrl,
+              }}
+              hasCloudflare={hasCloudflare}
+              publishing={publishing}
+              canPublish={canPublish}
+              onPublish={() => void onPublish()}
+            />
           )}
         </div>
 

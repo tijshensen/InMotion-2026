@@ -63,6 +63,7 @@ export default async function AdminLayout({
                 slug: active.slug,
                 cssFramework: active.cssFramework,
                 lastGeneratedAt: active.lastGeneratedAt?.toISOString() ?? null,
+                domain: active.domain,
                 cloudflareProject: active.cloudflareProject || "",
                 cloudflareUrl: active.cloudflareUrl || "",
               }
