@@ -61,36 +61,57 @@ function Toolbar({
   onHtml: () => void;
 }) {
   return (
-    <div className="flex flex-nowrap items-center gap-px overflow-x-auto border-b border-slate-200 bg-slate-50 px-1.5 py-1">
-      <div className="mr-1 flex shrink-0 rounded border border-slate-200 p-px text-[10px]">
-        <button
-          type="button"
-          onClick={onVisual}
-          className={[
-            "rounded px-1.5 py-0.5 font-medium",
-            mode === "visual"
-              ? "bg-slate-900 text-white"
-              : "text-slate-600 hover:bg-white",
-          ].join(" ")}
-        >
-          Visual
-        </button>
-        <button
-          type="button"
-          onClick={onHtml}
-          className={[
-            "rounded px-1.5 py-0.5 font-medium",
-            mode === "html"
-              ? "bg-slate-900 text-white"
-              : "text-slate-600 hover:bg-white",
-          ].join(" ")}
-        >
-          HTML
-        </button>
+    <div className="border-b border-slate-200 bg-slate-50">
+      <div className="flex flex-nowrap items-center justify-between gap-1 px-1.5 py-1">
+        <div className="flex shrink-0 rounded border border-slate-200 p-px text-[10px]">
+          <button
+            type="button"
+            onClick={onVisual}
+            className={[
+              "rounded px-1.5 py-0.5 font-medium",
+              mode === "visual"
+                ? "bg-slate-900 text-white"
+                : "text-slate-600 hover:bg-white",
+            ].join(" ")}
+          >
+            Visual
+          </button>
+          <button
+            type="button"
+            onClick={onHtml}
+            className={[
+              "rounded px-1.5 py-0.5 font-medium",
+              mode === "html"
+                ? "bg-slate-900 text-white"
+                : "text-slate-600 hover:bg-white",
+            ].join(" ")}
+          >
+            HTML
+          </button>
+        </div>
+
+        {mode === "visual" && editor && (
+          <div className="flex flex-nowrap items-center gap-px">
+            <ToolbarButton
+              title="Undo"
+              disabled={!editor.can().chain().focus().undo().run()}
+              onClick={() => editor.chain().focus().undo().run()}
+            >
+              ↩
+            </ToolbarButton>
+            <ToolbarButton
+              title="Redo"
+              disabled={!editor.can().chain().focus().redo().run()}
+              onClick={() => editor.chain().focus().redo().run()}
+            >
+              ↪
+            </ToolbarButton>
+          </div>
+        )}
       </div>
 
       {mode === "visual" && editor && (
-        <>
+        <div className="flex flex-nowrap items-center gap-px overflow-x-auto px-1.5 pb-1">
           <ToolbarButton
             title="Bold"
             active={editor.isActive("bold")}
@@ -184,24 +205,7 @@ function Toolbar({
           >
             ―
           </ToolbarButton>
-
-          <span className="mx-0.5 h-4 w-px shrink-0 bg-slate-200" />
-
-          <ToolbarButton
-            title="Undo"
-            disabled={!editor.can().chain().focus().undo().run()}
-            onClick={() => editor.chain().focus().undo().run()}
-          >
-            ↩
-          </ToolbarButton>
-          <ToolbarButton
-            title="Redo"
-            disabled={!editor.can().chain().focus().redo().run()}
-            onClick={() => editor.chain().focus().redo().run()}
-          >
-            ↪
-          </ToolbarButton>
-        </>
+        </div>
       )}
     </div>
   );
