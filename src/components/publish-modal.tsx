@@ -19,6 +19,12 @@ type DnsHint = {
   target: string;
 };
 
+type DnsGuide = {
+  registrar: string;
+  cached?: boolean;
+  instructions: string;
+};
+
 type Props = {
   site: PublishModalSite;
   hasCloudflare: boolean;
@@ -45,6 +51,8 @@ export function PublishModal({
   const [cfStatus, setCfStatus] = useState<string | null>(null);
   const [hasTransip, setHasTransip] = useState(false);
   const [applying, setApplying] = useState<"cname" | "nameservers" | null>(null);
+  const [guide, setGuide] = useState<DnsGuide | null>(null);
+  const [guideLoading, setGuideLoading] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -74,6 +82,7 @@ export function PublishModal({
             name: apex ? "@" : parts[0] || "www",
             target: data.pagesHost,
           });
+          void loadGuide(host);
         }
       } catch {
         /* ignore — wizard still works offline */
@@ -84,6 +93,26 @@ export function PublishModal({
       cancelled = true;
     };
   }, [site.id]);
+
+  async function loadGuide(domain: string) {
+    setGuideLoading(true);
+    try {
+      const res = await fetch(
+        `/api/sites/${site.id}/dns-instructions?domain=${encodeURIComponent(domain)}`,
+      );
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || "Could not load instructions");
+      setGuide({
+        registrar: data.registrar,
+        cached: data.cached,
+        instructions: data.instructions,
+      });
+    } catch {
+      setGuide(null);
+    } finally {
+      setGuideLoading(false);
+    }
+  }
 
   const previewHost = useMemo(() => {
     const typed = domainInput.trim().toLowerCase().replace(/^https?:\/\//, "");
@@ -135,6 +164,15 @@ export function PublishModal({
       if (!res.ok) throw new Error(data.error || "Could not save domain");
       setSavedDomain(data.domain || domainInput);
       if (data.dns) setDns(data.dns);
+      if (data.guide?.instructions) {
+        setGuide({
+          registrar: data.guide.registrar,
+          cached: data.guide.cached,
+          instructions: data.guide.instructions,
+        });
+      } else if (data.domain) {
+        void loadGuide(data.domain);
+      }
       if (data.attachError) {
         setConnectNote(
           `${data.attachError} Publish changes first — the domain is saved and will be attached then.`,
@@ -153,7 +191,7 @@ export function PublishModal({
   }
 
   return (
-    <div className="absolute right-0 top-full z-50 mt-1.5 w-[22.5rem] overflow-hidden rounded-xl border border-slate-700 bg-slate-900 text-left shadow-2xl">
+    <div className="absolute right-0 top-full z-50 mt-1.5 w-[24rem] max-h-[min(36rem,calc(100vh-5rem))] overflow-y-auto overflow-x-hidden rounded-xl border border-slate-700 bg-slate-900 text-left shadow-2xl">
       <div className="border-b border-slate-800 px-3.5 py-2.5">
         <p className="text-sm font-semibold text-white">Publish</p>
         <p className="text-[11px] text-slate-500">
@@ -282,9 +320,35 @@ export function PublishModal({
                 </p>
               )}
               <p>
-                Add the record at your DNS provider, then publish. SSL is
-                issued automatically after DNS is live.
+                Cloudflare uses this target in the background. Visitors open
+                your own domain. SSL is issued after DNS is live.
               </p>
+            </div>
+          )}
+
+          {(guideLoading || guide) && (
+            <div className="rounded-md border border-slate-800 bg-slate-900 px-2.5 py-2 space-y-1.5">
+              <p className="text-[11px] font-medium text-slate-200">
+                {guide
+                  ? `How to add this at ${guide.registrar}`
+                  : "Looking up your registrar…"}
+              </p>
+              {guideLoading && !guide && (
+                <p className="text-[11px] text-slate-500">
+                  Checking WHOIS and preparing steps…
+                </p>
+              )}
+              {guide && (
+                <ol className="list-decimal space-y-1 pl-4 text-[11px] leading-snug text-slate-300">
+                  {guide.instructions
+                    .split(/\n+/)
+                    .map((line) => line.replace(/^\s*\d+[.)]\s*/, "").trim())
+                    .filter(Boolean)
+                    .map((line, i) => (
+                      <li key={i}>{line}</li>
+                    ))}
+                </ol>
+              )}
             </div>
           )}
 

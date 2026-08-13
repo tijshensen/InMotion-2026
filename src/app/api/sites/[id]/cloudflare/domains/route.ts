@@ -13,6 +13,7 @@ import {
   pagesHostForSite,
 } from "@/lib/cloudflare-pages";
 import { transipConfigured } from "@/lib/transip";
+import { getDnsInstructions } from "@/lib/dns-instructions";
 
 type Ctx = { params: Promise<{ id: string }> };
 
@@ -98,12 +99,24 @@ export async function POST(req: Request, ctx: Ctx) {
       }
     }
 
+    let guide = null;
+    try {
+      guide = await getDnsInstructions({
+        hostname: name,
+        recordName: dns.name,
+        target: dns.target,
+      });
+    } catch (e) {
+      console.warn("[dns-instructions]", e);
+    }
+
     return NextResponse.json({
       domain: name,
       pagesHost,
       dns,
       attached,
       attachError,
+      guide,
     });
   } catch (e) {
     if (e instanceof z.ZodError) {
