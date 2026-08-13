@@ -574,14 +574,27 @@ export function dnsHintForDomain(host: string, pagesHost: string): {
   type: string;
   name: string;
   target: string;
+  connectHost: string;
 } {
   const parts = host.split(".").filter(Boolean);
   const apex = isApexHostname(host);
+  // Apex CNAME (@) is not valid at most registrars (including TransIP).
+  // Publish www.example.com via CNAME; bare domain needs Cloudflare nameservers.
+  if (apex) {
+    return {
+      apex: true,
+      type: "CNAME",
+      name: "www",
+      target: pagesHost,
+      connectHost: `www.${host}`,
+    };
+  }
   return {
-    apex,
+    apex: false,
     type: "CNAME",
-    name: apex ? "@" : parts[0] || "www",
+    name: parts[0] || "www",
     target: pagesHost,
+    connectHost: host,
   };
 }
 

@@ -37,9 +37,10 @@ export async function GET(req: Request, ctx: Ctx) {
 
   try {
     const guide = await getDnsInstructions({
-      hostname,
+      hostname: dns.connectHost,
       recordName: dns.name,
       target: dns.target,
+      recordType: dns.type,
     });
     return NextResponse.json({
       domain: hostname,

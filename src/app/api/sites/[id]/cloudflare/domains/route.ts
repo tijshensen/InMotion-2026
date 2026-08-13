@@ -75,22 +75,22 @@ export async function POST(req: Request, ctx: Ctx) {
       );
     }
 
-    await prisma.site.update({
-      where: { id: site.id },
-      data: { domain: name },
-    });
-
     const pagesHost = pagesHostForSite({
       slug: site.slug,
       cloudflareProject: site.cloudflareProject,
     });
     const dns = dnsHintForDomain(name, pagesHost);
 
+    await prisma.site.update({
+      where: { id: site.id },
+      data: { domain: dns.connectHost },
+    });
+
     let attached: { name: string; status: string } | null = null;
     let attachError: string | null = null;
     if (cloudflareConfigured() && site.cloudflareProject) {
       try {
-        attached = await addPagesDomain(site.cloudflareProject, name);
+        attached = await addPagesDomain(site.cloudflareProject, dns.connectHost);
       } catch (e) {
         attachError =
           e instanceof Error
@@ -102,16 +102,17 @@ export async function POST(req: Request, ctx: Ctx) {
     let guide = null;
     try {
       guide = await getDnsInstructions({
-        hostname: name,
+        hostname: dns.connectHost,
         recordName: dns.name,
         target: dns.target,
+        recordType: dns.type,
       });
     } catch (e) {
       console.warn("[dns-instructions]", e);
     }
 
     return NextResponse.json({
-      domain: name,
+      domain: dns.connectHost,
       pagesHost,
       dns,
       attached,

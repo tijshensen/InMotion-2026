@@ -17,6 +17,7 @@ type DnsHint = {
   type: string;
   name: string;
   target: string;
+  connectHost?: string;
 };
 
 type DnsGuide = {
@@ -292,7 +293,10 @@ export function PublishModal({
           <form onSubmit={(e) => void connectDomain(e)} className="space-y-2">
             <input
               value={domainInput}
-              onChange={(e) => setDomainInput(e.target.value)}
+              onChange={(e) => {
+              setDomainInput(e.target.value);
+              setDest("custom");
+            }}
               placeholder="www.example.com"
               autoCapitalize="off"
               autoCorrect="off"
@@ -315,20 +319,15 @@ export function PublishModal({
                 <tbody>
                   <tr>
                     <td className="py-0.5 pr-2 text-slate-500">Type</td>
-                    <td>CNAME</td>
+                    <td>{dns?.type || "CNAME"}</td>
                   </tr>
                   <tr>
                     <td className="py-0.5 pr-2 text-slate-500">Name</td>
-                    <td>
-                      {dns?.name ||
-                        (previewHost.split(".").length <= 2
-                          ? "@"
-                          : previewHost.split(".")[0])}
-                    </td>
+                    <td>{dns?.name || "www"}</td>
                   </tr>
                   <tr>
                     <td className="py-0.5 pr-2 text-slate-500">Target</td>
-                    <td className="break-all">{pagesHost}</td>
+                    <td className="break-all">{dns?.target || pagesHost}</td>
                   </tr>
                 </tbody>
               </table>
@@ -336,14 +335,20 @@ export function PublishModal({
                 (previewHost.split(".").length <= 2 &&
                   !previewHost.startsWith("www."))) && (
                 <p>
-                  Apex domains work best if the zone is on Cloudflare
-                  (nameservers at Cloudflare). Otherwise use CNAME flattening
-                  for <code className="text-slate-300">@</code>.
+                  A bare domain like{" "}
+                  <code className="text-slate-300">{previewHost}</code> cannot
+                  use CNAME <code className="text-slate-300">@</code>. We
+                  connect{" "}
+                  <code className="text-slate-300">
+                    {dns?.connectHost || `www.${previewHost}`}
+                  </code>{" "}
+                  instead. For the bare domain, use “Set Cloudflare nameservers
+                  at TransIP”.
                 </p>
               )}
               <p>
-                Cloudflare uses this target in the background. Visitors open
-                your own domain. SSL is issued after DNS is live.
+                Visitors use your domain. The target is only Cloudflare’s
+                routing address — it is not the public site.
               </p>
             </div>
           )}
