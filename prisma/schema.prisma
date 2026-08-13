@@ -248,6 +248,13 @@ model SiteSetting {
   @@unique([siteId, key])
 }
 
+/// Global admin settings (e.g. default AI import prompt)
+model AppSetting {
+  key       String   @id
+  value     String   @default("")
+  updatedAt DateTime @updatedAt
+}
+
 model MediaAsset {
   id        String   @id @default(cuid())
   siteId    String

@@ -1,10 +1,12 @@
 import { requireUser } from "@/lib/auth";
 import {
   canCreateAnySite,
+  isPlatformSuperadmin,
   listAccessibleSiteIds,
   listOwnedOrganizations,
 } from "@/lib/access";
 import { prisma } from "@/lib/db";
+import { getImportPrompt } from "@/lib/import-from-url";
 import { SitesAdminClient } from "./sites-admin-client";
 
 export default async function SitesAdminPage() {
@@ -39,10 +41,14 @@ export default async function SitesAdminPage() {
   const organizations = canCreate
     ? await listOwnedOrganizations(user.id)
     : [];
+  const importPrompt = await getImportPrompt();
 
   return (
     <SitesAdminClient
       canCreate={canCreate}
+      isSuperadmin={isPlatformSuperadmin(user)}
+      importPrompt={importPrompt}
+      hasXaiKey={Boolean(process.env.XAI_API_KEY)}
       organizations={organizations.map((o) => ({
         id: o.id,
         name: o.name,

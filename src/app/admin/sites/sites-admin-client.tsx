@@ -24,12 +24,23 @@ type SiteCard = {
 type Props = {
   sites: SiteCard[];
   canCreate: boolean;
+  isSuperadmin: boolean;
+  importPrompt: string;
+  hasXaiKey: boolean;
   organizations: Org[];
 };
 
-export function SitesAdminClient({ sites, canCreate, organizations }: Props) {
+export function SitesAdminClient({
+  sites,
+  canCreate,
+  isSuperadmin,
+  importPrompt,
+  hasXaiKey,
+  organizations,
+}: Props) {
   const router = useRouter();
   const [showForm, setShowForm] = useState(false);
+  const [showImport, setShowImport] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [name, setName] = useState("");
@@ -41,6 +52,10 @@ export function SitesAdminClient({ sites, canCreate, organizations }: Props) {
     "bootstrap" | "tailwind" | "none" | "custom"
   >("none");
   const [domain, setDomain] = useState("");
+  const [sourceUrl, setSourceUrl] = useState("");
+  const [prompt, setPrompt] = useState(importPrompt);
+  const [savePrompt, setSavePrompt] = useState(false);
+  const [importing, setImporting] = useState(false);
 
   async function onCreate(e: React.FormEvent) {
     e.preventDefault();
@@ -76,6 +91,40 @@ export function SitesAdminClient({ sites, canCreate, organizations }: Props) {
     }
   }
 
+  async function onImport(e: React.FormEvent) {
+    e.preventDefault();
+    if (!organizationId) {
+      setError("Select an organization");
+      return;
+    }
+    setImporting(true);
+    setError(null);
+    try {
+      const res = await fetch("/api/sites/import-from-url", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          organizationId,
+          sourceUrl,
+          name: name || undefined,
+          prompt,
+          savePromptAsDefault: savePrompt,
+        }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || "Import failed");
+      if (data.pageId) {
+        router.push(`/admin/pages/${data.pageId}`);
+      } else {
+        router.refresh();
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Import failed");
+    } finally {
+      setImporting(false);
+    }
+  }
+
   async function focusSite(siteId: string) {
     await fetch("/api/sites/active", {
       method: "POST",
@@ -98,13 +147,30 @@ export function SitesAdminClient({ sites, canCreate, organizations }: Props) {
           </p>
         </div>
         {canCreate && (
-          <button
-            type="button"
-            onClick={() => setShowForm((v) => !v)}
-            className="rounded-lg bg-blue-600 px-3 py-2 text-sm font-medium text-white hover:bg-blue-700"
-          >
-            {showForm ? "Cancel" : "New website"}
-          </button>
+          <div className="flex flex-wrap gap-2">
+            <button
+              type="button"
+              onClick={() => {
+                setShowImport((v) => !v);
+                setShowForm(false);
+                setError(null);
+              }}
+              className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-medium hover:bg-slate-50"
+            >
+              {showImport ? "Cancel" : "Import from URL"}
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setShowForm((v) => !v);
+                setShowImport(false);
+                setError(null);
+              }}
+              className="rounded-lg bg-blue-600 px-3 py-2 text-sm font-medium text-white hover:bg-blue-700"
+            >
+              {showForm ? "Cancel" : "New website"}
+            </button>
+          </div>
         )}
       </div>
 
@@ -112,6 +178,103 @@ export function SitesAdminClient({ sites, canCreate, organizations }: Props) {
         <p className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
           {error}
         </p>
+      )}
+
+      {showImport && canCreate && (
+        <form
+          onSubmit={(e) => void onImport(e)}
+          className="rounded-xl border border-slate-200 bg-white p-5 space-y-3 shadow-sm"
+        >
+          <div>
+            <h2 className="font-semibold">Import from a website</h2>
+            <p className="text-xs text-slate-500 mt-1">
+              Grok reads the homepage HTML, then builds a Tailwind Home
+              template (header/footer) and named editable sections for the
+              canvas.
+            </p>
+          </div>
+          {!hasXaiKey && (
+            <p className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
+              Set <code className="text-xs">XAI_API_KEY</code> in{" "}
+              <code className="text-xs">.env</code> (from{" "}
+              <a
+                href="https://console.x.ai"
+                target="_blank"
+                rel="noreferrer"
+                className="underline"
+              >
+                console.x.ai
+              </a>
+              ) then restart the server.
+            </p>
+          )}
+          <div className="grid gap-3 sm:grid-cols-2">
+            <label className="block text-sm sm:col-span-2">
+              <span className="text-slate-600">Organization</span>
+              <select
+                required
+                value={organizationId}
+                onChange={(e) => setOrganizationId(e.target.value)}
+                className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2"
+              >
+                {organizations.map((o) => (
+                  <option key={o.id} value={o.id}>
+                    {o.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="block text-sm sm:col-span-2">
+              <span className="text-slate-600">Website URL</span>
+              <input
+                required
+                type="url"
+                value={sourceUrl}
+                onChange={(e) => setSourceUrl(e.target.value)}
+                className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 font-mono text-sm"
+                placeholder="https://example.com"
+              />
+            </label>
+            <label className="block text-sm">
+              <span className="text-slate-600">Site name (optional)</span>
+              <input
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2"
+                placeholder="Taken from the source title if empty"
+              />
+            </label>
+            <label className="block text-sm sm:col-span-2">
+              <span className="text-slate-600">Prompt</span>
+              <textarea
+                required
+                value={prompt}
+                onChange={(e) => setPrompt(e.target.value)}
+                rows={4}
+                className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+              />
+            </label>
+          </div>
+          {isSuperadmin && (
+            <label className="flex items-center gap-2 text-sm text-slate-600">
+              <input
+                type="checkbox"
+                checked={savePrompt}
+                onChange={(e) => setSavePrompt(e.target.checked)}
+              />
+              Save this as the default prompt for next imports
+            </label>
+          )}
+          <button
+            type="submit"
+            disabled={importing || !hasXaiKey || !organizationId}
+            className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-800 disabled:opacity-50"
+          >
+            {importing
+              ? "Reading page and generating with Grok…"
+              : "Generate site with Grok"}
+          </button>
+        </form>
       )}
 
       {showForm && canCreate && (
