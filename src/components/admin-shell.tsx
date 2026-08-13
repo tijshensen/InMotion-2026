@@ -34,9 +34,12 @@ export type AdminShellProps = {
     slug: string;
     cssFramework: string;
     lastGeneratedAt: string | null;
+    cloudflareProject: string;
+    cloudflareUrl: string;
   } | null;
   pages: AdminPageOption[];
   hasUnpublishedChanges: boolean;
+  hasCloudflare: boolean;
   nav: { href: string; label: string }[];
   children: React.ReactNode;
 };
@@ -48,6 +51,7 @@ export function AdminShell({
   activeSite,
   pages,
   hasUnpublishedChanges,
+  hasCloudflare,
   nav,
   children,
 }: AdminShellProps) {
@@ -169,7 +173,8 @@ export function AdminShell({
   }, [pathname, pages]);
 
   async function onPublish() {
-    if (!activeSite || !localHasChanges || publishing) return;
+    if (!activeSite || publishing) return;
+    if (!localHasChanges && !hasCloudflare) return;
     setPublishing(true);
     setStatus(null);
     try {
@@ -182,9 +187,20 @@ export function AdminShell({
         return;
       }
       setLocalHasChanges(false);
-      setStatus(
-        `Published ${data.pagesWritten ?? ""} page(s) → /sites/${data.siteSlug || activeSite.slug}/`,
-      );
+      const cf = data.cloudflare as
+        | { url?: string; project?: string; error?: string; skipped?: string }
+        | undefined;
+      if (cf?.url) {
+        setStatus(
+          `Published ${data.pagesWritten ?? ""} page(s) → ${cf.url}`,
+        );
+      } else if (cf?.error) {
+        setStatus(`Generated locally, Cloudflare failed: ${cf.error}`);
+      } else {
+        setStatus(
+          `Published ${data.pagesWritten ?? ""} page(s) → /sites/${data.siteSlug || activeSite.slug}/`,
+        );
+      }
       setPublishOpen(false);
       startTransition(() => router.refresh());
     } catch {
@@ -193,6 +209,10 @@ export function AdminShell({
       setPublishing(false);
     }
   }
+
+  const canPublish = Boolean(
+    activeSite && (localHasChanges || hasCloudflare),
+  );
 
   const liveHref = activeSite ? `/s/${activeSite.slug}/` : null;
   const publishedHref = activeSite ? `/sites/${activeSite.slug}` : null;
@@ -490,7 +510,7 @@ export function AdminShell({
             onClick={() => setPublishOpen((o) => !o)}
             className={[
               "inline-flex items-center gap-1.5 rounded-lg px-3 py-2 text-xs font-semibold transition-colors",
-              localHasChanges && activeSite
+              canPublish
                 ? "bg-blue-600 text-white hover:bg-blue-500"
                 : "border border-slate-700 bg-slate-900 text-slate-400",
               !activeSite || publishing ? "opacity-60 cursor-not-allowed" : "",
@@ -500,7 +520,9 @@ export function AdminShell({
                 ? "No active site"
                 : localHasChanges
                   ? "There are unpublished changes"
-                  : "No changes since last publish"
+                  : hasCloudflare
+                    ? "Redeploy generated site to Cloudflare Pages"
+                    : "No changes since last publish"
             }
           >
             {publishing ? "Publishing…" : "Publish"}
@@ -517,17 +539,19 @@ export function AdminShell({
             <div className="absolute right-0 top-full z-50 mt-1 w-64 rounded-xl border border-slate-700 bg-slate-900 py-1 shadow-xl">
               <button
                 type="button"
-                disabled={!localHasChanges || publishing}
+                disabled={!canPublish || publishing}
                 onClick={() => void onPublish()}
                 className="flex w-full flex-col items-start px-3 py-2.5 text-left hover:bg-slate-800 disabled:opacity-40 disabled:hover:bg-transparent"
               >
                 <span className="text-sm font-medium text-white">
-                  Publish site
+                  {hasCloudflare ? "Publish to Cloudflare" : "Publish site"}
                 </span>
                 <span className="text-[11px] text-slate-500">
-                  {localHasChanges
-                    ? "Generate static HTML from current content"
-                    : "Already up to date — no changes since last publish"}
+                  {hasCloudflare
+                    ? "Generate static HTML and deploy to Pages"
+                    : localHasChanges
+                      ? "Generate static HTML from current content"
+                      : "Already up to date — no changes since last publish"}
                 </span>
               </button>
               <div className="my-1 border-t border-slate-800" />
@@ -569,10 +593,34 @@ export function AdminShell({
                 </span>
                 <span className="text-[11px] text-slate-500">
                   {hasPublished
-                    ? `Static files · last ${new Date(activeSite.lastGeneratedAt!).toLocaleString()}`
+                    ? `On this server · last ${new Date(activeSite.lastGeneratedAt!).toLocaleString()}`
                     : "Not published yet"}
                 </span>
               </a>
+              {activeSite.cloudflareUrl ? (
+                <a
+                  href={activeSite.cloudflareUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="flex w-full flex-col items-start px-3 py-2.5 text-left hover:bg-slate-800"
+                  onClick={() => setPublishOpen(false)}
+                >
+                  <span className="text-sm font-medium text-orange-200">
+                    View on Cloudflare ↗
+                  </span>
+                  <span className="text-[11px] text-slate-500 truncate w-full">
+                    {activeSite.cloudflareUrl.replace(/^https?:\/\//, "")}
+                  </span>
+                </a>
+              ) : hasCloudflare ? (
+                <p className="px-3 py-2 text-[11px] text-slate-500">
+                  Publish once to create {activeSite.cloudflareProject || activeSite.slug}.pages.dev
+                </p>
+              ) : (
+                <p className="px-3 py-2 text-[11px] text-slate-500">
+                  Add CLOUDFLARE_API_TOKEN + ACCOUNT_ID to deploy to Pages
+                </p>
+              )}
             </div>
           )}
         </div>

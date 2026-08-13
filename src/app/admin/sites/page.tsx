@@ -7,6 +7,7 @@ import {
 } from "@/lib/access";
 import { prisma } from "@/lib/db";
 import { getImportPrompt } from "@/lib/import-from-url";
+import { cloudflareConfigured } from "@/lib/cloudflare-pages";
 import { SitesAdminClient } from "./sites-admin-client";
 
 export default async function SitesAdminPage() {
@@ -49,6 +50,7 @@ export default async function SitesAdminPage() {
       isSuperadmin={isPlatformSuperadmin(user)}
       importPrompt={importPrompt}
       hasXaiKey={Boolean(process.env.XAI_API_KEY)}
+      hasCloudflare={cloudflareConfigured()}
       organizations={organizations.map((o) => ({
         id: o.id,
         name: o.name,
@@ -62,6 +64,8 @@ export default async function SitesAdminPage() {
         cssFramework: site.cssFramework || "none",
         themeSlug: site.themeSlug || site.slug,
         lastGeneratedAt: site.lastGeneratedAt?.toISOString() ?? null,
+        cloudflareProject: site.cloudflareProject || "",
+        cloudflareUrl: site.cloudflareUrl || "",
         organizationName: site.organization?.name ?? null,
         pageCount: site._count.pages,
         memberCount: site._count.members,

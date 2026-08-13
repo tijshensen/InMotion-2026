@@ -20,6 +20,9 @@ export type ActiveSite = {
   cssFramework: string;
   themeSlug: string;
   lastGeneratedAt: Date | null;
+  cloudflareProject: string;
+  cloudflareUrl: string;
+  lastCloudflareAt: Date | null;
   isActive: boolean;
   organizationId: string | null;
 };
@@ -62,6 +65,9 @@ function toActiveSite(active: {
   cssFramework: string;
   themeSlug: string;
   lastGeneratedAt: Date | null;
+  cloudflareProject: string;
+  cloudflareUrl: string;
+  lastCloudflareAt: Date | null;
   isActive: boolean;
   organizationId: string | null;
 }): ActiveSite {
@@ -74,6 +80,9 @@ function toActiveSite(active: {
     cssFramework: active.cssFramework || "none",
     themeSlug: active.themeSlug || active.slug,
     lastGeneratedAt: active.lastGeneratedAt,
+    cloudflareProject: active.cloudflareProject || "",
+    cloudflareUrl: active.cloudflareUrl || "",
+    lastCloudflareAt: active.lastCloudflareAt,
     isActive: active.isActive,
     organizationId: active.organizationId,
   };

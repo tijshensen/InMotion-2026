@@ -2,6 +2,7 @@ import { requireUser } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { getActiveSite } from "@/lib/site-context";
 import { siteHasUnpublishedChanges } from "@/lib/publish-status";
+import { cloudflareConfigured } from "@/lib/cloudflare-pages";
 import { AdminShell } from "@/components/admin-shell";
 import { EditorChromeProvider } from "@/components/editor-chrome-context";
 
@@ -62,11 +63,14 @@ export default async function AdminLayout({
                 slug: active.slug,
                 cssFramework: active.cssFramework,
                 lastGeneratedAt: active.lastGeneratedAt?.toISOString() ?? null,
+                cloudflareProject: active.cloudflareProject || "",
+                cloudflareUrl: active.cloudflareUrl || "",
               }
             : null
         }
         pages={pages}
         hasUnpublishedChanges={publish.hasChanges}
+        hasCloudflare={cloudflareConfigured()}
         nav={nav}
       >
         {children}

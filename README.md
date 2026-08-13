@@ -147,6 +147,8 @@ In the service → **Variables**:
 | `XAI_API_KEY` | from [console.x.ai](https://console.x.ai) (Import from URL) |
 | `ADMIN_EMAIL` | first-boot login (default `admin@cmsinmotion.local`) |
 | `ADMIN_PASSWORD` | first-boot password (random + printed in logs if omitted) |
+| `CLOUDFLARE_API_TOKEN` | Pages **Edit** token — Publish deploys to `*.pages.dev` |
+| `CLOUDFLARE_ACCOUNT_ID` | from the Cloudflare dashboard URL / Workers overview |
 
 Do **not** copy the local `file:./prisma/dev.db` URL into Railway.
 
@@ -159,6 +161,22 @@ the password printed once in the deploy logs). Change it immediately.
 
 `prisma db push` and admin bootstrap run on **start**, not pre-deploy —
 volumes are not mounted until the container starts.
+
+### Publish a generated site to Cloudflare Pages
+
+The CMS stays on Railway. **Publish** generates static HTML, then (when the
+two Cloudflare variables are set) uploads a standalone bundle to
+[Cloudflare Pages](https://developers.cloudflare.com/pages/get-started/direct-upload/).
+
+1. Create an API token: [dash.cloudflare.com/profile/api-tokens](https://dash.cloudflare.com/profile/api-tokens) → **Create Token** → custom token with **Account → Cloudflare Pages → Edit**.
+2. Copy the **Account ID** from the Workers & Pages overview.
+3. Set `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID` (local `.env` or Railway Variables). Restart the server.
+4. On **Websites**, optionally set the Pages project name (defaults to the site slug).
+5. Click **Publish** in the top bar.
+
+The public site is then at `https://<project>.pages.dev`. Attach a custom
+domain in the Cloudflare dashboard if you want. Assets and uploads are
+included in the bundle so the site does not depend on Railway URLs.
 
 ## Production notes
 

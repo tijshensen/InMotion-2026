@@ -14,6 +14,8 @@ type SiteCard = {
   cssFramework: string;
   themeSlug: string;
   lastGeneratedAt: string | null;
+  cloudflareProject: string;
+  cloudflareUrl: string;
   organizationName: string | null;
   pageCount: number;
   memberCount: number;
@@ -27,6 +29,7 @@ type Props = {
   isSuperadmin: boolean;
   importPrompt: string;
   hasXaiKey: boolean;
+  hasCloudflare: boolean;
   organizations: Org[];
 };
 
@@ -36,6 +39,7 @@ export function SitesAdminClient({
   isSuperadmin,
   importPrompt,
   hasXaiKey,
+  hasCloudflare,
   organizations,
 }: Props) {
   const router = useRouter();
@@ -135,6 +139,25 @@ export function SitesAdminClient({
     router.refresh();
   }
 
+  async function saveCloudflareProject(siteId: string, project: string) {
+    setBusy(true);
+    setError(null);
+    try {
+      const res = await fetch(`/api/sites/${siteId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ cloudflareProject: project }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || "Could not save project name");
+      router.refresh();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Save failed");
+    } finally {
+      setBusy(false);
+    }
+  }
+
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-start justify-between gap-3">
@@ -177,6 +200,16 @@ export function SitesAdminClient({
       {error && (
         <p className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
           {error}
+        </p>
+      )}
+
+      {!hasCloudflare && (
+        <p className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+          Cloudflare Pages is not configured. Set{" "}
+          <code className="text-xs">CLOUDFLARE_API_TOKEN</code> and{" "}
+          <code className="text-xs">CLOUDFLARE_ACCOUNT_ID</code> (see README),
+          then Publish will deploy each site to{" "}
+          <code className="text-xs">*.pages.dev</code>.
         </p>
       )}
 
@@ -395,6 +428,35 @@ export function SitesAdminClient({
                 {site.pageCount} pages · {site.memberCount} members ·{" "}
                 {site.languages} · {site.insertCount} inserts
               </p>
+              <form
+                className="mt-3 flex flex-wrap items-center gap-2"
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  const fd = new FormData(e.currentTarget);
+                  void saveCloudflareProject(
+                    site.id,
+                    String(fd.get("project") || ""),
+                  );
+                }}
+              >
+                <label className="text-[11px] text-slate-500 shrink-0">
+                  Pages project
+                </label>
+                <input
+                  name="project"
+                  defaultValue={site.cloudflareProject || site.slug}
+                  placeholder={site.slug}
+                  className="rounded-md border border-slate-200 px-2 py-1 text-xs font-mono w-44"
+                />
+                <span className="text-[11px] text-slate-400">.pages.dev</span>
+                <button
+                  type="submit"
+                  disabled={busy}
+                  className="rounded-md border border-slate-200 px-2 py-1 text-[11px] hover:bg-slate-50 disabled:opacity-50"
+                >
+                  Save
+                </button>
+              </form>
             </div>
             <div className="flex flex-wrap gap-2">
               <Link
@@ -412,6 +474,16 @@ export function SitesAdminClient({
                 >
                   Generated ↗
                 </Link>
+              )}
+              {site.cloudflareUrl && (
+                <a
+                  href={site.cloudflareUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="rounded-lg border border-orange-200 bg-orange-50 px-3 py-2 text-sm text-orange-900 hover:bg-orange-100"
+                >
+                  Cloudflare ↗
+                </a>
               )}
               <button
                 type="button"
