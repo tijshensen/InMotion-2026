@@ -1,7 +1,7 @@
 import { prisma } from "@/lib/db";
 import { requireUser } from "@/lib/auth";
 import { getActiveSite } from "@/lib/site-context";
-import { CreatePageForm } from "./create-page-form";
+import { CreatePageSlide } from "./create-page-form";
 import { PagesTable } from "./pages-table";
 
 export default async function PagesAdminPage() {
@@ -41,9 +41,11 @@ export default async function PagesAdminPage() {
               : "No website selected. Open Websites to choose or create one."}
           </p>
         </div>
+        <CreatePageSlide
+          site={site ? JSON.parse(JSON.stringify(site)) : null}
+          cssFramework={active?.cssFramework || "none"}
+        />
       </div>
-
-      <CreatePageForm site={site ? JSON.parse(JSON.stringify(site)) : null} />
 
       <PagesTable pages={JSON.parse(JSON.stringify(pages))} />
     </div>
