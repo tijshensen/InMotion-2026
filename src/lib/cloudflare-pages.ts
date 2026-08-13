@@ -49,16 +49,65 @@ export type CloudflarePublishResult = {
   files: number;
 };
 
+/** Bracket access so Next.js does not inline these at build time. */
+function readEnv(name: string) {
+  return String(process.env[name] ?? "").trim();
+}
+
 export function cloudflareConfigured() {
   return Boolean(cloudflareToken() && cloudflareAccountId());
 }
 
 export function cloudflareToken() {
-  return process.env.CLOUDFLARE_API_TOKEN?.trim() || "";
+  return readEnv("CLOUDFLARE_API_TOKEN");
 }
 
 export function cloudflareAccountId() {
-  return process.env.CLOUDFLARE_ACCOUNT_ID?.trim() || "";
+  return readEnv("CLOUDFLARE_ACCOUNT_ID");
+}
+
+export type CloudflareStatus = {
+  configured: boolean;
+  ok: boolean;
+  accountIdSuffix: string;
+  projectCount: number | null;
+  error: string | null;
+};
+
+/** Live check: token valid + can list Pages projects. */
+export async function verifyCloudflareConnection(): Promise<CloudflareStatus> {
+  const token = cloudflareToken();
+  const accountId = cloudflareAccountId();
+  if (!token || !accountId) {
+    return {
+      configured: false,
+      ok: false,
+      accountIdSuffix: "",
+      projectCount: null,
+      error: "CLOUDFLARE_API_TOKEN or CLOUDFLARE_ACCOUNT_ID is missing",
+    };
+  }
+  const accountIdSuffix = accountId.slice(-4);
+  try {
+    const projects = await cfFetch<unknown[]>(
+      `/accounts/${accountId}/pages/projects?per_page=50`,
+    );
+    return {
+      configured: true,
+      ok: true,
+      accountIdSuffix,
+      projectCount: Array.isArray(projects) ? projects.length : 0,
+      error: null,
+    };
+  } catch (e) {
+    return {
+      configured: true,
+      ok: false,
+      accountIdSuffix,
+      projectCount: null,
+      error: `Cloudflare Pages API failed: ${e instanceof Error ? e.message : String(e)}. Check the token has Account → Cloudflare Pages → Edit.`,
+    };
+  }
 }
 
 /** Pages project names: start with a letter, lowercase alphanumerics + hyphens. */

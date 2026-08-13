@@ -525,7 +525,11 @@ export function AdminShell({
                     : "No changes since last publish"
             }
           >
-            {publishing ? "Publishing…" : "Publish"}
+            {publishing
+              ? "Publishing…"
+              : hasCloudflare
+                ? "Publish to Cloudflare"
+                : "Publish"}
             <span className="text-[10px] opacity-80">▾</span>
             {localHasChanges && activeSite && !publishing && (
               <span

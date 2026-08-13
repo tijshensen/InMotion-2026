@@ -23,6 +23,14 @@ type SiteCard = {
   languages: string;
 };
 
+type CloudflareStatus = {
+  configured: boolean;
+  ok: boolean;
+  accountIdSuffix: string;
+  projectCount: number | null;
+  error: string | null;
+};
+
 type Props = {
   sites: SiteCard[];
   canCreate: boolean;
@@ -30,6 +38,7 @@ type Props = {
   importPrompt: string;
   hasXaiKey: boolean;
   hasCloudflare: boolean;
+  cloudflare: CloudflareStatus;
   organizations: Org[];
 };
 
@@ -40,12 +49,14 @@ export function SitesAdminClient({
   importPrompt,
   hasXaiKey,
   hasCloudflare,
+  cloudflare,
   organizations,
 }: Props) {
   const router = useRouter();
   const [showForm, setShowForm] = useState(false);
   const [showImport, setShowImport] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [publishingId, setPublishingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [name, setName] = useState("");
   const [slug, setSlug] = useState("");
@@ -139,6 +150,29 @@ export function SitesAdminClient({
     router.refresh();
   }
 
+  async function publishToCloudflare(siteId: string) {
+    setPublishingId(siteId);
+    setError(null);
+    try {
+      const res = await fetch(`/api/sites/${siteId}/generate`, {
+        method: "POST",
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || "Publish failed");
+      if (data.cloudflare?.error) {
+        throw new Error(data.cloudflare.error);
+      }
+      if (data.cloudflare?.url) {
+        window.open(data.cloudflare.url, "_blank", "noreferrer");
+      }
+      router.refresh();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Publish failed");
+    } finally {
+      setPublishingId(null);
+    }
+  }
+
   async function saveCloudflareProject(siteId: string, project: string) {
     setBusy(true);
     setError(null);
@@ -203,13 +237,26 @@ export function SitesAdminClient({
         </p>
       )}
 
-      {!hasCloudflare && (
+      {cloudflare.ok ? (
+        <p className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-900">
+          Cloudflare Pages is connected (account …{cloudflare.accountIdSuffix}
+          {cloudflare.projectCount != null
+            ? ` · ${cloudflare.projectCount} existing project(s)`
+            : ""}
+          ). Use <strong>Publish to Cloudflare</strong> on a site below, or the
+          button in the top bar.
+        </p>
+      ) : cloudflare.configured ? (
+        <p className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800">
+          Cloudflare credentials were found but the API check failed:{" "}
+          {cloudflare.error}
+        </p>
+      ) : (
         <p className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
           Cloudflare Pages is not configured. Set{" "}
           <code className="text-xs">CLOUDFLARE_API_TOKEN</code> and{" "}
-          <code className="text-xs">CLOUDFLARE_ACCOUNT_ID</code> (see README),
-          then Publish will deploy each site to{" "}
-          <code className="text-xs">*.pages.dev</code>.
+          <code className="text-xs">CLOUDFLARE_ACCOUNT_ID</code> in{" "}
+          <code className="text-xs">.env</code>, then restart the server.
         </p>
       )}
 
@@ -485,6 +532,21 @@ export function SitesAdminClient({
                   Cloudflare ↗
                 </a>
               )}
+              <button
+                type="button"
+                disabled={!hasCloudflare || publishingId === site.id}
+                onClick={() => void publishToCloudflare(site.id)}
+                className="rounded-lg bg-orange-600 px-3 py-2 text-sm text-white hover:bg-orange-500 disabled:opacity-50"
+                title={
+                  hasCloudflare
+                    ? "Generate static HTML and deploy to Cloudflare Pages"
+                    : "Cloudflare is not connected yet"
+                }
+              >
+                {publishingId === site.id
+                  ? "Publishing…"
+                  : "Publish to Cloudflare"}
+              </button>
               <button
                 type="button"
                 onClick={() => void focusSite(site.id)}
