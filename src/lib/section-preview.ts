@@ -8,8 +8,15 @@ import path from "path";
 import { pathToFileURL } from "url";
 import { prisma } from "./db";
 import { uploadsRoot } from "./paths";
-import { siteStylesheetHrefs } from "./site-context";
+import { ensureSiteStylesheets } from "./site-context";
 import { publicUrlFor } from "./media";
+import {
+  isFullThemeShell,
+  renderBootstrapMenuHtml,
+  rewriteThemeAssetUrls,
+} from "./theme";
+import { renderMenuHtml, type MenuPage } from "./menu";
+import { normalizeInsertHtml } from "./insert-html";
 
 const VIEWPORT_W = 1200;
 const CLIP_MAX_H = 640;
@@ -58,41 +65,68 @@ function rewriteLocalUrls(html: string) {
   );
 }
 
-function buildPreviewHtml(
-  sectionHtml: string,
-  cssHrefs: string[],
-): string {
-  const publicRoot = path.join(process.cwd(), "public");
-  const links = cssHrefs
-    .map((href) => {
-      if (href.startsWith("http")) {
-        return `<link rel="stylesheet" href="${href}">`;
-      }
-      const rel = href.replace(/^\//, "");
-      const abs = path.join(publicRoot, rel);
-      if (!fs.existsSync(abs)) return "";
-      return `<link rel="stylesheet" href="${fileHref(abs)}">`;
-    })
-    .filter(Boolean)
-    .join("\n");
+function escapeHtml(s: string) {
+  return s
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;");
+}
 
-  const body = rewriteLocalUrls(sectionHtml);
-  return `<!DOCTYPE html>
-<html>
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=${VIEWPORT_W}">
-<style>
-  html, body { margin: 0; padding: 0; background: #f4f4f5; }
-  .cms-preview-root { width: ${VIEWPORT_W}px; min-height: 80px; overflow: hidden; background: #fff; }
-  .cms-preview-root .container { padding-top: 12px !important; padding-bottom: 12px !important; }
-</style>
-${links}
-</head>
-<body>
-<div class="cms-preview-root">${body}</div>
-</body>
-</html>`;
+function fillShell(opts: {
+  coreHtml: string;
+  sectionHtml: string;
+  blockName: string;
+  site: {
+    name: string;
+    slug: string;
+    siteTitle: string;
+    themeSlug: string | null;
+    cssFramework: string | null;
+    inserts: { tag: string; content: string }[];
+  };
+  menuHtml: string;
+}): string {
+  const themeSlug = opts.site.themeSlug || opts.site.slug;
+  let html = (opts.coreHtml || "").trim();
+  if (!html.includes("{{sections}}")) {
+    html = `<!DOCTYPE html><html><head><meta charset="utf-8"></head><body>{{sections}}</body></html>`;
+  }
+
+  html = rewriteThemeAssetUrls(html, themeSlug);
+  html = ensureSiteStylesheets(html, opts.site);
+
+  const marked = `<div id="cms-preview-section">${opts.sectionHtml}</div>`;
+  html = html.replaceAll("{{sections}}", marked);
+  html = html
+    .replaceAll("{{page.title}}", escapeHtml(opts.blockName))
+    .replaceAll("{{page.metaDescription}}", "")
+    .replaceAll("{{site.title}}", escapeHtml(opts.site.siteTitle || opts.site.name))
+    .replaceAll("{{site.slug}}", escapeHtml(opts.site.slug))
+    .replaceAll("{{menu}}", opts.menuHtml);
+  html = html.replace(/\{\{block:[a-zA-Z0-9_-]+\}\}/g, "");
+
+  const resolveInsert = (tag: string) => {
+    const insert =
+      opts.site.inserts.find((i) => i.tag === tag) ||
+      opts.site.inserts.find((i) => i.tag === `[${tag}]`) ||
+      opts.site.inserts.find((i) => i.tag === tag.replace(/^\[|\]$/g, ""));
+    if (!insert) return "";
+    return rewriteThemeAssetUrls(
+      normalizeInsertHtml(insert.content),
+      themeSlug,
+    );
+  };
+  html = html.replace(
+    /\{\{insert:([a-zA-Z0-9_\[\]-]+)\}\}/g,
+    (_m, tag: string) => resolveInsert(tag),
+  );
+  html = html.replace(/\[([A-Z][A-Z0-9_]*)\]/g, (_m, tag: string) =>
+    resolveInsert(`[${tag}]`) || resolveInsert(tag) || "",
+  );
+
+  html = rewriteLocalUrls(html);
+  return html;
 }
 
 export async function generateSectionPreview(blockId: string): Promise<string | null> {
@@ -101,7 +135,11 @@ export async function generateSectionPreview(blockId: string): Promise<string | 
     include: {
       template: {
         include: {
-          templateSet: { include: { site: true } },
+          templateSet: {
+            include: {
+              site: { include: { inserts: true, pages: true } },
+            },
+          },
         },
       },
     },
@@ -109,8 +147,29 @@ export async function generateSectionPreview(blockId: string): Promise<string | 
   if (!block?.defaultHtml.trim()) return null;
 
   const site = block.template.templateSet.site;
-  const hrefs = siteStylesheetHrefs(site);
-  const html = buildPreviewHtml(block.defaultHtml, hrefs);
+  const menuPages = site.pages.map((p) => ({
+    id: p.id,
+    title: p.title,
+    menuTitle: p.menuTitle,
+    slug: p.slug,
+    parentId: p.parentId,
+    sortOrder: p.sortOrder,
+    isDefault: p.isDefault,
+    isHidden: p.isHidden,
+    inMenu: p.inMenu,
+  })) as MenuPage[];
+  const shell = block.template.coreHtml || "";
+  const menuHtml = isFullThemeShell(shell)
+    ? renderBootstrapMenuHtml(site.slug, menuPages)
+    : renderMenuHtml(site.slug, menuPages);
+
+  const html = fillShell({
+    coreHtml: shell,
+    sectionHtml: block.defaultHtml,
+    blockName: block.name,
+    site,
+    menuHtml,
+  });
 
   const dir = thumbsDir();
   fs.mkdirSync(dir, { recursive: true });
@@ -123,14 +182,12 @@ export async function generateSectionPreview(blockId: string): Promise<string | 
   try {
     await page.setViewport({
       width: VIEWPORT_W,
-      height: 1600,
+      height: 2400,
       deviceScaleFactor: 1,
     });
-    await page.setContent(html, { waitUntil: "load", timeout: 20_000 });
-    await page.evaluate(
-      () => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))),
-    );
-    const el = await page.$(".cms-preview-root");
+    await page.setContent(html, { waitUntil: "load", timeout: 25_000 });
+    await new Promise((r) => setTimeout(r, 250));
+    const el = await page.$("#cms-preview-section");
     if (el) {
       await el.screenshot({ path: tmpPng, type: "png" });
     } else {
@@ -142,15 +199,9 @@ export async function generateSectionPreview(blockId: string): Promise<string | 
     }
 
     const sharp = (await import("sharp")).default;
-    let input: Buffer | string = tmpPng;
-    try {
-      input = await sharp(tmpPng).trim({ threshold: 16 }).toBuffer();
-    } catch {
-      input = tmpPng;
-    }
-    await sharp(input)
+    await sharp(tmpPng)
       .resize({ width: OUT_W, withoutEnlargement: true })
-      .jpeg({ quality: 78, mozjpeg: true })
+      .jpeg({ quality: 80, mozjpeg: true })
       .toFile(absOut);
     try {
       fs.unlinkSync(tmpPng);

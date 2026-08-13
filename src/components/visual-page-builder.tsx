@@ -1205,7 +1205,7 @@ export function VisualPageBuilder({
                   {tb.previewPath ? (
                     // eslint-disable-next-line @next/next/no-img-element
                     <img
-                      src={`${tb.previewPath}?v=2`}
+                      src={`${tb.previewPath}?v=3`}
                       alt=""
                       className="h-full w-full object-contain object-top"
                     />
