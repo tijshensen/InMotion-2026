@@ -281,7 +281,7 @@ export function SectionBuilder({
                         <img
                           src={tb.previewPath}
                           alt=""
-                          className="mb-2 h-20 w-full rounded object-cover object-top"
+                          className="mb-2 block h-auto w-full rounded"
                         />
                       )}
                       <span className="font-medium text-sm text-slate-900">
