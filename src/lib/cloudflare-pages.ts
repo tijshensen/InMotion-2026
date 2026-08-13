@@ -6,8 +6,9 @@
  *      CLOUDFLARE_ACCOUNT_ID
  */
 
-import { createHash } from "crypto";
+import { createHash, randomBytes } from "crypto";
 import fs from "fs";
+import https from "https";
 import os from "os";
 import path from "path";
 import { prisma } from "./db";
@@ -135,29 +136,96 @@ class CloudflareApiError extends Error {
   }
 }
 
+function throwIfCfFailed(apiPath: string, status: number, json: CfErrorBody) {
+  if (status >= 200 && status < 300 && json.success !== false) {
+    return;
+  }
+  const first = json.errors?.[0];
+  throw new CloudflareApiError(
+    first?.message || `Cloudflare API ${status} on ${apiPath}`,
+    first?.code,
+  );
+}
+
 async function cfFetch<T>(
   apiPath: string,
   init: RequestInit & { token?: string } = {},
 ): Promise<T> {
-  const token = init.token || cloudflareToken();
-  const headers = new Headers(init.headers);
+  const { token: initToken, ...rest } = init;
+  const token = initToken || cloudflareToken();
+  const headers = new Headers(rest.headers);
   if (!headers.has("Authorization")) {
     headers.set("Authorization", `Bearer ${token}`);
   }
-  if (init.body && typeof init.body === "string" && !headers.has("Content-Type")) {
+  if (rest.body && typeof rest.body === "string" && !headers.has("Content-Type")) {
     headers.set("Content-Type", "application/json");
   }
 
-  const res = await fetch(`${CF_API}${apiPath}`, { ...init, headers });
+  const res = await fetch(`${CF_API}${apiPath}`, { ...rest, headers });
   const json = (await res.json().catch(() => ({}))) as CfErrorBody;
-  if (!res.ok || json.success === false) {
-    const first = json.errors?.[0];
-    throw new CloudflareApiError(
-      first?.message || `Cloudflare API ${res.status} on ${apiPath}`,
-      first?.code,
+  throwIfCfFailed(apiPath, res.status, json);
+  return json.result as T;
+}
+
+/** Multipart POST that bypasses Next.js's patched fetch (which drops the boundary → HTTP 415). */
+function cfMultipart<T>(
+  apiPath: string,
+  fields: Record<string, string>,
+): Promise<T> {
+  const boundary = `----cmsinmotion${randomBytes(12).toString("hex")}`;
+  const chunks: Buffer[] = [];
+  for (const [name, value] of Object.entries(fields)) {
+    chunks.push(
+      Buffer.from(
+        `--${boundary}\r\nContent-Disposition: form-data; name="${name}"\r\n\r\n${value}\r\n`,
+      ),
     );
   }
-  return json.result as T;
+  chunks.push(Buffer.from(`--${boundary}--\r\n`));
+  const body = Buffer.concat(chunks);
+  const url = new URL(`${CF_API}${apiPath}`);
+
+  return new Promise((resolve, reject) => {
+    const req = https.request(
+      {
+        hostname: url.hostname,
+        path: `${url.pathname}${url.search}`,
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${cloudflareToken()}`,
+          "Content-Type": `multipart/form-data; boundary=${boundary}`,
+          "Content-Length": body.length,
+        },
+      },
+      (res) => {
+        const out: Buffer[] = [];
+        res.on("data", (c: Buffer) => out.push(c));
+        res.on("end", () => {
+          const text = Buffer.concat(out).toString("utf8");
+          let json: CfErrorBody = {};
+          try {
+            json = JSON.parse(text) as CfErrorBody;
+          } catch {
+            reject(
+              new CloudflareApiError(
+                `Cloudflare API ${res.statusCode} on ${apiPath}: ${text.slice(0, 200)}`,
+              ),
+            );
+            return;
+          }
+          try {
+            throwIfCfFailed(apiPath, res.statusCode || 0, json);
+            resolve(json.result as T);
+          } catch (e) {
+            reject(e);
+          }
+        });
+      },
+    );
+    req.on("error", reject);
+    req.write(body);
+    req.end();
+  });
 }
 
 function copyDir(src: string, dest: string) {
@@ -404,23 +472,19 @@ async function createDeployment(
   manifest: Record<string, string>,
   headersFile?: string,
 ): Promise<{ id: string; url: string }> {
-  const form = new FormData();
-  form.append("manifest", JSON.stringify(manifest));
-  form.append("branch", "production");
-  form.append("commit_message", "Published from CMSinMotion");
-  form.append("commit_dirty", "true");
+  const fields: Record<string, string> = {
+    manifest: JSON.stringify(manifest),
+    branch: "production",
+    commit_message: "Published from CMSinMotion",
+    commit_dirty: "true",
+  };
   if (headersFile && fs.existsSync(headersFile)) {
-    form.append(
-      "_headers",
-      new File([fs.readFileSync(headersFile)], "_headers", {
-        type: "text/plain",
-      }),
-    );
+    fields._headers = fs.readFileSync(headersFile, "utf8");
   }
 
-  return cfFetch<{ id: string; url: string }>(
+  return cfMultipart<{ id: string; url: string }>(
     `/accounts/${accountId}/pages/projects/${projectName}/deployments`,
-    { method: "POST", body: form },
+    fields,
   );
 }
 
