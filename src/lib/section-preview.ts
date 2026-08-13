@@ -83,8 +83,9 @@ function buildPreviewHtml(
 <meta charset="utf-8">
 <meta name="viewport" content="width=${VIEWPORT_W}">
 <style>
-  html, body { margin: 0; padding: 0; background: #fff; }
-  .cms-preview-root { width: ${VIEWPORT_W}px; overflow: hidden; }
+  html, body { margin: 0; padding: 0; background: #f4f4f5; }
+  .cms-preview-root { width: ${VIEWPORT_W}px; min-height: 80px; overflow: hidden; background: #fff; }
+  .cms-preview-root .container { padding-top: 12px !important; padding-bottom: 12px !important; }
 </style>
 ${links}
 </head>
@@ -120,24 +121,36 @@ export async function generateSectionPreview(blockId: string): Promise<string | 
   const browser = await getBrowser();
   const page = await browser.newPage();
   try {
-    await page.setViewport({ width: VIEWPORT_W, height: CLIP_MAX_H, deviceScaleFactor: 1 });
-    await page.setContent(html, { waitUntil: "load", timeout: 20_000 });
-    const el = await page.$(".cms-preview-root");
-    const box = el ? await el.boundingBox() : null;
-    const height = Math.max(
-      80,
-      Math.min(CLIP_MAX_H, Math.ceil(box?.height || CLIP_MAX_H)),
-    );
-    await page.screenshot({
-      path: tmpPng,
-      type: "png",
-      clip: { x: 0, y: 0, width: VIEWPORT_W, height },
+    await page.setViewport({
+      width: VIEWPORT_W,
+      height: 1600,
+      deviceScaleFactor: 1,
     });
+    await page.setContent(html, { waitUntil: "load", timeout: 20_000 });
+    await page.evaluate(
+      () => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))),
+    );
+    const el = await page.$(".cms-preview-root");
+    if (el) {
+      await el.screenshot({ path: tmpPng, type: "png" });
+    } else {
+      await page.screenshot({
+        path: tmpPng,
+        type: "png",
+        clip: { x: 0, y: 0, width: VIEWPORT_W, height: CLIP_MAX_H },
+      });
+    }
 
     const sharp = (await import("sharp")).default;
-    await sharp(tmpPng)
+    let input: Buffer | string = tmpPng;
+    try {
+      input = await sharp(tmpPng).trim({ threshold: 16 }).toBuffer();
+    } catch {
+      input = tmpPng;
+    }
+    await sharp(input)
       .resize({ width: OUT_W, withoutEnlargement: true })
-      .jpeg({ quality: 72, mozjpeg: true })
+      .jpeg({ quality: 78, mozjpeg: true })
       .toFile(absOut);
     try {
       fs.unlinkSync(tmpPng);

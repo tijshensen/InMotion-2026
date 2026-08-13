@@ -1201,13 +1201,13 @@ export function VisualPageBuilder({
                 onClick={() => void addSection(tb.id)}
                 className="w-full overflow-hidden rounded-lg border border-slate-700 bg-slate-800/60 text-left text-sm hover:border-blue-500/50 hover:bg-slate-800 disabled:opacity-50"
               >
-                <div className="aspect-[16/8] w-full overflow-hidden bg-slate-950">
+                <div className="aspect-[16/9] w-full overflow-hidden bg-zinc-200">
                   {tb.previewPath ? (
                     // eslint-disable-next-line @next/next/no-img-element
                     <img
-                      src={tb.previewPath}
+                      src={`${tb.previewPath}?v=2`}
                       alt=""
-                      className="h-full w-full object-cover object-top"
+                      className="h-full w-full object-contain object-top"
                     />
                   ) : (
                     <div className="flex h-full items-center justify-center text-[11px] text-slate-500">
