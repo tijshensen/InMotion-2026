@@ -10,6 +10,7 @@ import {
 } from "./internal-links";
 import { renderMenuHtml, type MenuPage } from "./menu";
 import { renderAllSections } from "./sections";
+import { ensureSiteStylesheets } from "./site-context";
 import {
   isFullThemeShell,
   renderBootstrapMenuHtml,
@@ -196,6 +197,7 @@ export async function renderPublicPage({
   );
 
   html = resolveInternalLinks(html, site.slug, linkPages);
+  html = ensureSiteStylesheets(html, site);
 
   // Home / logo links in theme often point to index.html
   html = html.replace(

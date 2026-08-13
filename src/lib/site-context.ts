@@ -143,3 +143,25 @@ export function siteStylesheetHrefs(site: {
 
   return [...new Set(hrefs)];
 }
+
+/** Insert any missing theme stylesheets so generated/public HTML matches the editor. */
+export function ensureSiteStylesheets(
+  html: string,
+  site: {
+    slug: string;
+    themeSlug?: string | null;
+    cssFramework?: string | null;
+  },
+): string {
+  if (!html) return html;
+  const tags: string[] = [];
+  for (const href of siteStylesheetHrefs(site)) {
+    const file = href.split("?")[0]?.split("/").pop() || "";
+    if (file && html.includes(file)) continue;
+    tags.push(`<link rel="stylesheet" href="${href}">`);
+  }
+  if (!tags.length) return html;
+  const block = `${tags.join("\n")}\n`;
+  if (/<\/head>/i.test(html)) return html.replace(/<\/head>/i, `${block}</head>`);
+  return block + html;
+}

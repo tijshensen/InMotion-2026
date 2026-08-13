@@ -243,11 +243,59 @@ function copyDir(src: string, dest: string) {
 export function rewriteForStandalone(html: string, siteSlug: string): string {
   const esc = siteSlug.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
   let s = html;
+  // Do /sites/ first — "/sites/foo/" contains the substring "/s/foo/".
   s = s.replace(new RegExp(`/sites/${esc}/`, "g"), "/");
-  s = s.replace(new RegExp(`/sites/${esc}(?=["'\\s>]|$)`, "g"), "/");
-  s = s.replace(new RegExp(`/s/${esc}/`, "g"), "/");
-  s = s.replace(new RegExp(`/s/${esc}(?=["'\\s>]|$)`, "g"), "/");
+  s = s.replace(new RegExp(`/sites/${esc}(?=["'\\s>/]|$)`, "g"), "/");
+  // Live-preview paths only (never a substring of /sites/)
+  s = s.replace(
+    new RegExp(`(href|src)=(["'])/s/${esc}/`, "g"),
+    "$1=$2/",
+  );
+  s = s.replace(
+    new RegExp(`(href|src)=(["'])/s/${esc}\\2`, "g"),
+    "$1=$2/",
+  );
   return s;
+}
+
+const PUBLISH_HEADER_CSS = `/* CMSinMotion: keep Bootstrap 3 header intact on Pages */
+@media (min-width: 768px) {
+  .navbar-toggle { display: none !important; }
+  .visible-xs, .visible-xs-block, .visible-xs-inline, .visible-xs-inline-block {
+    display: none !important;
+  }
+  .hidden-xs { display: block !important; }
+  .head.hidden-xs { display: block !important; }
+  .navbar-collapse.collapse {
+    display: block !important;
+    height: auto !important;
+    overflow: visible !important;
+    visibility: visible !important;
+  }
+  .navbar-nav { float: left; margin: 0; }
+  .navbar-nav > li { float: left; }
+  .navbar-nav > li > .dropdown-menu { display: none; }
+  .navbar-nav > li.open > .dropdown-menu,
+  .navbar-nav > li:hover > .dropdown-menu { display: block; }
+}
+`;
+
+function injectStandaloneStylesheets(html: string): string {
+  const extras = [
+    "/assets/css/bootstrap.min.css",
+    "/assets/css/style.css",
+    "/assets/css/cms-publish.css",
+  ];
+  const tags = extras
+    .filter((href) => {
+      const file = href.split("/").pop() || "";
+      return file && !html.includes(file);
+    })
+    .map((href) => `<link rel="stylesheet" href="${href}">`)
+    .join("\n");
+  if (!tags) return html;
+  if (/<\/head>/i.test(html)) return html.replace(/<\/head>/i, `${tags}\n</head>`);
+  return tags + html;
 }
 
 function walkFiles(root: string): string[] {
@@ -334,6 +382,15 @@ export function prepareStandaloneBundle(site: { slug: string }): string {
   copyDir(src, dest);
   rewriteTextFiles(dest, site.slug);
   copyReferencedUploads(dest, site.slug);
+  const cssDir = path.join(dest, "assets", "css");
+  fs.mkdirSync(cssDir, { recursive: true });
+  fs.writeFileSync(path.join(cssDir, "cms-publish.css"), PUBLISH_HEADER_CSS, "utf8");
+  for (const file of walkFiles(dest)) {
+    if (path.extname(file).toLowerCase() !== ".html") continue;
+    const before = fs.readFileSync(file, "utf8");
+    const after = injectStandaloneStylesheets(before);
+    if (after !== before) fs.writeFileSync(file, after, "utf8");
+  }
   writePagesHeaders(dest);
   return dest;
 }
