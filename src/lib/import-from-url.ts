@@ -178,17 +178,11 @@ async function uniqueTemplateName(templateSetId: string, base: string) {
   return name;
 }
 
-/** Persist a Grok import plan as a page template + sections. Used by site and page import. */
-export async function applyImportPlan(opts: {
+/** Persist a Grok import plan as a page template + section layouts. */
+export async function applyImportPlanAsTemplate(opts: {
   siteId: string;
-  languageId: string;
   plan: ImportPlan;
-  creatorUserId: string;
-  title?: string;
-  slug?: string;
-  menuTitle?: string;
   templateName?: string;
-  isDefault?: boolean;
 }) {
   const site = await prisma.site.findUnique({
     where: { id: opts.siteId },
@@ -206,11 +200,13 @@ export async function applyImportPlan(opts: {
     });
   }
 
-  const title = (opts.title || opts.plan.siteTitle || "Home").trim();
   const template = await prisma.template.create({
     data: {
       templateSetId: set.id,
-      name: await uniqueTemplateName(set.id, opts.templateName || title),
+      name: await uniqueTemplateName(
+        set.id,
+        opts.templateName || opts.plan.siteTitle || "Imported",
+      ),
       coreHtml: opts.plan.coreHtml,
       menuHtml: "",
       submenuHtml: "",
@@ -233,16 +229,43 @@ export async function applyImportPlan(opts: {
     scheduleSectionPreview(tb.id);
   }
 
+  return { templateId: template.id, sectionCount: blocks.length };
+}
+
+/** Persist a Grok import plan as a page template + sections + page. */
+export async function applyImportPlan(opts: {
+  siteId: string;
+  languageId: string;
+  plan: ImportPlan;
+  creatorUserId: string;
+  title?: string;
+  slug?: string;
+  menuTitle?: string;
+  templateName?: string;
+  isDefault?: boolean;
+}) {
+  const title = (opts.title || opts.plan.siteTitle || "Home").trim();
+  const { templateId, sectionCount } = await applyImportPlanAsTemplate({
+    siteId: opts.siteId,
+    plan: opts.plan,
+    templateName: opts.templateName || title,
+  });
+
+  const blocks = await prisma.templateBlock.findMany({
+    where: { templateId },
+    orderBy: { sortOrder: "asc" },
+  });
+
   const page = await prisma.page.create({
     data: {
-      siteId: site.id,
+      siteId: opts.siteId,
       languageId: opts.languageId,
-      templateId: template.id,
+      templateId,
       authorId: opts.creatorUserId,
       title,
       menuTitle: (opts.menuTitle || title).trim(),
       slug: await uniquePageSlug(
-        site.id,
+        opts.siteId,
         opts.languageId,
         opts.slug || title,
       ),
@@ -261,8 +284,8 @@ export async function applyImportPlan(opts: {
 
   return {
     pageId: page.id,
-    templateId: template.id,
-    sectionCount: blocks.length,
+    templateId,
+    sectionCount,
   };
 }
 
@@ -312,42 +335,21 @@ export async function importSiteFromUrl(opts: {
   return { site, ...applied };
 }
 
-/** Same Grok plan as site import, applied as a new page template on an existing site. */
-export async function importPageFromUrl(opts: {
+/** Same Grok plan as site import, saved as a template + section layouts only. */
+export async function importTemplateFromUrl(opts: {
   siteId: string;
-  languageId: string;
   sourceUrl: string;
   prompt?: string;
-  title?: string;
-  slug?: string;
-  menuTitle?: string;
-  creatorUserId: string;
+  name?: string;
 }) {
   const prompt = (opts.prompt || (await getImportPrompt())).trim();
   const plan = await planSiteFromUrl({
     sourceUrl: opts.sourceUrl,
     prompt,
   });
-
-  const pageCount = await prisma.page.count({ where: { siteId: opts.siteId } });
-  const isFirstPage = pageCount === 0;
-
-  if (isFirstPage) {
-    await prisma.site.update({
-      where: { id: opts.siteId },
-      data: { cssFramework: "tailwind" },
-    });
-  }
-
-  return applyImportPlan({
+  return applyImportPlanAsTemplate({
     siteId: opts.siteId,
-    languageId: opts.languageId,
     plan,
-    creatorUserId: opts.creatorUserId,
-    title: opts.title || (isFirstPage ? "Home" : plan.siteTitle),
-    slug: opts.slug || (isFirstPage ? "home" : undefined),
-    menuTitle: opts.menuTitle,
-    templateName: isFirstPage ? "Home" : opts.title || plan.siteTitle,
-    isDefault: isFirstPage,
+    templateName: opts.name || plan.siteTitle,
   });
 }

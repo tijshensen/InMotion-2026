@@ -22,19 +22,11 @@ function slugify(input: string) {
     .slice(0, 80);
 }
 
-export function CreatePageSlide({
-  site,
-  isFirstPage = false,
-}: {
-  site: Site | null;
-  isFirstPage?: boolean;
-}) {
+export function CreatePageSlide({ site }: { site: Site | null }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
-  const [fromUrl, setFromUrl] = useState(false);
-  const [sourceUrl, setSourceUrl] = useState("");
   const [title, setTitle] = useState("");
   const [slug, setSlug] = useState("");
   const [slugTouched, setSlugTouched] = useState(false);
@@ -58,8 +50,6 @@ export function CreatePageSlide({
   function reset() {
     setError(null);
     setLoading(false);
-    setFromUrl(false);
-    setSourceUrl("");
     setTitle("");
     setSlug("");
     setSlugTouched(false);
@@ -85,27 +75,6 @@ export function CreatePageSlide({
 
     try {
       const form = new FormData(e.currentTarget);
-
-      if (fromUrl && sourceUrl.trim()) {
-        const res = await fetch("/api/pages/import-from-url", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            siteId: site.id,
-            languageId: form.get("languageId"),
-            title: title || undefined,
-            slug: slug || undefined,
-            menuTitle: menuTitle || undefined,
-            sourceUrl: sourceUrl.trim(),
-          }),
-        });
-        const data = await res.json().catch(() => ({}));
-        if (!res.ok) throw new Error(data.error || "Could not import page");
-        router.push(`/admin/pages/${data.pageId}`);
-        router.refresh();
-        return;
-      }
-
       const res = await fetch("/api/pages", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -131,14 +100,6 @@ export function CreatePageSlide({
       setLoading(false);
     }
   }
-
-  const submitLabel = loading
-    ? fromUrl
-      ? "Importing…"
-      : "Creating…"
-    : fromUrl
-      ? "Create page from URL"
-      : "Create page";
 
   return (
     <>
@@ -198,41 +159,6 @@ export function CreatePageSlide({
               <strong className="text-slate-700">{site.name}</strong>
             </p>
 
-            <label className="flex items-start gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm">
-              <input
-                type="checkbox"
-                className="mt-0.5"
-                checked={fromUrl}
-                onChange={(e) => {
-                  setFromUrl(e.target.checked);
-                  setError(null);
-                }}
-              />
-              <span>
-                <span className="font-medium text-slate-800">
-                  Start from a URL
-                </span>
-                <span className="block text-xs text-slate-500 mt-0.5">
-                  Same import as Websites → Import from URL. Grok builds a page
-                  template and saves the sections.
-                </span>
-              </span>
-            </label>
-
-            {fromUrl && (
-              <label className="space-y-1 text-sm block">
-                <span className="text-slate-600">Page URL</span>
-                <input
-                  type="url"
-                  value={sourceUrl}
-                  onChange={(e) => setSourceUrl(e.target.value)}
-                  placeholder="https://example.com/about"
-                  className="w-full rounded-lg border border-slate-200 px-3 py-2"
-                  required={fromUrl}
-                />
-              </label>
-            )}
-
             <label className="space-y-1 text-sm block">
               <span className="text-slate-600">Language</span>
               <select
@@ -251,7 +177,7 @@ export function CreatePageSlide({
               <span className="text-slate-600">Title</span>
               <input
                 name="title"
-                required={!fromUrl}
+                required
                 value={title}
                 onChange={(e) => onTitleChange(e.target.value)}
                 className="w-full rounded-lg border border-slate-200 px-3 py-2"
@@ -261,7 +187,7 @@ export function CreatePageSlide({
               <span className="text-slate-600">Slug</span>
               <input
                 name="slug"
-                required={!fromUrl}
+                required
                 value={slug}
                 onChange={(e) => {
                   setSlugTouched(true);
@@ -281,23 +207,21 @@ export function CreatePageSlide({
                 className="w-full rounded-lg border border-slate-200 px-3 py-2"
               />
             </label>
-            {!fromUrl && (
-              <label className="space-y-1 text-sm block">
-                <span className="text-slate-600">Template</span>
-                <select
-                  name="templateId"
-                  className="w-full rounded-lg border border-slate-200 px-3 py-2"
-                  defaultValue={templates[0]?.id || ""}
-                >
-                  <option value="">— none —</option>
-                  {templates.map((t) => (
-                    <option key={t.id} value={t.id}>
-                      {t.name}
-                    </option>
-                  ))}
-                </select>
-              </label>
-            )}
+            <label className="space-y-1 text-sm block">
+              <span className="text-slate-600">Template</span>
+              <select
+                name="templateId"
+                className="w-full rounded-lg border border-slate-200 px-3 py-2"
+                defaultValue={templates[0]?.id || ""}
+              >
+                <option value="">— none —</option>
+                {templates.map((t) => (
+                  <option key={t.id} value={t.id}>
+                    {t.name}
+                  </option>
+                ))}
+              </select>
+            </label>
 
             {error && <p className="text-sm text-red-600">{error}</p>}
 
@@ -306,15 +230,8 @@ export function CreatePageSlide({
               disabled={loading}
               className="w-full rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-60"
             >
-              {submitLabel}
+              {loading ? "Creating…" : "Create page"}
             </button>
-            {fromUrl && (
-              <p className="text-[11px] text-slate-400">
-                {isFirstPage
-                  ? "Import can take up to a minute. This creates the Home template and its sections."
-                  : "Import can take up to a minute. This creates a new page template and saves the sections."}
-              </p>
-            )}
           </form>
         )}
       </aside>

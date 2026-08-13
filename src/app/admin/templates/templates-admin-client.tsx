@@ -19,12 +19,18 @@ type Props = {
   siteId: string;
   siteName: string;
   cssFramework: string;
+  importPrompt: string;
+  hasXaiKey: boolean;
+  isSuperadmin: boolean;
 };
 
 export function TemplatesAdminClient({
   siteId,
   siteName,
   cssFramework,
+  importPrompt,
+  hasXaiKey,
+  isSuperadmin,
 }: Props) {
   const [templates, setTemplates] = useState<TemplateRow[]>([]);
   const [loading, setLoading] = useState(true);
@@ -37,6 +43,12 @@ export function TemplatesAdminClient({
   const [submenuHtml, setSubmenuHtml] = useState("");
   const [saving, setSaving] = useState(false);
   const [tab, setTab] = useState<"shell" | "menu">("shell");
+  const [showImport, setShowImport] = useState(false);
+  const [sourceUrl, setSourceUrl] = useState("");
+  const [importName, setImportName] = useState("");
+  const [grokPrompt, setGrokPrompt] = useState(importPrompt);
+  const [savePrompt, setSavePrompt] = useState(false);
+  const [importing, setImporting] = useState(false);
 
   const selected = templates.find((t) => t.id === selectedId) || null;
 
@@ -114,6 +126,45 @@ export function TemplatesAdminClient({
       setError(err instanceof Error ? err.message : "Save failed");
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function onImport(e: FormEvent) {
+    e.preventDefault();
+    setImporting(true);
+    setError(null);
+    setStatus(null);
+    try {
+      const res = await fetch("/api/templates/import-from-url", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          siteId,
+          sourceUrl,
+          name: importName || undefined,
+          prompt: grokPrompt,
+          savePromptAsDefault: savePrompt,
+        }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || "Import failed");
+      setShowImport(false);
+      setSourceUrl("");
+      setImportName("");
+      const listRes = await fetch(
+        `/api/templates?siteId=${encodeURIComponent(siteId)}`,
+      );
+      const list = (await listRes.json()) as TemplateRow[];
+      setTemplates(list);
+      const created = list.find((t) => t.id === data.templateId);
+      if (created) select(created);
+      setStatus(
+        `Imported template with ${data.sectionCount ?? 0} section layout(s)`,
+      );
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Import failed");
+    } finally {
+      setImporting(false);
     }
   }
 
@@ -226,6 +277,16 @@ export function TemplatesAdminClient({
       <div className="flex flex-wrap items-center gap-2">
         <button
           type="button"
+          onClick={() => {
+            setShowImport((v) => !v);
+            setError(null);
+          }}
+          className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-medium hover:bg-slate-50"
+        >
+          {showImport ? "Cancel" : "Import from URL"}
+        </button>
+        <button
+          type="button"
           onClick={() => void onCreate()}
           className="rounded-lg bg-slate-900 px-3 py-2 text-sm font-medium text-white hover:bg-slate-800"
         >
@@ -242,6 +303,87 @@ export function TemplatesAdminClient({
           {siteName} · framework: {cssFramework}
         </p>
       </div>
+
+      {showImport && (
+        <form
+          onSubmit={(e) => void onImport(e)}
+          className="rounded-xl border border-slate-200 bg-white p-5 space-y-3 shadow-sm"
+        >
+          <div>
+            <h2 className="font-semibold">Import from a website</h2>
+            <p className="text-xs text-slate-500 mt-1">
+              Same as Websites → Import from URL. Grok builds a Tailwind
+              template (header/footer) and named editable section layouts.
+            </p>
+          </div>
+          {!hasXaiKey && (
+            <p className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
+              Set <code className="text-xs">XAI_API_KEY</code> in{" "}
+              <code className="text-xs">.env</code> (from{" "}
+              <a
+                href="https://console.x.ai"
+                target="_blank"
+                rel="noreferrer"
+                className="underline"
+              >
+                console.x.ai
+              </a>
+              ) then restart the server.
+            </p>
+          )}
+          <div className="grid gap-3 sm:grid-cols-2">
+            <label className="block text-sm sm:col-span-2">
+              <span className="text-slate-600">Website URL</span>
+              <input
+                required
+                type="url"
+                value={sourceUrl}
+                onChange={(e) => setSourceUrl(e.target.value)}
+                className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 font-mono text-sm"
+                placeholder="https://example.com"
+              />
+            </label>
+            <label className="block text-sm">
+              <span className="text-slate-600">Template name (optional)</span>
+              <input
+                value={importName}
+                onChange={(e) => setImportName(e.target.value)}
+                className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2"
+                placeholder="Taken from the source title if empty"
+              />
+            </label>
+            <label className="block text-sm sm:col-span-2">
+              <span className="text-slate-600">Prompt</span>
+              <textarea
+                required
+                value={grokPrompt}
+                onChange={(e) => setGrokPrompt(e.target.value)}
+                rows={4}
+                className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+              />
+            </label>
+          </div>
+          {isSuperadmin && (
+            <label className="flex items-center gap-2 text-sm text-slate-600">
+              <input
+                type="checkbox"
+                checked={savePrompt}
+                onChange={(e) => setSavePrompt(e.target.checked)}
+              />
+              Save this as the default prompt for next imports
+            </label>
+          )}
+          <button
+            type="submit"
+            disabled={importing || !hasXaiKey}
+            className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-800 disabled:opacity-50"
+          >
+            {importing
+              ? "Reading page and generating with Grok…"
+              : "Generate template with Grok"}
+          </button>
+        </form>
+      )}
 
       {(error || status) && (
         <p

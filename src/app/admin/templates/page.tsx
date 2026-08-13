@@ -1,12 +1,13 @@
 import { requireUser } from "@/lib/auth";
 import { getActiveSite } from "@/lib/site-context";
+import { getImportPrompt } from "@/lib/import-from-url";
 import { TemplatesAdminClient } from "./templates-admin-client";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
 export default async function TemplatesAdminPage() {
-  await requireUser();
+  const user = await requireUser();
   const active = await getActiveSite();
 
   if (!active) {
@@ -58,6 +59,9 @@ export default async function TemplatesAdminPage() {
         siteId={active.id}
         siteName={active.name}
         cssFramework={active.cssFramework}
+        importPrompt={await getImportPrompt()}
+        hasXaiKey={Boolean(process.env.XAI_API_KEY)}
+        isSuperadmin={user.role === "SUPERADMIN"}
       />
     </div>
   );

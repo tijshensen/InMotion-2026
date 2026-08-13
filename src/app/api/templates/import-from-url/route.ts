@@ -2,17 +2,20 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { getSessionUser } from "@/lib/auth";
 import { assertSiteAccess } from "@/lib/access";
-import { importPageFromUrl } from "@/lib/import-from-url";
+import {
+  getImportPrompt,
+  importTemplateFromUrl,
+  saveImportPrompt,
+} from "@/lib/import-from-url";
 
 export const maxDuration = 180;
 
 const bodySchema = z.object({
   siteId: z.string().min(1),
-  languageId: z.string().min(1),
   sourceUrl: z.string().url(),
-  title: z.string().optional(),
-  slug: z.string().optional(),
-  menuTitle: z.string().optional(),
+  name: z.string().max(200).optional(),
+  prompt: z.string().min(1).max(4000).optional(),
+  savePromptAsDefault: z.boolean().optional(),
 });
 
 export async function POST(req: Request) {
@@ -26,14 +29,16 @@ export async function POST(req: Request) {
     const denied = await assertSiteAccess(user, body.siteId, "EDITOR");
     if (denied) return denied;
 
-    const result = await importPageFromUrl({
+    const prompt = (body.prompt || (await getImportPrompt())).trim();
+    if (body.savePromptAsDefault && user.role === "SUPERADMIN") {
+      await saveImportPrompt(prompt);
+    }
+
+    const result = await importTemplateFromUrl({
       siteId: body.siteId,
-      languageId: body.languageId,
       sourceUrl: body.sourceUrl,
-      title: body.title,
-      slug: body.slug,
-      menuTitle: body.menuTitle,
-      creatorUserId: user.id,
+      prompt,
+      name: body.name,
     });
 
     return NextResponse.json(result, { status: 201 });
