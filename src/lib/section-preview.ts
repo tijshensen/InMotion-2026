@@ -56,6 +56,22 @@ function placeholderSvg(w: number, h: number) {
   return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
 }
 
+function wrapSectionForPreview(html: string) {
+  const t = html.trim();
+  if (/^<div[^>]*class="[^"]*\bcol-(?:xs|sm|md|lg)-\d+/i.test(t)) {
+    return `<div class="container"><div class="row">${html}</div></div>`;
+  }
+  return html;
+}
+
+function sizeFromImgTag(tag: string): { w: number; h: number } {
+  const size = tag.match(/size=["'](\d+)\s*\/\s*(\d+)/i);
+  if (size) return { w: Number(size[1]) || 270, h: Number(size[2]) || 200 };
+  const w = Number(tag.match(/\bwidth=["'](\d+)/i)?.[1] || 0);
+  const h = Number(tag.match(/\bheight=["'](\d+)/i)?.[1] || 0);
+  return { w: w || 270, h: h || 200 };
+}
+
 function rewritePreviewAssets(html: string) {
   let s = html.replace(
     /https?:\/\/(?:www\.)?placehold\.it\/(\d+)x(\d+)/gi,
@@ -65,6 +81,13 @@ function rewritePreviewAssets(html: string) {
     /https?:\/\/(?:via\.)?placeholder\.com\/(\d+)x(\d+)/gi,
     (_m, w: string, h: string) => placeholderSvg(Number(w) || 400, Number(h) || 300),
   );
+  // Remote CMS images often 404 from this machine — keep the box so the layout is visible
+  s = s.replace(/<img\b[^>]*>/gi, (tag) => {
+    if (!/src=["']https?:\/\//i.test(tag)) return tag;
+    if (/placehold|placeholder\.com|data:/i.test(tag)) return tag;
+    const { w, h } = sizeFromImgTag(tag);
+    return tag.replace(/src=["'][^"']+["']/, `src="${placeholderSvg(w, h)}"`);
+  });
   s = s.replace(
     /(src|href)=(["'])\/(theme|uploads)\/([^"']+)\2/gi,
     (_m, attr: string, q: string, folder: string, rest: string) => {
@@ -136,7 +159,7 @@ function fillShell(opts: {
   html = rewriteThemeAssetUrls(html, themeSlug);
   html = ensureSiteStylesheets(html, opts.site);
 
-  const marked = `<div id="cms-preview-section">${opts.sectionHtml}</div>`;
+  const marked = `<div id="cms-preview-section">${wrapSectionForPreview(opts.sectionHtml)}</div>`;
   html = html.replaceAll("{{sections}}", marked);
   html = html
     .replaceAll("{{page.title}}", escapeHtml(opts.blockName))
@@ -242,7 +265,8 @@ export async function generateSectionPreview(blockId: string): Promise<string | 
     });
     await new Promise((r) => setTimeout(r, 150));
     const el = await page.$("#cms-preview-section");
-    if (el) {
+    const box = el ? await el.boundingBox() : null;
+    if (el && box && box.height >= 8) {
       await el.screenshot({ path: tmpPng, type: "png" });
     } else {
       await page.screenshot({
