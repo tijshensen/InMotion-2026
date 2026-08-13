@@ -2,12 +2,6 @@
 
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import {
-  frameworkLabel,
-  normalizeFramework,
-  slugifyPage,
-  type CssFramework,
-} from "@/lib/detect-css-framework";
 
 type Template = { id: string; name: string };
 type TemplateSet = { id: string; name: string; templates: Template[] };
@@ -19,35 +13,28 @@ type Site = {
   templateSets: TemplateSet[];
 };
 
-type Preview = {
-  sourceUrl: string;
-  sourceFramework: CssFramework;
-  siteFramework: CssFramework;
-  match: boolean;
-  needsRewrite: boolean;
-  isFirstPage?: boolean;
-  guessedTitle: string;
-  evidence: string[];
-  confidence: "high" | "medium" | "low";
-};
+function slugify(input: string) {
+  return input
+    .toLowerCase()
+    .trim()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 80);
+}
 
 export function CreatePageSlide({
   site,
-  cssFramework,
   isFirstPage = false,
 }: {
   site: Site | null;
-  cssFramework: string;
   isFirstPage?: boolean;
 }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
-  const [checking, setChecking] = useState(false);
   const [fromUrl, setFromUrl] = useState(false);
   const [sourceUrl, setSourceUrl] = useState("");
-  const [preview, setPreview] = useState<Preview | null>(null);
   const [title, setTitle] = useState("");
   const [slug, setSlug] = useState("");
   const [slugTouched, setSlugTouched] = useState(false);
@@ -58,7 +45,6 @@ export function CreatePageSlide({
     [site],
   );
   const languages = site?.languages || [];
-  const siteFw = normalizeFramework(cssFramework);
 
   useEffect(() => {
     if (!open) return;
@@ -72,10 +58,8 @@ export function CreatePageSlide({
   function reset() {
     setError(null);
     setLoading(false);
-    setChecking(false);
     setFromUrl(false);
     setSourceUrl("");
-    setPreview(null);
     setTitle("");
     setSlug("");
     setSlugTouched(false);
@@ -90,124 +74,71 @@ export function CreatePageSlide({
 
   function onTitleChange(value: string) {
     setTitle(value);
-    if (!slugTouched) setSlug(slugifyPage(value));
-  }
-
-  async function checkUrl() {
-    if (!site || !sourceUrl.trim()) return;
-    setChecking(true);
-    setError(null);
-    setPreview(null);
-    try {
-      const res = await fetch("/api/pages/import-preview", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ siteId: site.id, sourceUrl: sourceUrl.trim() }),
-      });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(data.error || "Could not check URL");
-      const next = data as Preview;
-      setPreview(next);
-      if (!title && next.guessedTitle) {
-        onTitleChange(next.guessedTitle);
-      }
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not check URL");
-    } finally {
-      setChecking(false);
-    }
+    if (!slugTouched) setSlug(slugify(value));
   }
 
   async function onSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
     if (!site) return;
     setError(null);
+    setLoading(true);
 
-    if (fromUrl && sourceUrl.trim()) {
-      if (
-        !isFirstPage &&
-        (!preview || preview.sourceUrl !== sourceUrl.trim())
-      ) {
-        await checkUrl();
-        return;
-      }
-      setLoading(true);
-      try {
-        const form = new FormData(e.currentTarget);
+    try {
+      const form = new FormData(e.currentTarget);
+
+      if (fromUrl && sourceUrl.trim()) {
         const res = await fetch("/api/pages/import-from-url", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             siteId: site.id,
             languageId: form.get("languageId"),
-            templateId: form.get("templateId") || null,
             title: title || undefined,
             slug: slug || undefined,
             menuTitle: menuTitle || undefined,
             sourceUrl: sourceUrl.trim(),
-            rewrite: Boolean(preview?.needsRewrite) && !isFirstPage,
           }),
         });
         const data = await res.json().catch(() => ({}));
-        if (res.status === 409 && data.preview) {
-          setPreview(data.preview);
-          setLoading(false);
-          return;
-        }
         if (!res.ok) throw new Error(data.error || "Could not import page");
         router.push(`/admin/pages/${data.pageId}`);
         router.refresh();
-      } catch (err) {
-        setError(err instanceof Error ? err.message : "Could not import page");
-        setLoading(false);
+        return;
       }
-      return;
-    }
 
-    setLoading(true);
-    const form = new FormData(e.currentTarget);
-    const res = await fetch("/api/pages", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        siteId: site.id,
-        languageId: form.get("languageId"),
-        templateId: form.get("templateId") || null,
-        title,
-        slug,
-        menuTitle: menuTitle || undefined,
-      }),
-    });
-    setLoading(false);
-    if (!res.ok) {
+      const res = await fetch("/api/pages", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          siteId: site.id,
+          languageId: form.get("languageId"),
+          templateId: form.get("templateId") || null,
+          title,
+          slug,
+          menuTitle: menuTitle || undefined,
+        }),
+      });
       const data = await res.json().catch(() => ({}));
-      setError(
-        typeof data.error === "string" ? data.error : "Could not create page",
-      );
-      return;
+      if (!res.ok) {
+        throw new Error(
+          typeof data.error === "string" ? data.error : "Could not create page",
+        );
+      }
+      router.push(`/admin/pages/${data.id}`);
+      router.refresh();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not create page");
+      setLoading(false);
     }
-    const page = await res.json();
-    router.push(`/admin/pages/${page.id}`);
-    router.refresh();
   }
 
-  const importReady =
-    isFirstPage || Boolean(preview && preview.sourceUrl === sourceUrl.trim());
   const submitLabel = loading
     ? fromUrl
-      ? preview?.needsRewrite && !isFirstPage
-        ? "Rewriting…"
-        : "Importing…"
+      ? "Importing…"
       : "Creating…"
-    : !fromUrl
-      ? "Create page"
-      : isFirstPage
-        ? "Create page from URL"
-        : !importReady
-          ? "Check URL"
-          : preview?.needsRewrite
-            ? "Rewrite & create page"
-            : "Create page from URL";
+    : fromUrl
+      ? "Create page from URL"
+      : "Create page";
 
   return (
     <>
@@ -265,10 +196,6 @@ export function CreatePageSlide({
             <p className="text-sm text-slate-500">
               Website:{" "}
               <strong className="text-slate-700">{site.name}</strong>
-              <span className="text-slate-400">
-                {" "}
-                · {frameworkLabel(siteFw)}
-              </span>
             </p>
 
             <label className="flex items-start gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm">
@@ -278,7 +205,6 @@ export function CreatePageSlide({
                 checked={fromUrl}
                 onChange={(e) => {
                   setFromUrl(e.target.checked);
-                  setPreview(null);
                   setError(null);
                 }}
               />
@@ -287,85 +213,24 @@ export function CreatePageSlide({
                   Start from a URL
                 </span>
                 <span className="block text-xs text-slate-500 mt-0.5">
-                  {isFirstPage
-                    ? "This is the first page, so we’ll build the template from the URL. No framework check needed."
-                    : "Paste a public page. We check its CSS framework before importing the content into this site."}
+                  Same import as Websites → Import from URL. Grok builds a page
+                  template and saves the sections.
                 </span>
               </span>
             </label>
 
             {fromUrl && (
-              <div className="space-y-2">
-                <label className="space-y-1 text-sm block">
-                  <span className="text-slate-600">Page URL</span>
-                  <input
-                    type="url"
-                    value={sourceUrl}
-                    onChange={(e) => {
-                      setSourceUrl(e.target.value);
-                      setPreview(null);
-                    }}
-                    placeholder="https://example.com/about"
-                    className="w-full rounded-lg border border-slate-200 px-3 py-2"
-                    required={fromUrl}
-                  />
-                </label>
-                {!isFirstPage && (
-                <button
-                  type="button"
-                  onClick={() => void checkUrl()}
-                  disabled={checking || !sourceUrl.trim()}
-                  className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50"
-                >
-                  {checking ? "Checking…" : "Check framework"}
-                </button>
-                )}
-
-                {preview && !isFirstPage && (
-                  <div
-                    className={[
-                      "rounded-lg border px-3 py-2 text-sm",
-                      preview.needsRewrite
-                        ? "border-amber-200 bg-amber-50 text-amber-950"
-                        : "border-emerald-200 bg-emerald-50 text-emerald-950",
-                    ].join(" ")}
-                  >
-                    {preview.needsRewrite ? (
-                      <>
-                        <p className="font-medium">Different CSS framework</p>
-                        <p className="mt-1 text-xs leading-relaxed">
-                          That page looks like{" "}
-                          <strong>
-                            {frameworkLabel(preview.sourceFramework)}
-                          </strong>
-                          . This site uses{" "}
-                          <strong>{frameworkLabel(preview.siteFramework)}</strong>
-                          . Next we will rewrite the markup so the imported
-                          sections match this site — content stays, classes
-                          change.
-                        </p>
-                      </>
-                    ) : (
-                      <>
-                        <p className="font-medium">Same framework</p>
-                        <p className="mt-1 text-xs leading-relaxed">
-                          Source and site both use{" "}
-                          <strong>
-                            {frameworkLabel(preview.siteFramework)}
-                          </strong>
-                          . Classes will be kept; we only split the body into
-                          editable sections.
-                        </p>
-                      </>
-                    )}
-                    {preview.evidence.length > 0 && (
-                      <p className="mt-1 text-[11px] opacity-70">
-                        Detected: {preview.evidence.join(" · ")}
-                      </p>
-                    )}
-                  </div>
-                )}
-              </div>
+              <label className="space-y-1 text-sm block">
+                <span className="text-slate-600">Page URL</span>
+                <input
+                  type="url"
+                  value={sourceUrl}
+                  onChange={(e) => setSourceUrl(e.target.value)}
+                  placeholder="https://example.com/about"
+                  className="w-full rounded-lg border border-slate-200 px-3 py-2"
+                  required={fromUrl}
+                />
+              </label>
             )}
 
             <label className="space-y-1 text-sm block">
@@ -416,38 +281,38 @@ export function CreatePageSlide({
                 className="w-full rounded-lg border border-slate-200 px-3 py-2"
               />
             </label>
-            {!(isFirstPage && fromUrl) && (
-            <label className="space-y-1 text-sm block">
-              <span className="text-slate-600">Template</span>
-              <select
-                name="templateId"
-                className="w-full rounded-lg border border-slate-200 px-3 py-2"
-                defaultValue={templates[0]?.id || ""}
-              >
-                <option value="">— none —</option>
-                {templates.map((t) => (
-                  <option key={t.id} value={t.id}>
-                    {t.name}
-                  </option>
-                ))}
-              </select>
-            </label>
+            {!fromUrl && (
+              <label className="space-y-1 text-sm block">
+                <span className="text-slate-600">Template</span>
+                <select
+                  name="templateId"
+                  className="w-full rounded-lg border border-slate-200 px-3 py-2"
+                  defaultValue={templates[0]?.id || ""}
+                >
+                  <option value="">— none —</option>
+                  {templates.map((t) => (
+                    <option key={t.id} value={t.id}>
+                      {t.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
             )}
 
             {error && <p className="text-sm text-red-600">{error}</p>}
 
             <button
               type="submit"
-              disabled={loading || checking}
+              disabled={loading}
               className="w-full rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-60"
             >
               {submitLabel}
             </button>
-            {fromUrl && importReady && (
+            {fromUrl && (
               <p className="text-[11px] text-slate-400">
                 {isFirstPage
-                  ? "Import can take up to a minute. We’ll create the Home template from this page."
-                  : "Import can take up to a minute. Header and footer stay this site’s template."}
+                  ? "Import can take up to a minute. This creates the Home template and its sections."
+                  : "Import can take up to a minute. This creates a new page template and saves the sections."}
               </p>
             )}
           </form>

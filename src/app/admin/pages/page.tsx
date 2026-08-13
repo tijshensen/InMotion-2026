@@ -43,7 +43,6 @@ export default async function PagesAdminPage() {
         </div>
         <CreatePageSlide
           site={site ? JSON.parse(JSON.stringify(site)) : null}
-          cssFramework={active?.cssFramework || "none"}
           isFirstPage={pages.length === 0}
         />
       </div>

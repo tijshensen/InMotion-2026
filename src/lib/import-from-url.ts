@@ -4,12 +4,13 @@
  */
 
 import { prisma } from "./db";
-import { createSiteForOrg } from "./sites";
+import { createSiteForOrg, slugifySite } from "./sites";
 import { grokChat, extractJsonObject, xaiApiKey } from "./xai";
 import {
   emptyFieldsFromTemplate,
   serializeFields,
 } from "./sections";
+import { scheduleSectionPreview } from "./section-preview";
 
 export const DEFAULT_IMPORT_PROMPT =
   "Maintain the content of the homepage but rebuild it with a cleaner, modern-looking design.";
@@ -143,6 +144,128 @@ ${sourceHtml}`,
   return { siteTitle, coreHtml, sections };
 }
 
+async function uniquePageSlug(
+  siteId: string,
+  languageId: string,
+  base: string,
+) {
+  let slug = slugifySite(base) || "page";
+  let n = 0;
+  while (
+    await prisma.page.findUnique({
+      where: { siteId_languageId_slug: { siteId, languageId, slug } },
+    })
+  ) {
+    n += 1;
+    slug = `${slugifySite(base) || "page"}-${n}`;
+  }
+  return slug;
+}
+
+async function uniqueTemplateName(templateSetId: string, base: string) {
+  const root = base.trim() || "Page";
+  let name = root;
+  let n = 0;
+  while (
+    await prisma.template.findFirst({
+      where: { templateSetId, name },
+      select: { id: true },
+    })
+  ) {
+    n += 1;
+    name = `${root} ${n}`;
+  }
+  return name;
+}
+
+/** Persist a Grok import plan as a page template + sections. Used by site and page import. */
+export async function applyImportPlan(opts: {
+  siteId: string;
+  languageId: string;
+  plan: ImportPlan;
+  creatorUserId: string;
+  title?: string;
+  slug?: string;
+  menuTitle?: string;
+  templateName?: string;
+  isDefault?: boolean;
+}) {
+  const site = await prisma.site.findUnique({
+    where: { id: opts.siteId },
+    select: { id: true, name: true },
+  });
+  if (!site) throw new Error("Site not found");
+
+  let set = await prisma.templateSet.findFirst({
+    where: { siteId: site.id },
+    orderBy: { name: "asc" },
+  });
+  if (!set) {
+    set = await prisma.templateSet.create({
+      data: { siteId: site.id, name: `${site.name} templates` },
+    });
+  }
+
+  const title = (opts.title || opts.plan.siteTitle || "Home").trim();
+  const template = await prisma.template.create({
+    data: {
+      templateSetId: set.id,
+      name: await uniqueTemplateName(set.id, opts.templateName || title),
+      coreHtml: opts.plan.coreHtml,
+      menuHtml: "",
+      submenuHtml: "",
+    },
+  });
+
+  const blocks = [];
+  for (let i = 0; i < opts.plan.sections.length; i++) {
+    const s = opts.plan.sections[i];
+    const tb = await prisma.templateBlock.create({
+      data: {
+        templateId: template.id,
+        name: s.name,
+        defaultHtml: s.html,
+        isRepeatable: false,
+        sortOrder: i,
+      },
+    });
+    blocks.push(tb);
+    scheduleSectionPreview(tb.id);
+  }
+
+  const page = await prisma.page.create({
+    data: {
+      siteId: site.id,
+      languageId: opts.languageId,
+      templateId: template.id,
+      authorId: opts.creatorUserId,
+      title,
+      menuTitle: (opts.menuTitle || title).trim(),
+      slug: await uniquePageSlug(
+        site.id,
+        opts.languageId,
+        opts.slug || title,
+      ),
+      isDefault: Boolean(opts.isDefault),
+      inMenu: true,
+      sortOrder: 0,
+      blocks: {
+        create: blocks.map((b, i) => ({
+          templateBlockId: b.id,
+          content: serializeFields(emptyFieldsFromTemplate(b.defaultHtml)),
+          sortOrder: i,
+        })),
+      },
+    },
+  });
+
+  return {
+    pageId: page.id,
+    templateId: template.id,
+    sectionCount: blocks.length,
+  };
+}
+
 export async function importSiteFromUrl(opts: {
   organizationId: string;
   name?: string;
@@ -166,58 +289,16 @@ export async function importSiteFromUrl(opts: {
   const language = site.languages[0];
   if (!language) throw new Error("Site language missing");
 
-  const set = await prisma.templateSet.create({
-    data: {
-      siteId: site.id,
-      name: `${site.name} templates`,
-    },
-  });
-
-  const template = await prisma.template.create({
-    data: {
-      templateSetId: set.id,
-      name: "Home",
-      coreHtml: plan.coreHtml,
-      menuHtml: "",
-      submenuHtml: "",
-    },
-  });
-
-  const blocks = [];
-  for (let i = 0; i < plan.sections.length; i++) {
-    const s = plan.sections[i];
-    const tb = await prisma.templateBlock.create({
-      data: {
-        templateId: template.id,
-        name: s.name,
-        defaultHtml: s.html,
-        isRepeatable: false,
-        sortOrder: i,
-      },
-    });
-    blocks.push(tb);
-  }
-
-  const page = await prisma.page.create({
-    data: {
-      siteId: site.id,
-      languageId: language.id,
-      templateId: template.id,
-      authorId: opts.creatorUserId,
-      title: "Home",
-      menuTitle: "Home",
-      slug: "home",
-      isDefault: true,
-      inMenu: true,
-      sortOrder: 0,
-      blocks: {
-        create: blocks.map((b, i) => ({
-          templateBlockId: b.id,
-          content: serializeFields(emptyFieldsFromTemplate(b.defaultHtml)),
-          sortOrder: i,
-        })),
-      },
-    },
+  const applied = await applyImportPlan({
+    siteId: site.id,
+    languageId: language.id,
+    plan,
+    creatorUserId: opts.creatorUserId,
+    title: "Home",
+    slug: "home",
+    menuTitle: "Home",
+    templateName: "Home",
+    isDefault: true,
   });
 
   await prisma.siteSetting.create({
@@ -228,10 +309,45 @@ export async function importSiteFromUrl(opts: {
     },
   });
 
-  return {
-    site,
-    pageId: page.id,
-    templateId: template.id,
-    sectionCount: blocks.length,
-  };
+  return { site, ...applied };
+}
+
+/** Same Grok plan as site import, applied as a new page template on an existing site. */
+export async function importPageFromUrl(opts: {
+  siteId: string;
+  languageId: string;
+  sourceUrl: string;
+  prompt?: string;
+  title?: string;
+  slug?: string;
+  menuTitle?: string;
+  creatorUserId: string;
+}) {
+  const prompt = (opts.prompt || (await getImportPrompt())).trim();
+  const plan = await planSiteFromUrl({
+    sourceUrl: opts.sourceUrl,
+    prompt,
+  });
+
+  const pageCount = await prisma.page.count({ where: { siteId: opts.siteId } });
+  const isFirstPage = pageCount === 0;
+
+  if (isFirstPage) {
+    await prisma.site.update({
+      where: { id: opts.siteId },
+      data: { cssFramework: "tailwind" },
+    });
+  }
+
+  return applyImportPlan({
+    siteId: opts.siteId,
+    languageId: opts.languageId,
+    plan,
+    creatorUserId: opts.creatorUserId,
+    title: opts.title || (isFirstPage ? "Home" : plan.siteTitle),
+    slug: opts.slug || (isFirstPage ? "home" : undefined),
+    menuTitle: opts.menuTitle,
+    templateName: isFirstPage ? "Home" : opts.title || plan.siteTitle,
+    isDefault: isFirstPage,
+  });
 }
