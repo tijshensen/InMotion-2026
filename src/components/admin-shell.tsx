@@ -219,10 +219,8 @@ export function AdminShell({
   return (
     <div
       className={[
-        "flex flex-col bg-slate-50",
-        isCanvas
-          ? "fixed inset-0 z-30 h-[100dvh] max-h-[100dvh] overflow-hidden"
-          : "min-h-screen",
+        "flex h-dvh max-h-dvh flex-col overflow-hidden bg-slate-50",
+        isCanvas ? "fixed inset-0 z-30" : "",
       ].join(" ")}
       style={
         {
@@ -558,11 +556,11 @@ export function AdminShell({
         )}
       </header>
 
-      <div className="flex flex-1 min-h-0 h-0 relative overflow-hidden">
+      <div className="relative flex min-h-0 flex-1 overflow-hidden">
         {/* Left navigation — slides off screen when collapsed */}
         <aside
           className={[
-            "shrink-0 border-r border-slate-200 bg-slate-900 text-slate-100 flex flex-col transition-all duration-200 ease-out overflow-hidden h-full",
+            "flex h-full min-h-0 shrink-0 flex-col overflow-hidden border-r border-slate-200 bg-slate-900 text-slate-100 transition-all duration-200 ease-out",
             navCollapsed
               ? "w-0 border-r-0 opacity-0 pointer-events-none"
               : "w-60 opacity-100",
