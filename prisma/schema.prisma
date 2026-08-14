@@ -106,8 +106,25 @@ model Site {
   inserts     Insert[]
   settings    SiteSetting[]
   media       MediaAsset[]
+  stylePresets StylePreset[]
 
   @@index([organizationId])
+}
+
+/// Named Tailwind class snapshot (Layout mode “Save as preset”).
+model StylePreset {
+  id        String   @id @default(cuid())
+  siteId    String
+  site      Site     @relation(fields: [siteId], references: [id], onDelete: Cascade)
+  name      String
+  className String
+  tag       String   @default("")
+  /// JSON snapshot of last apply, for undo
+  lastUndo  String   @default("")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([siteId])
 }
 
 model SiteMember {

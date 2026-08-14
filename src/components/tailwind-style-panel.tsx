@@ -27,6 +27,7 @@ import {
   type ComputedBox,
   type LayoutState,
 } from "@/lib/tailwind-layout";
+import { StylePresetBar } from "@/components/style-preset-dialog";
 
 type Props = {
   tag: string;
@@ -35,8 +36,15 @@ type Props = {
   computed: ComputedBox | null;
   parentComputed: ComputedBox | null;
   parentNid: string | null;
+  siteId: string;
+  pageBlockId: string;
+  nid: string;
   onChange: (next: string) => void;
   onJumpParent: () => void;
+  onPresetReplaced: (payload: {
+    updatedPageBlocks: { id: string; content: string }[];
+    updatedTemplateBlocks: { id: string; defaultHtml: string }[];
+  }) => void;
 };
 
 const STATES: { id: LayoutState; label: string }[] = [
@@ -110,8 +118,12 @@ export function TailwindStylePanel({
   computed,
   parentComputed,
   parentNid,
+  siteId,
+  pageBlockId,
+  nid,
   onChange,
   onJumpParent,
+  onPresetReplaced,
 }: Props) {
   const [state, setState] = useState<LayoutState>("default");
   const variant = classVariant(device, state);
@@ -210,6 +222,17 @@ export function TailwindStylePanel({
           className="mt-1 w-full rounded-md border border-slate-200 px-2 py-1.5 font-mono text-[11px] text-slate-800"
           spellCheck={false}
         />
+        <div className="mt-2">
+          <StylePresetBar
+            siteId={siteId}
+            pageBlockId={pageBlockId}
+            nid={nid}
+            tag={tag}
+            className={className}
+            onApplyClass={onChange}
+            onReplaced={onPresetReplaced}
+          />
+        </div>
       </div>
 
       <section className="space-y-2">

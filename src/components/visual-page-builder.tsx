@@ -28,7 +28,7 @@ import { MediaPicker, type MediaItem } from "@/components/media-picker";
 import { HtmlCodeEditor } from "@/components/html-code-editor";
 import { BlockEditor } from "@/components/block-editor";
 import { TailwindStylePanel } from "@/components/tailwind-style-panel";
-import { setClassAtNid, stampLayoutNids } from "@/lib/layout-html";
+import { getClassAtNid, setClassAtNid, stampLayoutNids } from "@/lib/layout-html";
 import { pickComputed, type ComputedBox } from "@/lib/tailwind-layout";
 
 type TemplateBlock = {
@@ -972,6 +972,39 @@ export function VisualPageBuilder({
     el.click();
   }
 
+  function applyPresetReplacements(payload: {
+    updatedPageBlocks: { id: string; content: string }[];
+    updatedTemplateBlocks: { id: string; defaultHtml: string }[];
+  }) {
+    onChange((prev) =>
+      prev.map((s) => {
+        const pageHit = payload.updatedPageBlocks.find((b) => b.id === s.id);
+        const tplHit = s.templateBlockId
+          ? payload.updatedTemplateBlocks.find(
+              (b) => b.id === s.templateBlockId,
+            )
+          : undefined;
+        if (!pageHit && !tplHit) return s;
+        return {
+          ...s,
+          content: pageHit ? pageHit.content : s.content,
+          templateBlock:
+            tplHit && s.templateBlock
+              ? { ...s.templateBlock, defaultHtml: tplHit.defaultHtml }
+              : s.templateBlock,
+        };
+      }),
+    );
+    if (!layoutHit) return;
+    const pageHit = payload.updatedPageBlocks.find(
+      (b) => b.id === layoutHit.sectionId,
+    );
+    if (!pageHit) return;
+    const parsed = parseStoredContent(pageHit.content);
+    const cls = getClassAtNid(parsed.layoutHtml || "", layoutHit.nid);
+    if (cls) setLayoutHit((h) => (h ? { ...h, className: cls } : h));
+  }
+
   function setField(key: string, value: string) {
     setFields({ [key]: value });
   }
@@ -1198,8 +1231,12 @@ export function VisualPageBuilder({
                 computed={layoutHit.computed}
                 parentComputed={layoutHit.parentComputed}
                 parentNid={layoutHit.parentNid}
+                siteId={siteId}
+                pageBlockId={layoutHit.sectionId}
+                nid={layoutHit.nid}
                 onChange={applyLayoutClass}
                 onJumpParent={jumpLayoutParent}
+                onPresetReplaced={applyPresetReplacements}
               />
             </div>
           </>
