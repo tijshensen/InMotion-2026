@@ -6,6 +6,7 @@ export const dynamic = "force-dynamic";
 export const revalidate = 0;
 import { renderMenuHtml, type MenuPage } from "@/lib/menu";
 import {
+  menuTokenWantsBareItems,
   renderMenuFromSnippets,
   resolveMenuSnippets,
 } from "@/lib/menu-snippets";
@@ -86,7 +87,9 @@ export default async function EditPageAdmin({ params }: Props) {
     templateSet: page.template?.templateSet,
   });
   const menuHtml =
-    renderMenuFromSnippets(snippets, page.site.slug, menuPages, page.id) ||
+    renderMenuFromSnippets(snippets, page.site.slug, menuPages, page.id, {
+      bareItems: menuTokenWantsBareItems(shellHtml),
+    }) ||
     (isFullThemeShell(shellHtml)
       ? renderBootstrapMenuHtml(page.site.slug, menuPages)
       : renderMenuHtml(page.site.slug, menuPages));

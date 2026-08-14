@@ -17,6 +17,7 @@ import {
 } from "./theme";
 import { renderMenuHtml, type MenuPage } from "./menu";
 import {
+  menuTokenWantsBareItems,
   renderMenuFromSnippets,
   resolveMenuSnippets,
 } from "./menu-snippets";
@@ -233,7 +234,9 @@ export async function generateSectionPreview(blockId: string): Promise<string | 
     templateSet: block.template.templateSet,
   });
   const menuHtml =
-    renderMenuFromSnippets(snippets, site.slug, menuPages) ||
+    renderMenuFromSnippets(snippets, site.slug, menuPages, null, {
+      bareItems: menuTokenWantsBareItems(shell),
+    }) ||
     (isFullThemeShell(shell)
       ? renderBootstrapMenuHtml(site.slug, menuPages)
       : renderMenuHtml(site.slug, menuPages));

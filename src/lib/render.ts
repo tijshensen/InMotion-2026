@@ -10,6 +10,7 @@ import {
 } from "./internal-links";
 import { renderMenuHtml, type MenuPage } from "./menu";
 import {
+  menuTokenWantsBareItems,
   renderMenuFromSnippets,
   renderSubmenuFromSnippets,
   resolveMenuSnippets,
@@ -137,7 +138,9 @@ export async function renderPublicPage({
     templateSet: page.template?.templateSet,
   });
   const menu =
-    renderMenuFromSnippets(snippets, site.slug, menuPages, page.id) ||
+    renderMenuFromSnippets(snippets, site.slug, menuPages, page.id, {
+      bareItems: menuTokenWantsBareItems(html),
+    }) ||
     (fullTheme
       ? renderBootstrapMenuHtml(site.slug, menuPages)
       : renderMenuHtml(site.slug, menuPages));
