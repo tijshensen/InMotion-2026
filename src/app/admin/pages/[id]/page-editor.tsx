@@ -108,7 +108,30 @@ export function PageEditor({
   const [showMeta, setShowMeta] = useState(false);
   const [device, setDevice] = useState<CanvasDevice>("phone");
   const [showAdd, setShowAdd] = useState(false);
-  const [editorMode, setEditorMode] = useState<EditorMode>("content");
+  const [editorMode, setEditorMode] = useState<EditorMode>(() => {
+    if (typeof window === "undefined") return "content";
+    try {
+      const stored = sessionStorage.getItem("cms_editor_mode");
+      if (
+        stored === "view" ||
+        stored === "content" ||
+        stored === "layout"
+      ) {
+        return stored;
+      }
+    } catch {
+      /* ignore */
+    }
+    return "content";
+  });
+
+  useEffect(() => {
+    try {
+      sessionStorage.setItem("cms_editor_mode", editorMode);
+    } catch {
+      /* ignore */
+    }
+  }, [editorMode]);
   const layoutModeAvailable = (cssFramework || "").toLowerCase() === "tailwind";
 
   const skipFirstSave = useRef(true);

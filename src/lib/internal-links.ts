@@ -35,6 +35,52 @@ export function isInternalLinkRef(href: string): boolean {
   return /^#internalURI\d+$/i.test(href) || /^#page:[a-z0-9_-]+$/i.test(href);
 }
 
+/** Map a preview / public href to an editor page id, or null if external. */
+export function matchEditorPageFromHref(
+  href: string,
+  siteSlug: string,
+  pages: LinkablePage[],
+): string | null {
+  if (!href || !siteSlug || !pages.length) return null;
+  const raw = href.trim();
+  const ref = parseInternalLinkRef(raw);
+  if (ref?.kind === "page") {
+    return pages.some((p) => p.id === ref.id) ? ref.id : null;
+  }
+  if (ref?.kind === "legacy") {
+    return pages.find((p) => p.legacyId === ref.id)?.id || null;
+  }
+
+  let path = raw;
+  try {
+    if (/^https?:\/\//i.test(raw)) {
+      path = new URL(raw).pathname;
+    }
+  } catch {
+    /* keep raw */
+  }
+  path = path.split("?")[0].split("#")[0];
+  if (!path.startsWith("/")) return null;
+
+  const prefixes = [`/s/${siteSlug}`, `/sites/${siteSlug}`];
+  for (const prefix of prefixes) {
+    if (path === prefix || path === `${prefix}/`) {
+      return (
+        pages.find((p) => p.isDefault || p.slug === "home" || p.slug === "")
+          ?.id || null
+      );
+    }
+    if (path.startsWith(`${prefix}/`)) {
+      const slug = path.slice(prefix.length + 1).replace(/\/+$/, "");
+      if (!slug) {
+        return pages.find((p) => p.isDefault || p.slug === "home")?.id || null;
+      }
+      return pages.find((p) => p.slug === slug)?.id || null;
+    }
+  }
+  return null;
+}
+
 export function parseInternalLinkRef(
   href: string,
 ): { kind: "legacy"; id: number } | { kind: "page"; id: string } | null {

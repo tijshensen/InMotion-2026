@@ -771,11 +771,19 @@ export function buildEditorPreviewHtml(opts: {
       var link = e.target && e.target.closest ? e.target.closest("a") : null;
       if (link) {
         var href = link.getAttribute("href") || "";
-        var stay = !href || href === "#" || href.charAt(0) === "#" || href.indexOf("javascript:") === 0;
-        if (!stay) {
+        var cmsRef = href.indexOf("#internalURI") === 0 || href.indexOf("#page:") === 0;
+        var inPageHash = href.charAt(0) === "#" && !cmsRef;
+        var stay = !href || href === "#" || inPageHash || href.indexOf("javascript:") === 0;
+        if (!stay || cmsRef) {
           e.preventDefault();
           e.stopPropagation();
-          try { window.open(link.href, "_blank", "noopener"); } catch (err) {}
+          try {
+            window.parent.postMessage({
+              type: "cms-view-navigate",
+              href: href,
+              resolved: link.href || ""
+            }, "*");
+          } catch (err) {}
         }
       }
       return;

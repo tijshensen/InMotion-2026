@@ -8,6 +8,7 @@
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 import {
   META,
   buildEditorPreviewHtml,
@@ -18,7 +19,7 @@ import {
   type FieldType,
   type SectionField,
 } from "@/lib/sections";
-import { type LinkablePage } from "@/lib/internal-links";
+import { matchEditorPageFromHref, type LinkablePage } from "@/lib/internal-links";
 import { MediaPicker, type MediaItem } from "@/components/media-picker";
 import { BlockEditor } from "@/components/block-editor";
 import { TextLinkComposer } from "@/components/text-link-composer";
@@ -446,6 +447,7 @@ export function VisualPageBuilder({
   onShowAddChange,
   editorMode = "content",
 }: Props) {
+  const router = useRouter();
   const [selectedSectionId, setSelectedSectionId] = useState<string | null>(
     null,
   );
@@ -847,6 +849,26 @@ export function VisualPageBuilder({
         });
         return;
       }
+      if (data.type === "cms-view-navigate") {
+        const href = String(data.href || "");
+        const resolved = String(data.resolved || href);
+        const nextId =
+          matchEditorPageFromHref(href, siteSlug, linkPages) ||
+          matchEditorPageFromHref(resolved, siteSlug, linkPages);
+        if (nextId && nextId !== pageId) {
+          router.push(`/admin/pages/${nextId}`);
+          return;
+        }
+        if (nextId && nextId === pageId) return;
+        if (resolved && !resolved.startsWith("#")) {
+          try {
+            window.open(resolved, "_blank", "noopener");
+          } catch {
+            /* ignore */
+          }
+        }
+        return;
+      }
       if (data.type !== "cms-select-section") return;
       if (typeof data.sectionId !== "string") return;
       const win = iframeRef.current?.contentWindow;
@@ -856,7 +878,7 @@ export function VisualPageBuilder({
     }
     window.addEventListener("message", onMessage);
     return () => window.removeEventListener("message", onMessage);
-  }, []);
+  }, [linkPages, pageId, router, siteSlug]);
 
   function applyLayoutClass(nextClass: string) {
     if (!layoutHit) return;
