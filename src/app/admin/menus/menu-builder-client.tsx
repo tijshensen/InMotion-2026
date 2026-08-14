@@ -12,6 +12,7 @@ type Site = {
 type Props = {
   site: Site;
   initialLanguageId: string;
+  multiLanguage?: boolean;
   initialPages: MenuPage[];
 };
 
@@ -60,6 +61,7 @@ function flattenFromTree(nodes: MenuNode[], parentId: string | null = null): Men
 export function MenuBuilderClient({
   site,
   initialLanguageId,
+  multiLanguage = false,
   initialPages,
 }: Props) {
   const siteId = site.id;
@@ -342,20 +344,22 @@ export function MenuBuilderClient({
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-end gap-3 rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-        <label className="space-y-1 text-sm">
-          <span className="text-slate-600">Language</span>
-          <select
-            value={languageId}
-            onChange={(e) => void onLanguageChange(e.target.value)}
-            className="block rounded-lg border border-slate-200 px-3 py-2 min-w-[10rem]"
-          >
-            {languages.map((l) => (
-              <option key={l.id} value={l.id}>
-                {l.name} ({l.code})
-              </option>
-            ))}
-          </select>
-        </label>
+        {multiLanguage && (
+          <label className="space-y-1 text-sm">
+            <span className="text-slate-600">Language</span>
+            <select
+              value={languageId}
+              onChange={(e) => void onLanguageChange(e.target.value)}
+              className="block rounded-lg border border-slate-200 px-3 py-2 min-w-[10rem]"
+            >
+              {languages.map((l) => (
+                <option key={l.id} value={l.id}>
+                  {l.name} ({l.code})
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
         <button
           type="button"
           onClick={() => void onSave()}

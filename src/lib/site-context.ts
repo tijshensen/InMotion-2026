@@ -17,6 +17,7 @@ export type ActiveSite = {
   slug: string;
   domain: string | null;
   siteTitle: string;
+  multiLanguage: boolean;
   cssFramework: string;
   themeSlug: string;
   lastGeneratedAt: Date | null;
@@ -62,6 +63,7 @@ function toActiveSite(active: {
   slug: string;
   domain: string | null;
   siteTitle: string;
+  multiLanguage?: boolean;
   cssFramework: string;
   themeSlug: string;
   lastGeneratedAt: Date | null;
@@ -77,6 +79,7 @@ function toActiveSite(active: {
     slug: active.slug,
     domain: active.domain,
     siteTitle: active.siteTitle,
+    multiLanguage: Boolean(active.multiLanguage),
     cssFramework: active.cssFramework || "none",
     themeSlug: active.themeSlug || active.slug,
     lastGeneratedAt: active.lastGeneratedAt,

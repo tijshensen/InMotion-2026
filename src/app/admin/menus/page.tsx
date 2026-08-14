@@ -77,6 +77,7 @@ export default async function MenusAdminPage() {
           })),
         }}
         initialLanguageId={language?.id || ""}
+        multiLanguage={site.multiLanguage}
         initialPages={JSON.parse(JSON.stringify(pages))}
       />
     </div>

@@ -11,6 +11,14 @@ import {
 
 type Org = { id: string; name: string; slug: string };
 
+const LANGUAGE_OPTIONS = [
+  { name: "English", code: "en" },
+  { name: "Nederlands", code: "nl" },
+  { name: "Deutsch", code: "de" },
+  { name: "Français", code: "fr" },
+  { name: "Español", code: "es" },
+];
+
 type SiteCard = {
   id: string;
   name: string;
@@ -27,7 +35,8 @@ type SiteCard = {
   pageCount: number;
   memberCount: number;
   insertCount: number;
-  languages: string;
+  multiLanguage: boolean;
+  languages: { id: string; name: string; code: string; isDefault: boolean }[];
 };
 
 type Props = {
@@ -403,6 +412,9 @@ function SiteEditor({
     site.cloudflareProject || site.slug,
   );
   const [logo, setLogo] = useState(site.logoPath || "");
+  const [multi, setMulti] = useState(site.multiLanguage);
+  const [langs, setLangs] = useState(site.languages);
+  const [newLang, setNewLang] = useState("en");
   const [saving, setSaving] = useState<string | null>(null);
   const [saved, setSaved] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -412,13 +424,53 @@ function SiteEditor({
     setTitle(site.siteTitle || site.name);
     setProject(site.cloudflareProject || site.slug);
     setLogo(site.logoPath || "");
-  }, [site.siteTitle, site.name, site.cloudflareProject, site.slug, site.logoPath]);
+    setMulti(site.multiLanguage);
+    setLangs(site.languages);
+  }, [
+    site.siteTitle,
+    site.name,
+    site.cloudflareProject,
+    site.slug,
+    site.logoPath,
+    site.multiLanguage,
+    site.languages,
+  ]);
 
   const projectErr = pagesProjectError(project);
   const liveProject = (project.trim() || site.slug).toLowerCase();
   const previewUrl = pagesDevUrl(liveProject);
 
-  async function patch(body: Record<string, string>, field: string) {
+  async function addLanguage() {
+    const opt = LANGUAGE_OPTIONS.find((o) => o.code === newLang);
+    if (!opt) return;
+    setSaving("lang");
+    setError(null);
+    try {
+      const res = await fetch(`/api/sites/${site.id}/languages`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: opt.name, code: opt.code }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || "Could not add language");
+      setLangs((prev) => [...prev, data]);
+      setMulti(true);
+      const next = LANGUAGE_OPTIONS.find(
+        (o) => o.code !== opt.code && !langs.some((l) => l.code === o.code),
+      );
+      if (next) setNewLang(next.code);
+      router.refresh();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Could not add language");
+    } finally {
+      setSaving(null);
+    }
+  }
+
+  async function patch(
+    body: Record<string, string | boolean>,
+    field: string,
+  ) {
     setSaving(field);
     setError(null);
     setSaved(null);
@@ -589,6 +641,76 @@ function SiteEditor({
               </p>
             )}
           </div>
+
+          <label className="flex items-start gap-2 text-sm text-slate-700">
+            <input
+              type="checkbox"
+              checked={multi}
+              onChange={(e) => {
+                const on = e.target.checked;
+                setMulti(on);
+                void patch({ multiLanguage: on }, "multi");
+              }}
+              onClick={(e) => e.stopPropagation()}
+              className="mt-0.5"
+            />
+            <span>
+              Enable multilingual
+              <span className="block text-xs font-normal text-slate-400">
+                Pages and menus can have a separate version per language
+              </span>
+            </span>
+          </label>
+
+          {multi && (
+            <div
+              className="rounded-lg border border-slate-200 bg-white/70 px-3 py-2 space-y-2"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <p className="text-[11px] uppercase tracking-wide text-slate-400">
+                Languages
+              </p>
+              <ul className="flex flex-wrap gap-1.5">
+                {langs.map((l) => (
+                  <li
+                    key={l.id}
+                    className="rounded-full bg-slate-100 px-2 py-0.5 text-xs text-slate-700"
+                  >
+                    {l.name} ({l.code})
+                    {l.isDefault ? " · default" : ""}
+                  </li>
+                ))}
+              </ul>
+              <div className="flex flex-wrap items-center gap-2">
+                <select
+                  value={newLang}
+                  onChange={(e) => setNewLang(e.target.value)}
+                  className="rounded-lg border border-slate-200 px-2 py-1 text-xs"
+                >
+                  {LANGUAGE_OPTIONS.filter(
+                    (o) => !langs.some((l) => l.code === o.code),
+                  ).map((o) => (
+                    <option key={o.code} value={o.code}>
+                      {o.name} ({o.code})
+                    </option>
+                  ))}
+                </select>
+                <button
+                  type="button"
+                  disabled={
+                    saving === "lang" ||
+                    !LANGUAGE_OPTIONS.some(
+                      (o) => o.code === newLang && !langs.some((l) => l.code === o.code),
+                    )
+                  }
+                  onClick={() => void addLanguage()}
+                  className="text-xs font-medium text-blue-700 hover:underline disabled:opacity-40"
+                >
+                  {saving === "lang" ? "Adding…" : "Add language"}
+                </button>
+              </div>
+            </div>
+          )}
 
           <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-slate-500">
             <button

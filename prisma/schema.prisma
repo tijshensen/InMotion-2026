@@ -82,6 +82,8 @@ model Site {
   domain      String?
   siteTitle   String   @default("")
   logoPath    String   @default("")
+  /// When false, the site is single-language (language pickers stay hidden).
+  multiLanguage Boolean @default(false)
   isActive    Boolean  @default(true)
   /// Visual CSS framework for this site: bootstrap | tailwind | none | custom
   cssFramework String  @default("none")

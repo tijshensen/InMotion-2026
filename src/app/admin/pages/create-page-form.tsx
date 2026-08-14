@@ -22,7 +22,13 @@ function slugify(input: string) {
     .slice(0, 80);
 }
 
-export function CreatePageSlide({ site }: { site: Site | null }) {
+export function CreatePageSlide({
+  site,
+  multiLanguage = false,
+}: {
+  site: Site | null;
+  multiLanguage?: boolean;
+}) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -159,20 +165,28 @@ export function CreatePageSlide({ site }: { site: Site | null }) {
               <strong className="text-slate-700">{site.name}</strong>
             </p>
 
-            <label className="space-y-1 text-sm block">
-              <span className="text-slate-600">Language</span>
-              <select
+            {multiLanguage ? (
+              <label className="space-y-1 text-sm block">
+                <span className="text-slate-600">Language</span>
+                <select
+                  name="languageId"
+                  className="w-full rounded-lg border border-slate-200 px-3 py-2"
+                  defaultValue={languages[0]?.id}
+                >
+                  {languages.map((l) => (
+                    <option key={l.id} value={l.id}>
+                      {l.name} ({l.code})
+                    </option>
+                  ))}
+                </select>
+              </label>
+            ) : (
+              <input
+                type="hidden"
                 name="languageId"
-                className="w-full rounded-lg border border-slate-200 px-3 py-2"
-                defaultValue={languages[0]?.id}
-              >
-                {languages.map((l) => (
-                  <option key={l.id} value={l.id}>
-                    {l.name} ({l.code})
-                  </option>
-                ))}
-              </select>
-            </label>
+                value={languages[0]?.id || ""}
+              />
+            )}
             <label className="space-y-1 text-sm block">
               <span className="text-slate-600">Title</span>
               <input

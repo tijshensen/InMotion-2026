@@ -43,10 +43,14 @@ export default async function PagesAdminPage() {
         </div>
         <CreatePageSlide
           site={site ? JSON.parse(JSON.stringify(site)) : null}
+          multiLanguage={Boolean(site?.multiLanguage)}
         />
       </div>
 
-      <PagesTable pages={JSON.parse(JSON.stringify(pages))} />
+      <PagesTable
+        pages={JSON.parse(JSON.stringify(pages))}
+        multiLanguage={Boolean(site?.multiLanguage)}
+      />
     </div>
   );
 }

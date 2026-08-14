@@ -13,6 +13,7 @@ const patchSchema = z.object({
   name: z.string().min(1).max(120).optional(),
   siteTitle: z.string().max(200).optional(),
   logoPath: z.string().max(500).optional(),
+  multiLanguage: z.boolean().optional(),
 });
 
 export async function PATCH(req: Request, ctx: Ctx) {
@@ -33,6 +34,7 @@ export async function PATCH(req: Request, ctx: Ctx) {
       name?: string;
       siteTitle?: string;
       logoPath?: string;
+      multiLanguage?: boolean;
     } = {};
     if (body.cloudflareProject !== undefined) {
       const project = body.cloudflareProject.trim().toLowerCase();
@@ -45,6 +47,7 @@ export async function PATCH(req: Request, ctx: Ctx) {
     if (body.domain !== undefined) data.domain = body.domain;
     if (body.name !== undefined) data.name = body.name.trim();
     if (body.siteTitle !== undefined) data.siteTitle = body.siteTitle.trim();
+    if (body.multiLanguage !== undefined) data.multiLanguage = body.multiLanguage;
     if (body.logoPath !== undefined) {
       const logo = body.logoPath.trim();
       if (logo && !logo.startsWith("/uploads/") && !/^https?:\/\//i.test(logo)) {

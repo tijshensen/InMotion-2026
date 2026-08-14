@@ -11,14 +11,30 @@ type PageRow = {
   isDefault: boolean;
   siteId: string;
   site: { id: string; name: string; slug: string };
+  language?: { id: string; name: string; code: string } | null;
   _count: { blocks: number };
 };
 
-export function PagesTable({ pages }: { pages: PageRow[] }) {
+export function PagesTable({
+  pages,
+  multiLanguage = false,
+}: {
+  pages: PageRow[];
+  multiLanguage?: boolean;
+}) {
   const [q, setQ] = useState("");
+  const langCodes = useMemo(() => {
+    const seen = new Map<string, string>();
+    for (const p of pages) {
+      if (p.language) seen.set(p.language.id, `${p.language.name} (${p.language.code})`);
+    }
+    return [...seen.entries()];
+  }, [pages]);
+  const [langId, setLangId] = useState(() => langCodes[0]?.[0] || "");
 
   const filtered = useMemo(() => {
     return pages.filter((p) => {
+      if (multiLanguage && langId && p.language?.id !== langId) return false;
       if (!q.trim()) return true;
       const needle = q.toLowerCase();
       return (
@@ -26,11 +42,27 @@ export function PagesTable({ pages }: { pages: PageRow[] }) {
         p.slug.toLowerCase().includes(needle)
       );
     });
-  }, [pages, q]);
+  }, [pages, q, multiLanguage, langId]);
 
   return (
     <div className="space-y-3">
       <div className="flex flex-wrap gap-3 items-end">
+        {multiLanguage && langCodes.length > 0 && (
+          <label className="text-sm space-y-1">
+            <span className="text-slate-600">Language</span>
+            <select
+              value={langId}
+              onChange={(e) => setLangId(e.target.value)}
+              className="block rounded-lg border border-slate-200 px-3 py-2 min-w-[10rem]"
+            >
+              {langCodes.map(([id, label]) => (
+                <option key={id} value={id}>
+                  {label}
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
         <label className="text-sm space-y-1 flex-1 min-w-[12rem]">
           <span className="text-slate-600">Search</span>
           <input

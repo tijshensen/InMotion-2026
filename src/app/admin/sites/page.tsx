@@ -20,7 +20,10 @@ export default async function SitesAdminPage() {
           orderBy: { name: "asc" },
           include: {
             organization: { select: { name: true } },
-            languages: { select: { code: true } },
+            languages: {
+              select: { id: true, name: true, code: true, isDefault: true },
+              orderBy: { name: "asc" },
+            },
             _count: { select: { pages: true, members: true, inserts: true } },
           },
         })
@@ -30,7 +33,10 @@ export default async function SitesAdminPage() {
             orderBy: { name: "asc" },
             include: {
               organization: { select: { name: true } },
-              languages: { select: { code: true } },
+              languages: {
+              select: { id: true, name: true, code: true, isDefault: true },
+              orderBy: { name: "asc" },
+            },
               _count: {
                 select: { pages: true, members: true, inserts: true },
               },
@@ -73,7 +79,8 @@ export default async function SitesAdminPage() {
         pageCount: site._count.pages,
         memberCount: site._count.members,
         insertCount: site._count.inserts,
-        languages: site.languages.map((l) => l.code).join(", "),
+        multiLanguage: site.multiLanguage,
+        languages: site.languages,
       }))}
     />
   );
