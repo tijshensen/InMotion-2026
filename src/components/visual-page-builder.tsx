@@ -4,7 +4,7 @@
  * Page builder modelled on original MotionCMS (pages.edit.view.php):
  * - Main area = full rendered page in iframe (same HTML as public output)
  * - Click a section → slide-in panel with field editors from Templater::edit()
- *   singleline (+ link), multiline, image (+ alt/link), file, style CSS
+ *   singleline (+ link), multiline, image (+ alt/link), file
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -18,15 +18,10 @@ import {
   type FieldType,
   type SectionField,
 } from "@/lib/sections";
-import {
-  encodeInternalLink,
-  isInternalLinkRef,
-  parseInternalLinkRef,
-  type LinkablePage,
-} from "@/lib/internal-links";
+import { type LinkablePage } from "@/lib/internal-links";
 import { MediaPicker, type MediaItem } from "@/components/media-picker";
-import { HtmlCodeEditor } from "@/components/html-code-editor";
 import { BlockEditor } from "@/components/block-editor";
+import { TextLinkComposer } from "@/components/text-link-composer";
 import { TailwindStylePanel } from "@/components/tailwind-style-panel";
 import { SectionRepeatEditor } from "@/components/section-repeat-editor";
 import { getClassAtNid, setClassAtNid, stampLayoutNids } from "@/lib/layout-html";
@@ -98,185 +93,6 @@ type Props = {
   editorMode?: "content" | "layout";
 };
 
-/**
- * Link editor matching original addTextLink / addPicLink modal:
- * external URL, title, target, OR pick an internal page → #internalURI{id}
- */
-function FieldLinkEditor({
-  label,
-  href,
-  target,
-  title,
-  linkPages,
-  onChangeHref,
-  onChangeTarget,
-  onChangeTitle,
-}: {
-  label: string;
-  href: string;
-  target: string;
-  title: string;
-  linkPages: LinkPageOption[];
-  onChangeHref: (v: string) => void;
-  onChangeTarget: (v: string) => void;
-  onChangeTitle: (v: string) => void;
-}) {
-  const parsed = parseInternalLinkRef(href || "");
-  const selectedPageId = parsed
-    ? parsed.kind === "page"
-      ? parsed.id
-      : linkPages.find((p) => p.legacyId === parsed.id)?.id || ""
-    : "";
-  const mode: "none" | "internal" | "external" = !href
-    ? "none"
-    : isInternalLinkRef(href) || selectedPageId
-      ? "internal"
-      : "external";
-
-  const open = Boolean(href);
-
-  return (
-    <div className="rounded-lg border border-slate-200 bg-slate-50/80 p-3 space-y-2">
-      <div className="flex items-center justify-between gap-2">
-        <p className="text-xs font-medium text-slate-700">{label}</p>
-        {href && (
-          <button
-            type="button"
-            onClick={() => {
-              onChangeHref("");
-              onChangeTarget("");
-              onChangeTitle("");
-            }}
-            className="text-[11px] text-red-600 hover:underline"
-          >
-            Remove link
-          </button>
-        )}
-      </div>
-
-      <div className="flex flex-wrap gap-1 text-[11px]">
-        <button
-          type="button"
-          onClick={() => {
-            onChangeHref("");
-            onChangeTarget("");
-          }}
-          className={[
-            "rounded-md px-2 py-1 border",
-            mode === "none"
-              ? "border-slate-900 bg-slate-900 text-white"
-              : "border-slate-200 bg-white text-slate-600",
-          ].join(" ")}
-        >
-          No link
-        </button>
-        <button
-          type="button"
-          onClick={() => {
-            if (mode !== "internal") {
-              const first = linkPages[0];
-              onChangeHref(first ? encodeInternalLink(first) : "");
-            }
-          }}
-          className={[
-            "rounded-md px-2 py-1 border",
-            mode === "internal"
-              ? "border-blue-600 bg-blue-600 text-white"
-              : "border-slate-200 bg-white text-slate-600",
-          ].join(" ")}
-        >
-          Internal page
-        </button>
-        <button
-          type="button"
-          onClick={() => {
-            if (mode !== "external") {
-              onChangeHref(
-                href && !isInternalLinkRef(href) ? href : "https://",
-              );
-            }
-          }}
-          className={[
-            "rounded-md px-2 py-1 border",
-            mode === "external"
-              ? "border-blue-600 bg-blue-600 text-white"
-              : "border-slate-200 bg-white text-slate-600",
-          ].join(" ")}
-        >
-          External URL
-        </button>
-      </div>
-
-      {mode === "internal" && (
-        <label className="block space-y-1 text-xs">
-          <span className="text-slate-600">Page</span>
-          <select
-            value={selectedPageId}
-            onChange={(e) => {
-              const page = linkPages.find((p) => p.id === e.target.value);
-              if (page) onChangeHref(encodeInternalLink(page));
-            }}
-            className="w-full rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-xs"
-          >
-            <option value="">Select a page…</option>
-            {linkPages.map((p) => (
-              <option key={p.id} value={p.id}>
-                {p.menuTitle || p.title}
-                {p.legacyId != null ? ` (#${p.legacyId})` : ""}
-              </option>
-            ))}
-          </select>
-          {href && (
-            <p className="font-mono text-[10px] text-slate-400 break-all">
-              stores as {href}
-            </p>
-          )}
-        </label>
-      )}
-
-      {mode === "external" && (
-        <label className="block space-y-1 text-xs">
-          <span className="text-slate-600">URL</span>
-          <input
-            type="text"
-            placeholder="https://example.com"
-            value={href}
-            onChange={(e) => onChangeHref(e.target.value)}
-            className="w-full rounded-lg border border-slate-200 bg-white px-2 py-1.5 font-mono text-xs"
-          />
-        </label>
-      )}
-
-      {(mode === "internal" || mode === "external" || open) && mode !== "none" && (
-        <div className="grid grid-cols-2 gap-2">
-          <label className="block space-y-1 text-xs">
-            <span className="text-slate-600">Target</span>
-            <select
-              value={target || ""}
-              onChange={(e) => onChangeTarget(e.target.value)}
-              className="w-full rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-xs"
-            >
-              <option value="">Same window</option>
-              <option value="_blank">New window (_blank)</option>
-              <option value="_self">_self</option>
-            </select>
-          </label>
-          <label className="block space-y-1 text-xs">
-            <span className="text-slate-600">Title</span>
-            <input
-              type="text"
-              placeholder="Link title"
-              value={title}
-              onChange={(e) => onChangeTitle(e.target.value)}
-              className="w-full rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-xs"
-            />
-          </label>
-        </div>
-      )}
-    </div>
-  );
-}
-
 export function FieldEditors({
   fields,
   values,
@@ -296,6 +112,11 @@ export function FieldEditors({
   onChangeMany: (updates: Record<string, string>) => void;
 }) {
   const [mediaFor, setMediaFor] = useState<string | null>(null);
+  const [textSel, setTextSel] = useState<{
+    key: string;
+    start: number;
+    end: number;
+  } | null>(null);
   /**
    * Optimistic overlay so the URL input / thumb update immediately after
    * media pick, even if a parent re-render races with async crop.
@@ -420,62 +241,55 @@ export function FieldEditors({
                 type="text"
                 value={displayValues[f.key] ?? ""}
                 onChange={(e) => onChange(f.key, e.target.value)}
+                onSelect={(e) => {
+                  const el = e.currentTarget;
+                  const start = el.selectionStart ?? 0;
+                  const end = el.selectionEnd ?? 0;
+                  setTextSel(
+                    end > start ? { key: f.key, start, end } : null,
+                  );
+                }}
                 className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
               />
-              <FieldLinkEditor
-                label="Add link (text)"
-                href={displayValues[f.key + META.link] ?? ""}
-                target={displayValues[f.key + META.linkTarget] ?? ""}
-                title={displayValues[f.key + META.linkTitle] ?? ""}
+              <TextLinkComposer
                 linkPages={linkPages}
-                onChangeHref={(v) => onChange(f.key + META.link, v)}
-                onChangeTarget={(v) => onChange(f.key + META.linkTarget, v)}
-                onChangeTitle={(v) => onChange(f.key + META.linkTitle, v)}
+                canAdd={textSel?.key === f.key && textSel.end > textSel.start}
+                existing={
+                  displayValues[f.key + META.link]
+                    ? {
+                        href: displayValues[f.key + META.link],
+                        title: displayValues[f.key + META.linkTitle] ?? "",
+                        target: displayValues[f.key + META.linkTarget] ?? "",
+                      }
+                    : null
+                }
+                onApply={(draft) => {
+                  onChangeMany({
+                    [f.key + META.link]: draft.href,
+                    [f.key + META.linkTitle]: draft.title,
+                    [f.key + META.linkTarget]: draft.target,
+                  });
+                  setTextSel(null);
+                }}
+                onRemove={() =>
+                  onChangeMany({
+                    [f.key + META.link]: "",
+                    [f.key + META.linkTitle]: "",
+                    [f.key + META.linkTarget]: "",
+                  })
+                }
               />
             </div>
           )}
 
           {f.type === "multiline" && (
-            <div className="space-y-2">
-              <BlockEditor
-                content={displayValues[f.key] ?? ""}
-                siteId={siteId}
-                onChange={(html) => onChange(f.key, html)}
-                placeholder={`${f.label}…`}
-              />
-              <details className="text-xs">
-                <summary className="cursor-pointer text-slate-500">
-                  Internal page links (copy into Link tool)
-                </summary>
-                <p className="mt-1 text-[11px] text-slate-500">
-                  Select text → Link in the toolbar, paste a ref like{" "}
-                  <code className="rounded bg-slate-100 px-1">
-                    #internalURI194
-                  </code>
-                  .
-                </p>
-                <ul className="mt-2 max-h-36 overflow-y-auto space-y-0.5 rounded-lg border border-slate-200 bg-white p-2">
-                  {linkPages.map((p) => (
-                    <li
-                      key={p.id}
-                      className="font-mono text-[10px] text-slate-600"
-                    >
-                      <button
-                        type="button"
-                        className="w-full text-left hover:text-blue-600"
-                        onClick={() => {
-                          const ref = encodeInternalLink(p);
-                          void navigator.clipboard?.writeText(ref);
-                        }}
-                        title="Copy link ref"
-                      >
-                        {encodeInternalLink(p)} — {p.menuTitle || p.title}
-                      </button>
-                    </li>
-                  ))}
-                </ul>
-              </details>
-            </div>
+            <BlockEditor
+              content={displayValues[f.key] ?? ""}
+              siteId={siteId}
+              linkPages={linkPages}
+              onChange={(html) => onChange(f.key, html)}
+              placeholder={`${f.label}…`}
+            />
           )}
 
           {f.type === "image" && (
@@ -524,15 +338,32 @@ export function FieldEditors({
                 onChange={(e) => onChange(f.key + META.alt, e.target.value)}
                 className="w-full rounded-lg border border-slate-200 px-2 py-1.5 text-xs"
               />
-              <FieldLinkEditor
-                label="Add link (image)"
-                href={displayValues[f.key + META.link] ?? ""}
-                target={displayValues[f.key + META.linkTarget] ?? ""}
-                title={displayValues[f.key + META.linkTitle] ?? ""}
+              <TextLinkComposer
                 linkPages={linkPages}
-                onChangeHref={(v) => onChange(f.key + META.link, v)}
-                onChangeTarget={(v) => onChange(f.key + META.linkTarget, v)}
-                onChangeTitle={(v) => onChange(f.key + META.linkTitle, v)}
+                canAdd={!displayValues[f.key + META.link]}
+                existing={
+                  displayValues[f.key + META.link]
+                    ? {
+                        href: displayValues[f.key + META.link],
+                        title: displayValues[f.key + META.linkTitle] ?? "",
+                        target: displayValues[f.key + META.linkTarget] ?? "",
+                      }
+                    : null
+                }
+                onApply={(draft) =>
+                  onChangeMany({
+                    [f.key + META.link]: draft.href,
+                    [f.key + META.linkTitle]: draft.title,
+                    [f.key + META.linkTarget]: draft.target,
+                  })
+                }
+                onRemove={() =>
+                  onChangeMany({
+                    [f.key + META.link]: "",
+                    [f.key + META.linkTitle]: "",
+                    [f.key + META.linkTarget]: "",
+                  })
+                }
               />
             </div>
           )}
@@ -618,7 +449,7 @@ export function VisualPageBuilder({
   const [selectedSectionId, setSelectedSectionId] = useState<string | null>(
     null,
   );
-  const [panelTab, setPanelTab] = useState<"content" | "style">("content");
+
   const [layoutHit, setLayoutHit] = useState<{
     sectionId: string;
     nid: string;
@@ -963,7 +794,6 @@ export function VisualPageBuilder({
       const win = iframeRef.current?.contentWindow;
       if (win) scrollRestore.current = win.scrollY || 0;
       setSelectedSectionId(data.sectionId);
-      setPanelTab("content");
       setLayoutHit(null);
     }
     window.addEventListener("message", onMessage);
@@ -1315,101 +1145,50 @@ export function VisualPageBuilder({
               </button>
             </div>
 
-            <div className="flex border-b border-slate-100 text-sm">
-              <button
-                type="button"
-                onClick={() => setPanelTab("content")}
-                className={[
-                  "flex-1 py-2.5 font-medium",
-                  panelTab === "content"
-                    ? "border-b-2 border-blue-600 text-blue-700"
-                    : "text-slate-500 hover:text-slate-800",
-                ].join(" ")}
-              >
-                Content
-              </button>
-              <button
-                type="button"
-                onClick={() => setPanelTab("style")}
-                className={[
-                  "flex-1 py-2.5 font-medium",
-                  panelTab === "style"
-                    ? "border-b-2 border-blue-600 text-blue-700"
-                    : "text-slate-500 hover:text-slate-800",
-                ].join(" ")}
-              >
-                Style
-              </button>
-            </div>
-
             <div className="flex-1 overflow-y-auto px-4 py-4">
-              {panelTab === "content" && (
-                <>
-                  <FieldEditors
-                    fields={selectedFields}
-                    values={selectedValues}
-                    siteId={siteId}
-                    sectionId={selected.id}
-                    linkPages={linkPages}
-                    onChange={setField}
-                    onChangeMany={setFields}
-                  />
-                  {selectedRepeatGroups.length ? (
-                    <SectionRepeatEditor
-                      pageId={pageId}
-                      sectionId={selected.id}
-                      groups={selectedRepeatGroups}
-                      items={selected.repeatItems || []}
-                      onChangeItems={(next) =>
-                        onChange((prev) =>
-                          prev.map((s) =>
-                            s.id === selected.id
-                              ? { ...s, repeatItems: next }
-                              : s,
-                          ),
-                        )
-                      }
-                      renderFields={({
-                        item,
-                        fields,
-                        values,
-                        onChange: onItemField,
-                        onChangeMany,
-                      }) => (
-                        <FieldEditors
-                          fields={fields}
-                          values={values}
-                          siteId={siteId}
-                          sectionId={`${selected.id}:${item.id}`}
-                          linkPages={linkPages}
-                          onChange={onItemField}
-                          onChangeMany={onChangeMany}
-                        />
-                      )}
+              <FieldEditors
+                fields={selectedFields}
+                values={selectedValues}
+                siteId={siteId}
+                sectionId={selected.id}
+                linkPages={linkPages}
+                onChange={setField}
+                onChangeMany={setFields}
+              />
+              {selectedRepeatGroups.length ? (
+                <SectionRepeatEditor
+                  pageId={pageId}
+                  sectionId={selected.id}
+                  groups={selectedRepeatGroups}
+                  items={selected.repeatItems || []}
+                  onChangeItems={(next) =>
+                    onChange((prev) =>
+                      prev.map((s) =>
+                        s.id === selected.id
+                          ? { ...s, repeatItems: next }
+                          : s,
+                      ),
+                    )
+                  }
+                  renderFields={({
+                    item,
+                    fields,
+                    values,
+                    onChange: onItemField,
+                    onChangeMany,
+                  }) => (
+                    <FieldEditors
+                      fields={fields}
+                      values={values}
+                      siteId={siteId}
+                      sectionId={`${selected.id}:${item.id}`}
+                      linkPages={linkPages}
+                      onChange={onItemField}
+                      onChangeMany={onChangeMany}
                     />
-                  ) : null}
-                </>
-              )}
-              {panelTab === "style" && (
-                <div className="space-y-2">
-                  <p className="text-xs text-slate-500">
-                    Optional CSS applied only to this section instance (original
-                    Style tab).
-                  </p>
-                  <HtmlCodeEditor
-                    value={selected.css}
-                    onChange={(css) =>
-                      onChange((prev) =>
-                        prev.map((s) =>
-                          s.id === selected.id ? { ...s, css } : s,
-                        ),
-                      )
-                    }
-                    minHeight="220px"
-                    placeholder={".section { padding: 1rem; }"}
-                  />
-                </div>
-              )}
+                  )}
+                />
+              ) : null}
             </div>
 
             <div className="flex flex-wrap gap-2 border-t border-slate-100 px-4 py-3">

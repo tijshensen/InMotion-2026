@@ -8,6 +8,8 @@ import Underline from "@tiptap/extension-underline";
 import TextAlign from "@tiptap/extension-text-align";
 import Image from "@tiptap/extension-image";
 import { useEffect, useState } from "react";
+import { TextLinkComposer } from "@/components/text-link-composer";
+import type { LinkablePage } from "@/lib/internal-links";
 
 type Props = {
   content: string;
@@ -15,6 +17,7 @@ type Props = {
   placeholder?: string;
   /** Kept for callers; media insert is no longer on the compact toolbar */
   siteId?: string;
+  linkPages?: LinkablePage[];
 };
 
 function ToolbarButton({
@@ -215,9 +218,16 @@ export function BlockEditor({
   content,
   onChange,
   placeholder,
+  linkPages = [],
 }: Props) {
   const [mode, setMode] = useState<"visual" | "html">("visual");
   const [htmlDraft, setHtmlDraft] = useState(content);
+  const [hasSelection, setHasSelection] = useState(false);
+  const [linkAttrs, setLinkAttrs] = useState<{
+    href: string;
+    title: string;
+    target: string;
+  } | null>(null);
 
   const editor = useEditor({
     extensions: [
@@ -226,7 +236,14 @@ export function BlockEditor({
       }),
       Underline,
       // Keep these so existing HTML still renders; they are not on the toolbar
-      Link.configure({
+      Link.extend({
+        addAttributes() {
+          return {
+            ...this.parent?.(),
+            title: { default: null },
+          };
+        },
+      }).configure({
         openOnClick: false,
         HTMLAttributes: { rel: "noopener noreferrer" },
       }),
@@ -252,6 +269,20 @@ export function BlockEditor({
       const html = ed.getHTML();
       setHtmlDraft(html);
       onChange(html);
+    },
+    onSelectionUpdate: ({ editor: ed }) => {
+      const { from, to, empty } = ed.state.selection;
+      setHasSelection(!empty && to > from);
+      if (ed.isActive("link")) {
+        const attrs = ed.getAttributes("link");
+        setLinkAttrs({
+          href: String(attrs.href || ""),
+          title: String(attrs.title || ""),
+          target: String(attrs.target || ""),
+        });
+      } else {
+        setLinkAttrs(null);
+      }
     },
   });
 
@@ -304,6 +335,34 @@ export function BlockEditor({
           placeholder="HTML content"
         />
       )}
+
+      {mode === "visual" &&
+      editor &&
+      linkPages.length > 0 &&
+      (hasSelection || linkAttrs) ? (
+        <div className="border-t border-slate-100 px-2 py-2">
+          <TextLinkComposer
+            linkPages={linkPages}
+            canAdd={hasSelection}
+            existing={linkAttrs}
+            onApply={(draft) => {
+              editor
+                .chain()
+                .focus()
+                .extendMarkRange("link")
+                .setLink({
+                  href: draft.href,
+                  target: draft.target || null,
+                  title: draft.title || null,
+                })
+                .run();
+            }}
+            onRemove={() =>
+              editor.chain().focus().extendMarkRange("link").unsetLink().run()
+            }
+          />
+        </div>
+      ) : null}
     </div>
   );
 }
