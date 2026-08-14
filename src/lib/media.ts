@@ -5,14 +5,24 @@ import { uploadsRoot } from "./paths";
 
 export { uploadsRoot };
 
-export const MAX_UPLOAD_BYTES = 5 * 1024 * 1024; // 5 MB
+export const MAX_IMAGE_BYTES = 5 * 1024 * 1024; // 5 MB
+export const MAX_VIDEO_BYTES = 50 * 1024 * 1024; // 50 MB
+/** @deprecated use MAX_IMAGE_BYTES / MAX_VIDEO_BYTES */
+export const MAX_UPLOAD_BYTES = MAX_IMAGE_BYTES;
 
-export const ALLOWED_MIME = new Set([
+export const ALLOWED_IMAGE_MIME = new Set([
   "image/jpeg",
   "image/png",
   "image/gif",
   "image/webp",
   "image/svg+xml",
+]);
+
+export const ALLOWED_VIDEO_MIME = new Set(["video/mp4", "video/quicktime"]);
+
+export const ALLOWED_MIME = new Set([
+  ...ALLOWED_IMAGE_MIME,
+  ...ALLOWED_VIDEO_MIME,
 ]);
 
 const EXT_BY_MIME: Record<string, string> = {
@@ -21,7 +31,17 @@ const EXT_BY_MIME: Record<string, string> = {
   "image/gif": ".gif",
   "image/webp": ".webp",
   "image/svg+xml": ".svg",
+  "video/mp4": ".mp4",
+  "video/quicktime": ".mp4",
 };
+
+export function isImageMime(mime: string) {
+  return ALLOWED_IMAGE_MIME.has(mime) || mime.startsWith("image/");
+}
+
+export function isVideoMime(mime: string) {
+  return ALLOWED_VIDEO_MIME.has(mime) || mime.startsWith("video/");
+}
 
 export function publicUrlFor(relativePath: string) {
   // relativePath is like "demo/abc.jpg" or already "/uploads/..."
@@ -43,7 +63,19 @@ function originalBasename(filename: string) {
   return base.slice(0, 80) || "file";
 }
 
-export async function saveUploadedImage(opts: {
+function guessMimeFromName(filename: string, reported: string): string {
+  if (reported && reported !== "application/octet-stream") return reported;
+  const ext = path.extname(filename).toLowerCase();
+  if (ext === ".mp4" || ext === ".m4v") return "video/mp4";
+  if (ext === ".jpg" || ext === ".jpeg") return "image/jpeg";
+  if (ext === ".png") return "image/png";
+  if (ext === ".gif") return "image/gif";
+  if (ext === ".webp") return "image/webp";
+  if (ext === ".svg") return "image/svg+xml";
+  return reported || "application/octet-stream";
+}
+
+export async function saveUploadedMedia(opts: {
   siteSlug: string;
   file: File;
 }): Promise<{
@@ -51,13 +83,22 @@ export async function saveUploadedImage(opts: {
   path: string;
   mimeType: string;
   sizeBytes: number;
+  posterPath: string;
 }> {
-  const mimeType = opts.file.type || "application/octet-stream";
+  const mimeType = guessMimeFromName(opts.file.name, opts.file.type);
   if (!ALLOWED_MIME.has(mimeType)) {
-    throw new Error("Only JPEG, PNG, GIF, WebP, and SVG images are allowed");
+    throw new Error(
+      "Only JPEG, PNG, GIF, WebP, SVG images and MP4 video are allowed",
+    );
   }
-  if (opts.file.size > MAX_UPLOAD_BYTES) {
-    throw new Error("File is too large (max 5 MB)");
+  const video = isVideoMime(mimeType);
+  const max = video ? MAX_VIDEO_BYTES : MAX_IMAGE_BYTES;
+  if (opts.file.size > max) {
+    throw new Error(
+      video
+        ? "Video is too large (max 50 MB)"
+        : "File is too large (max 5 MB)",
+    );
   }
 
   const ext = EXT_BY_MIME[mimeType] || path.extname(opts.file.name) || ".bin";
@@ -73,12 +114,26 @@ export async function saveUploadedImage(opts: {
   await writeFile(diskPath, buffer);
 
   const relative = `${siteDir}/${storedName}`;
+  const publicPath = publicUrlFor(relative);
+  let posterPath = "";
+  if (video) {
+    posterPath = (await tryGenerateVideoPoster(publicPath)) || "";
+  }
   return {
     filename: opts.file.name,
-    path: publicUrlFor(relative),
-    mimeType,
+    path: publicPath,
+    mimeType: video ? "video/mp4" : mimeType,
     sizeBytes: opts.file.size,
+    posterPath,
   };
+}
+
+/** @deprecated use saveUploadedMedia */
+export async function saveUploadedImage(opts: {
+  siteSlug: string;
+  file: File;
+}) {
+  return saveUploadedMedia(opts);
 }
 
 export async function deleteUploadedFile(publicPath: string) {
@@ -91,6 +146,55 @@ export async function deleteUploadedFile(publicPath: string) {
     await unlink(abs);
   } catch {
     // file may already be gone
+  }
+}
+
+let ffmpegAvailable: boolean | null = null;
+
+async function hasFfmpeg(): Promise<boolean> {
+  if (ffmpegAvailable !== null) return ffmpegAvailable;
+  try {
+    const { execFile } = await import("child_process");
+    const { promisify } = await import("util");
+    const execFileAsync = promisify(execFile);
+    await execFileAsync("ffmpeg", ["-version"], { timeout: 4000 });
+    ffmpegAvailable = true;
+  } catch {
+    ffmpegAvailable = false;
+  }
+  return ffmpegAvailable;
+}
+
+/**
+ * Grab a still from an uploaded MP4 when system ffmpeg is installed.
+ * Returns a public /uploads/… jpg path, or null if ffmpeg is missing.
+ */
+export async function tryGenerateVideoPoster(
+  publicVideoPath: string,
+): Promise<string | null> {
+  if (!publicVideoPath.startsWith("/uploads/")) return null;
+  if (!(await hasFfmpeg())) return null;
+
+  const abs = absolutePathFromPublicUrl(publicVideoPath);
+  const root = uploadsRoot();
+  if (!abs.startsWith(root)) return null;
+
+  const { execFile } = await import("child_process");
+  const { promisify } = await import("util");
+  const execFileAsync = promisify(execFile);
+
+  const ext = path.extname(abs);
+  const posterAbs = abs.slice(0, -ext.length || abs.length) + "-poster.jpg";
+  try {
+    await execFileAsync(
+      "ffmpeg",
+      ["-y", "-ss", "0.5", "-i", abs, "-frames:v", "1", "-q:v", "3", posterAbs],
+      { timeout: 20000 },
+    );
+    const rel = path.relative(root, posterAbs).replace(/\\/g, "/");
+    return publicUrlFor(rel);
+  } catch {
+    return null;
   }
 }
 

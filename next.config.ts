@@ -5,11 +5,12 @@ const nextConfig: NextConfig = {
   turbopack: {
     root: path.join(__dirname),
   },
-  // Allow larger image uploads in route handlers (default is often too small)
+  // Allow larger image + MP4 uploads in route handlers (default clone is 10 MB)
   experimental: {
     serverActions: {
-      bodySizeLimit: "6mb",
+      bodySizeLimit: "52mb",
     },
+    middlewareClientMaxBodySize: "52mb",
     // Don't serve a stale RSC payload of an empty canvas after edits
     staleTimes: {
       dynamic: 0,

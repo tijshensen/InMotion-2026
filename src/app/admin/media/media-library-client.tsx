@@ -10,8 +10,13 @@ type Asset = {
   mimeType: string;
   sizeBytes: number;
   alt: string;
+  posterPath?: string;
   createdAt: string;
 };
+
+function isVideoAsset(asset: Asset) {
+  return asset.mimeType.startsWith("video/") || /\.mp4(\?|#|$)/i.test(asset.path);
+}
 
 type Props = {
   siteId: string;
@@ -126,7 +131,7 @@ export function MediaLibraryClient({
         <input
           ref={fileRef}
           type="file"
-          accept="image/jpeg,image/png,image/gif,image/webp,image/svg+xml"
+          accept="image/jpeg,image/png,image/gif,image/webp,image/svg+xml,video/mp4,.mp4"
           multiple
           className="hidden"
           onChange={(e) => void onUpload(e.target.files)}
@@ -137,7 +142,7 @@ export function MediaLibraryClient({
           onClick={() => fileRef.current?.click()}
           className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-60"
         >
-          {uploading ? "Uploading…" : "Upload images"}
+          {uploading ? "Uploading…" : "Upload images or MP4"}
         </button>
         <button
           type="button"
@@ -162,13 +167,37 @@ export function MediaLibraryClient({
               key={asset.id}
               className="rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden flex flex-col"
             >
-              <div className="aspect-video bg-slate-100 flex items-center justify-center overflow-hidden">
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
-                  src={asset.path}
-                  alt={asset.alt || asset.filename}
-                  className="max-h-full max-w-full object-contain"
-                />
+              <div className="aspect-video bg-slate-100 flex items-center justify-center overflow-hidden relative">
+                {isVideoAsset(asset) ? (
+                  asset.posterPath ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                      src={asset.posterPath}
+                      alt={asset.alt || asset.filename}
+                      className="max-h-full max-w-full object-contain"
+                    />
+                  ) : (
+                    <video
+                      src={asset.path}
+                      muted
+                      playsInline
+                      preload="metadata"
+                      className="max-h-full max-w-full object-contain"
+                    />
+                  )
+                ) : (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    src={asset.path}
+                    alt={asset.alt || asset.filename}
+                    className="max-h-full max-w-full object-contain"
+                  />
+                )}
+                {isVideoAsset(asset) && (
+                  <span className="absolute left-2 top-2 rounded bg-black/70 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-white">
+                    MP4
+                  </span>
+                )}
               </div>
               <div className="p-3 space-y-2 flex-1 flex flex-col">
                 <p className="text-sm font-medium text-slate-900 truncate">

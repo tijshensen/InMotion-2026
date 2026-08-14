@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { getSessionUser } from "@/lib/auth";
 import { assertSiteAccess } from "@/lib/access";
-import { saveUploadedImage } from "@/lib/media";
+import { saveUploadedMedia } from "@/lib/media";
 
 export async function GET(req: Request) {
   const user = await getSessionUser();
@@ -54,7 +54,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Site not found" }, { status: 404 });
     }
 
-    const saved = await saveUploadedImage({ siteSlug: site.slug, file });
+    const saved = await saveUploadedMedia({ siteSlug: site.slug, file });
 
     const asset = await prisma.mediaAsset.create({
       data: {
@@ -64,6 +64,7 @@ export async function POST(req: Request) {
         mimeType: saved.mimeType,
         sizeBytes: saved.sizeBytes,
         alt,
+        posterPath: saved.posterPath || "",
       },
     });
 

@@ -309,15 +309,16 @@ model RegistrarDnsGuide {
 }
 
 model MediaAsset {
-  id        String   @id @default(cuid())
-  siteId    String
-  site      Site     @relation(fields: [siteId], references: [id], onDelete: Cascade)
-  filename  String
-  path      String
-  mimeType  String   @default("")
-  sizeBytes Int      @default(0)
-  alt       String   @default("")
-  createdAt DateTime @default(now())
+  id         String   @id @default(cuid())
+  siteId     String
+  site       Site     @relation(fields: [siteId], references: [id], onDelete: Cascade)
+  filename   String
+  path       String
+  mimeType   String   @default("")
+  sizeBytes  Int      @default(0)
+  alt        String   @default("")
+  posterPath String   @default("")
+  createdAt  DateTime @default(now())
 }
 
 model AuditLog {

@@ -5,7 +5,8 @@
  *   <singleline name="…">…</singleline>   + optional link (_link, _link_target, _link_title)
  *   <multiline name="…">…</multiline>     rich HTML
  *   <img editable="true" name="…" src width height alt />
- *       + optional _link, _link_target, _link_title, _alt
+ *       + optional _link, _link_target, _link_title, _alt, _poster
+ *       value may be an image, MP4, YouTube, or Vimeo URL
  *       (legacy also used label="…" instead of name)
  *   <file name="…">label</file>           file URL + description
  *
@@ -24,6 +25,7 @@ import {
   type LinkablePage,
 } from "./internal-links";
 import { isFullThemeShell, rewriteThemeAssetUrls } from "./theme";
+import { detectVideoSource, isLikelyMediaSrc } from "./video-media";
 
 export type FieldType = "singleline" | "multiline" | "image" | "file";
 
@@ -66,6 +68,7 @@ export const META = {
   linkTitle: "__link_title",
   alt: "__alt",
   fileLabel: "__label",
+  poster: "__poster",
 } as const;
 
 const SINGLE_RE =
@@ -345,6 +348,74 @@ function escapeAttr(s: string) {
   return escapeHtml(s).replaceAll("'", "&#39;");
 }
 
+function presentationalAttrs(
+  rawImg: string,
+  def: SectionField,
+  extraClass: string,
+): string {
+  const attrs = rawImg.replace(/^<img\b/i, "").replace(/\/?>$/, "");
+  const existingClass = attr(attrs, "class");
+  const cls = [extraClass, existingClass].filter(Boolean).join(" ");
+  let out = cls ? ` class="${escapeAttr(cls)}"` : "";
+  for (const name of ["id", "style", "data-cms-nid"] as const) {
+    const v = attr(attrs, name);
+    if (v) out += ` ${name}="${escapeAttr(v)}"`;
+  }
+  const width = def.width || attr(attrs, "width");
+  const height = def.height || attr(attrs, "height");
+  if (width) out += ` width="${escapeAttr(width)}"`;
+  if (height) out += ` height="${escapeAttr(height)}"`;
+  return out;
+}
+
+function renderImageOrVideoTag(
+  def: SectionField,
+  src: string,
+  alt: string,
+  poster: string,
+): string {
+  const video = detectVideoSource(src);
+
+  if (video?.kind === "youtube" || video?.kind === "vimeo") {
+    const embed = video.embedUrl || src;
+    const extra = presentationalAttrs(def.raw, def, "cms-video-frame");
+    return `<iframe${extra} src="${escapeAttr(embed)}" title="${escapeAttr(alt || def.label)}" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" allowfullscreen loading="lazy" referrerpolicy="strict-origin-when-cross-origin"></iframe>`;
+  }
+
+  if (video?.kind === "file") {
+    const extra = presentationalAttrs(def.raw, def, "cms-video");
+    const posterAttr = poster ? ` poster="${escapeAttr(poster)}"` : "";
+    return `<video${extra} controls playsinline preload="metadata"${posterAttr}><source src="${escapeAttr(src)}" type="video/mp4" /></video>`;
+  }
+
+  let img = def.raw;
+  if (/src\s*=\s*["'][^"']*["']/i.test(img)) {
+    img = img.replace(
+      /src\s*=\s*["'][^"']*["']/i,
+      `src="${escapeAttr(src)}"`,
+    );
+  } else {
+    img = img.replace(/<img/i, `<img src="${escapeAttr(src)}"`);
+  }
+  if (/alt\s*=\s*["'][^"']*["']/i.test(img)) {
+    img = img.replace(
+      /alt\s*=\s*["'][^"']*["']/i,
+      `alt="${escapeAttr(alt)}"`,
+    );
+  } else {
+    img = img.replace(/<img/i, `<img alt="${escapeAttr(alt)}"`);
+  }
+  img = img.replace(/\s*editable\s*=\s*["']true["']/i, "");
+  img = img.replace(/\s*label\s*=\s*["'][^"']*["']/i, "");
+  if (def.width && !/\bwidth\s*=/i.test(img)) {
+    img = img.replace(/<img/i, `<img width="${escapeAttr(def.width)}"`);
+  }
+  if (def.height && !/\bheight\s*=/i.test(img)) {
+    img = img.replace(/<img/i, `<img height="${escapeAttr(def.height)}"`);
+  }
+  return img;
+}
+
 export function expandRepeatTokens(
   html: string,
   groups: RepeatGroupDef[] | undefined,
@@ -413,7 +484,7 @@ export function renderSectionHtml(
     } else if (def.type === "multiline") {
       html = html.replace(def.raw, value || "");
     } else if (def.type === "image") {
-      let img = def.raw;
+      const poster = cleanFieldValue(fields[def.key + META.poster] || "");
       // Empty / placeholder junk from legacy imports
       const empty =
         !value ||
@@ -422,45 +493,19 @@ export function renderSectionHtml(
         value === "null" ||
         value === "undefined";
       // If import stored a caption/label instead of a URL, fall back to template src
-      const looksLikeSrc =
-        empty ||
-        /^(https?:\/\/|\/|data:|blob:|\.\/|\.\.\/)/i.test(value) ||
-        /\.(jpe?g|png|gif|webp|svg|avif)(\?|#|$)/i.test(value);
+      const looksLikeSrc = empty || isLikelyMediaSrc(value);
       const src = empty
         ? def.defaultValue || ""
         : looksLikeSrc
           ? value
           : def.defaultValue || value || "";
-      if (/src\s*=\s*["'][^"']*["']/i.test(img)) {
-        img = img.replace(
-          /src\s*=\s*["'][^"']*["']/i,
-          `src="${escapeAttr(src)}"`,
-        );
-      } else {
-        img = img.replace(/<img/i, `<img src="${escapeAttr(src)}"`);
-      }
-      if (/alt\s*=\s*["'][^"']*["']/i.test(img)) {
-        img = img.replace(
-          /alt\s*=\s*["'][^"']*["']/i,
-          `alt="${escapeAttr(alt)}"`,
-        );
-      } else {
-        img = img.replace(/<img/i, `<img alt="${escapeAttr(alt)}"`);
-      }
-      img = img.replace(/\s*editable\s*=\s*["']true["']/i, "");
-      img = img.replace(/\s*label\s*=\s*["'][^"']*["']/i, "");
-      if (def.width && !/\bwidth\s*=/i.test(img)) {
-        img = img.replace(/<img/i, `<img width="${escapeAttr(def.width)}"`);
-      }
-      if (def.height && !/\bheight\s*=/i.test(img)) {
-        img = img.replace(/<img/i, `<img height="${escapeAttr(def.height)}"`);
-      }
-      if (link) {
+      let media = renderImageOrVideoTag(def, src, alt, poster);
+      if (link && !detectVideoSource(src)) {
         const t = linkTarget ? ` target="${escapeAttr(linkTarget)}"` : "";
         const ti = linkTitle ? ` title="${escapeAttr(linkTitle)}"` : "";
-        img = `<a href="${escapeAttr(link)}"${t}${ti}>${img}</a>`;
+        media = `<a href="${escapeAttr(link)}"${t}${ti}>${media}</a>`;
       }
-      html = html.replace(def.raw, img);
+      html = html.replace(def.raw, media);
     } else if (def.type === "file") {
       const label = cleanFieldValue(
         fields[def.key + META.fileLabel] || def.defaultValue || def.label,
@@ -772,6 +817,24 @@ export function buildEditorPreviewHtml(opts: {
     visibility: visible !important;
     opacity: 1 !important;
   }
+  .cms-edit-body video.cms-video,
+  .cms-sections video.cms-video {
+    max-width: 100%;
+    height: auto;
+    display: block;
+  }
+  .cms-edit-body iframe.cms-video-frame,
+  .cms-sections iframe.cms-video-frame {
+    max-width: 100%;
+    width: 100%;
+    aspect-ratio: 16 / 9;
+    border: 0;
+    display: block;
+  }
+  html[data-cms-mode="layout"] .cms-edit-body iframe.cms-video-frame,
+  html[data-cms-mode="layout"] .cms-edit-body video.cms-video {
+    pointer-events: none;
+  }
   .cms-edit-body .hidden,
   .cms-edit-body .hidden-xs,
   .cms-edit-body .hidden-sm,
@@ -927,6 +990,8 @@ function defaultEditorShell() {
 <style>
   body { font-family: system-ui, sans-serif; }
   .cms-sections img, .cms-edit-body img { max-width: 100%; height: auto; }
+  .cms-sections video.cms-video, .cms-edit-body video.cms-video { max-width: 100%; height: auto; display: block; }
+  .cms-sections iframe.cms-video-frame, .cms-edit-body iframe.cms-video-frame { max-width: 100%; width: 100%; aspect-ratio: 16 / 9; border: 0; display: block; }
   .single_activiteiten img { width: 100%; display: block; object-fit: cover; }
   .single_activiteiten h5 { margin: 0; padding: 0.75rem 1rem; font-size: 0.95rem; font-weight: 600; }
   .cms-nav .cms-menu, .cms-nav .cms-submenu { list-style: none; margin: 0; padding: 0; }

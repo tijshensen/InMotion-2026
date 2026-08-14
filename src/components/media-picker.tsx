@@ -14,6 +14,7 @@ export type MediaItem = {
   mimeType: string;
   sizeBytes: number;
   alt: string;
+  posterPath?: string;
   createdAt: string;
 };
 
@@ -28,6 +29,8 @@ type Props = {
    */
   targetWidth?: number | null;
   targetHeight?: number | null;
+  /** Image fields accept MP4 too; poster pickers stay image-only. */
+  acceptKinds?: "all" | "image";
 };
 
 function canCropMime(mime: string) {
@@ -42,6 +45,12 @@ function canCropMime(mime: string) {
   );
 }
 
+function isVideoItem(item: Pick<MediaItem, "mimeType" | "path">) {
+  return (
+    item.mimeType.startsWith("video/") || /\.mp4(\?|#|$)/i.test(item.path)
+  );
+}
+
 export function MediaPicker({
   open,
   siteId,
@@ -49,6 +58,7 @@ export function MediaPicker({
   onSelect,
   targetWidth,
   targetHeight,
+  acceptKinds = "all",
 }: Props) {
   const [items, setItems] = useState<MediaItem[]>([]);
   const [loading, setLoading] = useState(false);
@@ -60,7 +70,9 @@ export function MediaPicker({
   const [cropError, setCropError] = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
 
+  const imagesOnly = acceptKinds === "image";
   const hasCropTarget =
+    !imagesOnly &&
     typeof targetWidth === "number" &&
     typeof targetHeight === "number" &&
     targetWidth > 0 &&
@@ -74,13 +86,17 @@ export function MediaPicker({
       const res = await fetch(`/api/media?siteId=${encodeURIComponent(siteId)}`);
       if (!res.ok) throw new Error("Failed to load media");
       const data = (await res.json()) as MediaItem[];
-      setItems(data);
+      setItems(
+        imagesOnly
+          ? data.filter((item) => !isVideoItem(item))
+          : data,
+      );
     } catch (e) {
       setError(e instanceof Error ? e.message : "Load failed");
     } finally {
       setLoading(false);
     }
-  }, [siteId]);
+  }, [siteId, imagesOnly]);
 
   // Only reset picker state when the dialog opens / site changes — not when
   // `load` identity changes mid-crop (that used to abort the crop dialog).
@@ -201,11 +217,13 @@ export function MediaPicker({
             <div>
               <h2 className="font-semibold text-slate-900">Media library</h2>
               <p className="text-xs text-slate-500 mt-0.5">
-                Upload or pick an image (JPEG, PNG, GIF, WebP, SVG · max 5 MB)
+                {imagesOnly
+                  ? "Upload or pick an image (JPEG, PNG, GIF, WebP, SVG · max 5 MB)"
+                  : "Upload or pick an image or MP4 (images max 5 MB · video max 50 MB)"}
                 {hasCropTarget && (
                   <span className="text-blue-600">
                     {" "}
-                    · will crop to {targetWidth}×{targetHeight}px
+                    · images will crop to {targetWidth}×{targetHeight}px
                   </span>
                 )}
               </p>
@@ -223,7 +241,11 @@ export function MediaPicker({
             <input
               ref={fileRef}
               type="file"
-              accept="image/jpeg,image/png,image/gif,image/webp,image/svg+xml"
+              accept={
+                imagesOnly
+                  ? "image/jpeg,image/png,image/gif,image/webp,image/svg+xml"
+                  : "image/jpeg,image/png,image/gif,image/webp,image/svg+xml,video/mp4,.mp4"
+              }
               multiple
               className="hidden"
               onChange={(e) => void onUpload(e.target.files)}
@@ -234,7 +256,11 @@ export function MediaPicker({
               onClick={() => fileRef.current?.click()}
               className="rounded-lg bg-blue-600 px-3 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-60"
             >
-              {uploading ? "Uploading…" : "Upload images"}
+              {uploading
+                ? "Uploading…"
+                : imagesOnly
+                  ? "Upload images"
+                  : "Upload images or MP4"}
             </button>
             <button
               type="button"
@@ -254,7 +280,9 @@ export function MediaPicker({
             )}
             {!loading && items.length === 0 && (
               <p className="text-sm text-slate-500 text-center py-12">
-                No media yet. Upload your first image.
+                {imagesOnly
+                  ? "No images yet. Upload your first image."
+                  : "No media yet. Upload your first image or MP4."}
               </p>
             )}
             {!loading && items.length > 0 && (
@@ -274,20 +302,43 @@ export function MediaPicker({
                             : "border-slate-200 hover:border-slate-300",
                         ].join(" ")}
                       >
-                        <div className="aspect-square bg-slate-100 flex items-center justify-center overflow-hidden">
-                          {/* eslint-disable-next-line @next/next/no-img-element */}
-                          <img
-                            src={item.path}
-                            alt={item.alt || item.filename}
-                            className="h-full w-full object-cover"
-                            onError={(e) => {
-                              // Fallback if cover fails (broken/missing file)
-                              const el = e.currentTarget;
-                              el.className =
-                                "max-h-full max-w-full object-contain opacity-40";
-                              el.alt = "Preview unavailable";
-                            }}
-                          />
+                        <div className="aspect-square bg-slate-100 flex items-center justify-center overflow-hidden relative">
+                          {isVideoItem(item) ? (
+                            item.posterPath ? (
+                              // eslint-disable-next-line @next/next/no-img-element
+                              <img
+                                src={item.posterPath}
+                                alt={item.alt || item.filename}
+                                className="h-full w-full object-cover"
+                              />
+                            ) : (
+                              <video
+                                src={item.path}
+                                muted
+                                playsInline
+                                preload="metadata"
+                                className="h-full w-full object-cover"
+                              />
+                            )
+                          ) : (
+                            // eslint-disable-next-line @next/next/no-img-element
+                            <img
+                              src={item.path}
+                              alt={item.alt || item.filename}
+                              className="h-full w-full object-cover"
+                              onError={(e) => {
+                                const el = e.currentTarget;
+                                el.className =
+                                  "max-h-full max-w-full object-contain opacity-40";
+                                el.alt = "Preview unavailable";
+                              }}
+                            />
+                          )}
+                          {isVideoItem(item) && (
+                            <span className="absolute left-1.5 top-1.5 rounded bg-black/70 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-white">
+                              MP4
+                            </span>
+                          )}
                         </div>
                         <div className="px-2 py-1.5">
                           <p className="text-xs font-medium text-slate-800 truncate">
@@ -311,7 +362,9 @@ export function MediaPicker({
                 ? `Selected: ${selected.filename}`
                 : hasCropTarget
                   ? `Select an image to crop to ${targetWidth}×${targetHeight}`
-                  : "Select an image, or double-click to insert"}
+                  : imagesOnly
+                    ? "Select an image, or double-click to insert"
+                    : "Select an image or video, or double-click to insert"}
             </p>
             <div className="flex gap-2 shrink-0">
               <button

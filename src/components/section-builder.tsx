@@ -8,6 +8,7 @@ import {
 } from "@/lib/sections";
 import { BlockEditor } from "@/components/block-editor";
 import { MediaPicker, type MediaItem } from "@/components/media-picker";
+import { detectVideoSource } from "@/lib/video-media";
 
 type TemplateBlock = {
   id: string;
@@ -95,14 +96,34 @@ function SectionFieldsEditor({
             <div className="flex flex-wrap items-start gap-3">
               <div className="h-24 w-32 rounded-lg border border-slate-200 bg-slate-50 overflow-hidden flex items-center justify-center">
                 {values[f.key] ? (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img
-                    src={values[f.key]}
-                    alt={f.label}
-                    className="max-h-full max-w-full object-contain"
-                  />
+                  detectVideoSource(values[f.key])?.kind === "file" ? (
+                    <video
+                      src={values[f.key]}
+                      muted
+                      playsInline
+                      preload="metadata"
+                      className="max-h-full max-w-full object-contain"
+                    />
+                  ) : detectVideoSource(values[f.key]) ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                      src={
+                        detectVideoSource(values[f.key])?.posterUrl ||
+                        values[f.key]
+                      }
+                      alt={f.label}
+                      className="max-h-full max-w-full object-contain"
+                    />
+                  ) : (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                      src={values[f.key]}
+                      alt={f.label}
+                      className="max-h-full max-w-full object-contain"
+                    />
+                  )
                 ) : (
-                  <span className="text-xs text-slate-400">No image</span>
+                  <span className="text-xs text-slate-400">No media</span>
                 )}
               </div>
               <div className="flex-1 space-y-2 min-w-[12rem]">
@@ -110,7 +131,7 @@ function SectionFieldsEditor({
                   type="text"
                   value={values[f.key] ?? ""}
                   onChange={(e) => onChange(f.key, e.target.value)}
-                  placeholder="Image URL"
+                  placeholder="Image, MP4, YouTube or Vimeo URL"
                   className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm font-mono"
                 />
                 <button

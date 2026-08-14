@@ -163,6 +163,20 @@ body {
   height: auto;
 }
 
+.cms-page-canvas .cms-section-render video.cms-video {
+  max-width: 100%;
+  height: auto;
+  display: block;
+}
+
+.cms-page-canvas .cms-section-render iframe.cms-video-frame {
+  max-width: 100%;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  border: 0;
+  display: block;
+}
+
 .cms-page-canvas .cms-section-render table {
   width: 100%;
   border-collapse: collapse;

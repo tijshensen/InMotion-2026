@@ -38,6 +38,7 @@ export async function DELETE(_req: Request, ctx: Ctx) {
   }
 
   await deleteUploadedFile(asset.path);
+  if (asset.posterPath) await deleteUploadedFile(asset.posterPath);
   await prisma.mediaAsset.delete({ where: { id } });
 
   return NextResponse.json({ ok: true });

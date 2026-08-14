@@ -28,9 +28,10 @@ export default async function MediaAdminPage() {
       <div>
         <h1 className="text-2xl font-semibold">Media</h1>
         <p className="text-slate-500 mt-1">
-          Images for{" "}
+          Images and MP4 video for{" "}
           <strong className="text-slate-700">{active.name}</strong>. Use them
-          from the page editor Image button.
+          from image fields in the page editor. YouTube and Vimeo URLs can be
+          pasted directly on those fields.
         </p>
       </div>
 

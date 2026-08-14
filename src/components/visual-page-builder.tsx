@@ -4,10 +4,18 @@
  * Page builder modelled on original MotionCMS (pages.edit.view.php):
  * - Main area = full rendered page in iframe (same HTML as public output)
  * - Click a section → slide-in panel with field editors from Templater::edit()
- *   singleline (+ link), multiline, image (+ alt/link), file
+ *   singleline (+ link), multiline, image/video (+ alt/link/poster), file
  */
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type Dispatch,
+  type SetStateAction,
+} from "react";
 import { useRouter } from "next/navigation";
 import {
   META,
@@ -27,6 +35,7 @@ import { TailwindStylePanel } from "@/components/tailwind-style-panel";
 import { SectionRepeatEditor } from "@/components/section-repeat-editor";
 import { getClassAtNid, setClassAtNid, stampLayoutNids } from "@/lib/layout-html";
 import { pickComputed, type ComputedBox } from "@/lib/tailwind-layout";
+import { detectVideoSource } from "@/lib/video-media";
 
 type TemplateBlock = {
   id: string;
@@ -94,6 +103,231 @@ type Props = {
   editorMode?: "content" | "layout" | "view";
 };
 
+function ImageVideoField({
+  field: f,
+  displayValues,
+  onChange,
+  onChangeMany,
+  setLocalOverlay,
+  openMedia,
+  linkPages,
+}: {
+  field: SectionField;
+  displayValues: Record<string, string>;
+  onChange: (key: string, value: string) => void;
+  onChangeMany: (updates: Record<string, string>) => void;
+  setLocalOverlay: Dispatch<SetStateAction<Record<string, string>>>;
+  openMedia: (field: SectionField, slot?: "src" | "poster") => void;
+  linkPages: LinkPageOption[];
+}) {
+  const [posterBusy, setPosterBusy] = useState(false);
+  const src = displayValues[f.key] ?? "";
+  const poster = displayValues[f.key + META.poster] ?? "";
+  const video = detectVideoSource(src);
+
+  async function fillPoster(force: boolean) {
+    if (!video) return;
+    if (poster && !force) return;
+    if (video.kind === "youtube" && video.posterUrl) {
+      const updates = { [f.key + META.poster]: video.posterUrl };
+      setLocalOverlay((prev) => ({ ...prev, ...updates }));
+      onChangeMany(updates);
+      return;
+    }
+    setPosterBusy(true);
+    try {
+      const qs = new URLSearchParams({ url: src });
+      if (force || video.kind === "file") qs.set("generate", "1");
+      const res = await fetch(`/api/media/video-info?${qs.toString()}`);
+      const data = (await res.json().catch(() => ({}))) as {
+        posterUrl?: string;
+      };
+      if (data.posterUrl) {
+        const updates = { [f.key + META.poster]: data.posterUrl };
+        setLocalOverlay((prev) => ({ ...prev, ...updates }));
+        onChangeMany(updates);
+      }
+    } finally {
+      setPosterBusy(false);
+    }
+  }
+
+  useEffect(() => {
+    if (!video || poster) return;
+    const t = window.setTimeout(() => {
+      void fillPoster(false);
+    }, 400);
+    return () => window.clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- only when src/poster change
+  }, [src, poster, video?.kind]);
+
+  return (
+    <div className="space-y-2">
+      <div className="flex gap-3">
+        <div className="h-20 w-28 shrink-0 overflow-hidden rounded-lg border border-slate-700 bg-slate-800 flex items-center justify-center">
+          <MediaFieldPreview
+            src={src}
+            poster={poster}
+            alt={displayValues[f.key + META.alt] || f.label}
+          />
+        </div>
+        <div className="flex-1 space-y-2 min-w-0">
+          <input
+            type="text"
+            value={src}
+            onChange={(e) => {
+              const v = e.target.value;
+              const next: Record<string, string> = { [f.key]: v };
+              if (!detectVideoSource(v) && poster) {
+                next[f.key + META.poster] = "";
+              }
+              setLocalOverlay((prev) => ({ ...prev, ...next }));
+              if (next[f.key + META.poster] === "") {
+                onChangeMany(next);
+              } else {
+                onChange(f.key, v);
+              }
+            }}
+            placeholder="Image, MP4, YouTube or Vimeo URL"
+            className="w-full rounded-lg border border-slate-700 bg-slate-800 px-2 py-1.5 font-mono text-xs text-white"
+          />
+          <button
+            type="button"
+            onClick={() => openMedia(f, "src")}
+            className="rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-blue-700"
+          >
+            Choose from media…
+          </button>
+        </div>
+      </div>
+      {video && (
+        <div className="space-y-1.5">
+          <label className="text-[10px] uppercase tracking-wide text-slate-500">
+            Poster / thumbnail
+          </label>
+          <input
+            type="text"
+            placeholder="Poster image URL (optional)"
+            value={poster}
+            onChange={(e) => {
+              const v = e.target.value;
+              setLocalOverlay((prev) => ({
+                ...prev,
+                [f.key + META.poster]: v,
+              }));
+              onChange(f.key + META.poster, v);
+            }}
+            className="w-full rounded-lg border border-slate-700 bg-slate-800 px-2 py-1.5 font-mono text-xs text-white"
+          />
+          <div className="flex flex-wrap gap-2">
+            <button
+              type="button"
+              onClick={() => openMedia(f, "poster")}
+              className="rounded-lg border border-slate-700 px-3 py-1.5 text-xs text-slate-200 hover:bg-slate-800"
+            >
+              Choose poster…
+            </button>
+            <button
+              type="button"
+              disabled={posterBusy}
+              onClick={() => void fillPoster(true)}
+              className="rounded-lg border border-slate-700 px-3 py-1.5 text-xs text-slate-200 hover:bg-slate-800 disabled:opacity-50"
+            >
+              {posterBusy ? "Generating…" : "Auto poster"}
+            </button>
+          </div>
+        </div>
+      )}
+      <input
+        type="text"
+        placeholder={video ? "Title / alt text" : "Alt text"}
+        value={displayValues[f.key + META.alt] ?? f.alt ?? ""}
+        onChange={(e) => onChange(f.key + META.alt, e.target.value)}
+        className="w-full rounded-lg border border-slate-700 bg-slate-800 px-2 py-1.5 text-xs text-white"
+      />
+      {!video && (
+        <TextLinkComposer
+          linkPages={linkPages}
+          canAdd={!displayValues[f.key + META.link]}
+          existing={
+            displayValues[f.key + META.link]
+              ? {
+                  href: displayValues[f.key + META.link],
+                  title: displayValues[f.key + META.linkTitle] ?? "",
+                  target: displayValues[f.key + META.linkTarget] ?? "",
+                }
+              : null
+          }
+          onApply={(draft) =>
+            onChangeMany({
+              [f.key + META.link]: draft.href,
+              [f.key + META.linkTitle]: draft.title,
+              [f.key + META.linkTarget]: draft.target,
+            })
+          }
+          onRemove={() =>
+            onChangeMany({
+              [f.key + META.link]: "",
+              [f.key + META.linkTitle]: "",
+              [f.key + META.linkTarget]: "",
+            })
+          }
+        />
+      )}
+    </div>
+  );
+}
+
+function MediaFieldPreview({
+  src,
+  poster,
+  alt,
+}: {
+  src: string;
+  poster?: string;
+  alt: string;
+}) {
+  const empty = !src || src === "." || src === "#";
+  if (empty) {
+    return <span className="text-[10px] text-slate-400">No media</span>;
+  }
+  const video = detectVideoSource(src);
+  if (video?.kind === "file") {
+    return (
+      <video
+        src={src}
+        poster={poster || undefined}
+        muted
+        playsInline
+        preload="metadata"
+        className="max-h-full max-w-full object-contain"
+      />
+    );
+  }
+  if (video) {
+    const thumb = poster || video.posterUrl;
+    if (thumb) {
+      return (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img
+          src={thumb}
+          alt={alt}
+          className="max-h-full max-w-full object-contain"
+        />
+      );
+    }
+    return (
+      <span className="text-[10px] uppercase tracking-wide text-slate-400">
+        {video.kind}
+      </span>
+    );
+  }
+  return (
+    // eslint-disable-next-line @next/next/no-img-element
+    <img src={src} alt={alt} className="max-h-full max-w-full object-contain" />
+  );
+}
+
 export function FieldEditors({
   fields,
   values,
@@ -128,6 +362,7 @@ export function FieldEditors({
     sectionId: string;
     fieldKey: string;
     fieldType: FieldType;
+    slot: "src" | "poster";
   } | null>(null);
 
   const displayValues = { ...values, ...localOverlay };
@@ -162,11 +397,12 @@ export function FieldEditors({
   const cropW = mediaField?.width ? parseInt(mediaField.width, 10) : NaN;
   const cropH = mediaField?.height ? parseInt(mediaField.height, 10) : NaN;
 
-  function openMedia(field: SectionField) {
+  function openMedia(field: SectionField, slot: "src" | "poster" = "src") {
     mediaTargetRef.current = {
       sectionId,
       fieldKey: field.key,
       fieldType: field.type,
+      slot,
     };
     setMediaFor(field.key);
   }
@@ -188,12 +424,26 @@ export function FieldEditors({
       return;
     }
 
+    if (target?.slot === "poster") {
+      const updates = { [fieldKey + META.poster]: path };
+      setLocalOverlay((prev) => ({ ...prev, ...updates }));
+      onChangeMany(updates);
+      setMediaFor(null);
+      mediaTargetRef.current = null;
+      return;
+    }
+
     const updates: Record<string, string> = {
       [fieldKey]: path,
     };
     if (field?.type === "image" || target?.fieldType === "image") {
       if (asset.alt) {
         updates[fieldKey + META.alt] = asset.alt;
+      }
+      if (asset.posterPath) {
+        updates[fieldKey + META.poster] = asset.posterPath;
+      } else if (detectVideoSource(path)?.kind === "file") {
+        // leave existing poster; user can generate or pick one
       }
     }
     if (field?.type === "file" || target?.fieldType === "file") {
@@ -228,9 +478,12 @@ export function FieldEditors({
               {f.label}
             </label>
             <span className="text-[10px] uppercase tracking-wide text-slate-500">
-              {f.type}
+              {f.type === "image" ? "image / video" : f.type}
               {f.width ? ` · ${f.width}×${f.height || "auto"}` : ""}
-              {f.type === "image" && f.width && f.height
+              {f.type === "image" &&
+              f.width &&
+              f.height &&
+              !detectVideoSource(displayValues[f.key] || "")
                 ? " · crop"
                 : ""}
             </span>
@@ -294,79 +547,15 @@ export function FieldEditors({
           )}
 
           {f.type === "image" && (
-            <div className="space-y-2">
-              <div className="flex gap-3">
-                <div className="h-20 w-28 shrink-0 overflow-hidden rounded-lg border border-slate-700 bg-slate-800 flex items-center justify-center">
-                  {displayValues[f.key] &&
-                  displayValues[f.key] !== "." &&
-                  displayValues[f.key] !== "#" ? (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img
-                      key={displayValues[f.key]}
-                      src={displayValues[f.key]}
-                      alt={displayValues[f.key + META.alt] || f.label}
-                      className="max-h-full max-w-full object-contain"
-                    />
-                  ) : (
-                    <span className="text-[10px] text-slate-400">No image</span>
-                  )}
-                </div>
-                <div className="flex-1 space-y-2 min-w-0">
-                  <input
-                    type="text"
-                    value={displayValues[f.key] ?? ""}
-                    onChange={(e) => {
-                      const v = e.target.value;
-                      setLocalOverlay((prev) => ({ ...prev, [f.key]: v }));
-                      onChange(f.key, v);
-                    }}
-                    placeholder="Image URL"
-                    className="w-full rounded-lg border border-slate-700 bg-slate-800 px-2 py-1.5 font-mono text-xs text-white"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => openMedia(f)}
-                    className="rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-blue-700"
-                  >
-                    Choose from media…
-                  </button>
-                </div>
-              </div>
-              <input
-                type="text"
-                placeholder="Alt text"
-                value={displayValues[f.key + META.alt] ?? f.alt ?? ""}
-                onChange={(e) => onChange(f.key + META.alt, e.target.value)}
-                className="w-full rounded-lg border border-slate-700 bg-slate-800 px-2 py-1.5 text-xs text-white"
-              />
-              <TextLinkComposer
-                linkPages={linkPages}
-                canAdd={!displayValues[f.key + META.link]}
-                existing={
-                  displayValues[f.key + META.link]
-                    ? {
-                        href: displayValues[f.key + META.link],
-                        title: displayValues[f.key + META.linkTitle] ?? "",
-                        target: displayValues[f.key + META.linkTarget] ?? "",
-                      }
-                    : null
-                }
-                onApply={(draft) =>
-                  onChangeMany({
-                    [f.key + META.link]: draft.href,
-                    [f.key + META.linkTitle]: draft.title,
-                    [f.key + META.linkTarget]: draft.target,
-                  })
-                }
-                onRemove={() =>
-                  onChangeMany({
-                    [f.key + META.link]: "",
-                    [f.key + META.linkTitle]: "",
-                    [f.key + META.linkTarget]: "",
-                  })
-                }
-              />
-            </div>
+            <ImageVideoField
+              field={f}
+              displayValues={displayValues}
+              onChange={onChange}
+              onChangeMany={onChangeMany}
+              setLocalOverlay={setLocalOverlay}
+              openMedia={openMedia}
+              linkPages={linkPages}
+            />
           )}
 
           {f.type === "file" && (
@@ -403,13 +592,22 @@ export function FieldEditors({
         <MediaPicker
           open
           siteId={siteId}
+          acceptKinds={
+            mediaTargetRef.current?.slot === "poster" ? "image" : "all"
+          }
           targetWidth={
-            mediaField?.type === "image" && Number.isFinite(cropW) && cropW > 0
+            mediaTargetRef.current?.slot !== "poster" &&
+            mediaField?.type === "image" &&
+            Number.isFinite(cropW) &&
+            cropW > 0
               ? cropW
               : null
           }
           targetHeight={
-            mediaField?.type === "image" && Number.isFinite(cropH) && cropH > 0
+            mediaTargetRef.current?.slot !== "poster" &&
+            mediaField?.type === "image" &&
+            Number.isFinite(cropH) &&
+            cropH > 0
               ? cropH
               : null
           }
