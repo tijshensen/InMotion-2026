@@ -678,6 +678,49 @@ export function buildEditorPreviewHtml(opts: {
   .cms-edit-section.is-hidden {
     opacity: 0.35;
   }
+  .cms-edit-section.is-delete-pending {
+    opacity: 1 !important;
+    z-index: 8;
+  }
+  .cms-edit-delete-mask {
+    position: absolute;
+    inset: 0;
+    z-index: 40;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(15, 23, 42, 0.62);
+    pointer-events: auto;
+  }
+  .cms-edit-delete-card {
+    text-align: center;
+    color: #fff;
+    font: 500 13px/1.45 system-ui, sans-serif;
+    padding: 1rem 1.25rem;
+    max-width: 90%;
+  }
+  .cms-edit-delete-actions {
+    display: flex;
+    gap: 0.5rem;
+    justify-content: center;
+    margin-top: 0.75rem;
+  }
+  .cms-edit-delete-actions button {
+    border-radius: 0.5rem;
+    padding: 0.4rem 0.9rem;
+    font: 600 12px/1 system-ui, sans-serif;
+    cursor: pointer;
+  }
+  .cms-edit-delete-cancel {
+    border: 1px solid rgba(255,255,255,0.4);
+    background: transparent;
+    color: #fff;
+  }
+  .cms-edit-delete-confirm {
+    border: 0;
+    background: #dc2626;
+    color: #fff;
+  }
   .cms-edit-section .cms-edit-badge {
     position: absolute;
     top: 6px;
@@ -767,6 +810,9 @@ export function buildEditorPreviewHtml(opts: {
   }
   document.addEventListener("click", function (e) {
     var mode = document.documentElement.getAttribute("data-cms-mode") || "content";
+    if (e.target && e.target.closest && e.target.closest(".cms-edit-delete-mask")) {
+      return;
+    }
     if (mode === "view") {
       var link = e.target && e.target.closest ? e.target.closest("a") : null;
       if (link) {

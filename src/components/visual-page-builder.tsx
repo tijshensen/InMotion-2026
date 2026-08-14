@@ -463,6 +463,8 @@ export function VisualPageBuilder({
   } | null>(null);
   const [showAddInternal, setShowAddInternal] = useState(false);
   const [adding, setAdding] = useState(false);
+  const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
+  const confirmRemoveRef = useRef<(id: string) => Promise<void>>(async () => {});
   const [deviceInternal, setDeviceInternal] = useState<CanvasDevice>("phone");
   const device = deviceProp ?? deviceInternal;
   const setDevice = onDeviceChange ?? setDeviceInternal;
@@ -829,6 +831,57 @@ export function VisualPageBuilder({
     applySelectionInIframe(selectedSectionId);
   }, [selectedSectionId, applySelectionInIframe]);
 
+  // In-canvas delete overlay on the target section
+  useEffect(() => {
+    const doc = iframeRef.current?.contentDocument;
+    if (!doc) return;
+    doc.querySelectorAll(".cms-edit-delete-mask").forEach((el) => {
+      el.parentElement?.classList.remove("is-delete-pending");
+      el.remove();
+    });
+    if (!pendingDeleteId) return;
+    const wrap = doc.querySelector(
+      sectionSelector(pendingDeleteId),
+    ) as HTMLElement | null;
+    if (!wrap) return;
+    wrap.classList.add("is-delete-pending");
+    const mask = doc.createElement("div");
+    mask.className = "cms-edit-delete-mask";
+    mask.innerHTML =
+      '<div class="cms-edit-delete-card">' +
+      "<p>Remove this section from the page?</p>" +
+      '<div class="cms-edit-delete-actions">' +
+      '<button type="button" class="cms-edit-delete-cancel" data-act="cancel">Cancel</button>' +
+      '<button type="button" class="cms-edit-delete-confirm" data-act="confirm">Confirm</button>' +
+      "</div></div>";
+    wrap.appendChild(mask);
+    wrap.scrollIntoView({ block: "center", behavior: "smooth" });
+    const onCancel = (e: Event) => {
+      e.preventDefault();
+      e.stopPropagation();
+      setPendingDeleteId(null);
+    };
+    const onConfirm = (e: Event) => {
+      e.preventDefault();
+      e.stopPropagation();
+      void confirmRemoveRef.current(pendingDeleteId);
+    };
+    mask
+      .querySelector('[data-act="cancel"]')
+      ?.addEventListener("click", onCancel);
+    mask
+      .querySelector('[data-act="confirm"]')
+      ?.addEventListener("click", onConfirm);
+    return () => {
+      mask
+        .querySelector('[data-act="cancel"]')
+        ?.removeEventListener("click", onCancel);
+      mask
+        .querySelector('[data-act="confirm"]')
+        ?.removeEventListener("click", onConfirm);
+    };
+  }, [pendingDeleteId, documentHtml, sectionSelector]);
+
   // Listen for section / layout clicks from iframe
   useEffect(() => {
     function onMessage(ev: MessageEvent) {
@@ -1031,15 +1084,15 @@ export function VisualPageBuilder({
     }
   }
 
-  async function removeSection(id: string) {
-    if (!confirm("Remove this section from the page?")) return;
+  async function confirmRemoveSection(id: string) {
     const res = await fetch(`/api/pages/${pageId}/sections/${id}`, {
       method: "DELETE",
     });
     if (!res.ok) {
-      alert("Delete failed");
+      setPendingDeleteId(null);
       return;
     }
+    setPendingDeleteId(null);
     onChange((prev) =>
       prev
         .filter((s) => s.id !== id)
@@ -1047,6 +1100,7 @@ export function VisualPageBuilder({
     );
     if (selectedSectionId === id) setSelectedSectionId(null);
   }
+  confirmRemoveRef.current = confirmRemoveSection;
 
   const deviceWidth =
     device === "desktop" ? "100%" : device === "tablet" ? "768px" : "390px";
@@ -1312,7 +1366,7 @@ export function VisualPageBuilder({
               </label>
               <button
                 type="button"
-                onClick={() => void removeSection(selected.id)}
+                onClick={() => setPendingDeleteId(selected.id)}
                 className="ml-auto rounded-lg border border-red-900/60 bg-red-950/40 px-2.5 py-1.5 text-xs text-red-300 hover:bg-red-950/70"
               >
                 Remove
