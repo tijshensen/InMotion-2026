@@ -90,8 +90,9 @@ export async function verifyCloudflareConnection(): Promise<CloudflareStatus> {
   }
   const accountIdSuffix = accountId.slice(-4);
   try {
+    // Pages API only accepts per_page up to 25 (50 returns 8000024).
     const projects = await cfFetch<unknown[]>(
-      `/accounts/${accountId}/pages/projects?per_page=50`,
+      `/accounts/${accountId}/pages/projects?page=1&per_page=25`,
     );
     return {
       configured: true,
@@ -101,12 +102,13 @@ export async function verifyCloudflareConnection(): Promise<CloudflareStatus> {
       error: null,
     };
   } catch (e) {
+    const detail = e instanceof Error ? e.message : String(e);
     return {
       configured: true,
       ok: false,
       accountIdSuffix,
       projectCount: null,
-      error: `Cloudflare Pages API failed: ${e instanceof Error ? e.message : String(e)}. Check the token has Account → Cloudflare Pages → Edit.`,
+      error: detail,
     };
   }
 }
