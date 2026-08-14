@@ -46,7 +46,39 @@ type Props = {
   linkPages: LinkPageOption[];
 };
 
-const AUTOSAVE_MS = 700;
+const AUTOSAVE_MS = 400;
+
+type Snapshot = {
+  sections: PageSection[];
+  title: string;
+  menuTitle: string;
+  slug: string;
+  metaDescription: string;
+  isHidden: boolean;
+  isDefault: boolean;
+};
+
+function snapshotPayload(snap: Snapshot) {
+  return {
+    title: snap.title,
+    menuTitle: snap.menuTitle,
+    slug: snap.slug,
+    metaDescription: snap.metaDescription,
+    isHidden: snap.isHidden,
+    isDefault: snap.isDefault,
+    sections: snap.sections.map((s, i) => {
+      const html = s.templateBlock?.defaultHtml || "";
+      return {
+        id: s.id,
+        templateBlockId: s.templateBlockId,
+        sortOrder: i,
+        isHidden: s.isHidden,
+        css: s.css,
+        fields: parseStoredContent(s.content, html).fields,
+      };
+    }),
+  };
+}
 
 export function PageEditor({
   page,
@@ -73,98 +105,105 @@ export function PageEditor({
   const [showAdd, setShowAdd] = useState(false);
 
   const skipFirstSave = useRef(true);
-  const saveGen = useRef(0);
+  const snapRef = useRef<Snapshot>({
+    sections: page.blocks,
+    title: page.title,
+    menuTitle: page.menuTitle,
+    slug: page.slug,
+    metaDescription: page.metaDescription,
+    isHidden: page.isHidden,
+    isDefault: page.isDefault,
+  });
+  snapRef.current = {
+    sections,
+    title,
+    menuTitle,
+    slug,
+    metaDescription,
+    isHidden,
+    isDefault,
+  };
 
-  const persist = useCallback(
-    async (payload: {
-      sections: PageSection[];
-      title: string;
-      menuTitle: string;
-      slug: string;
-      metaDescription: string;
-      isHidden: boolean;
-      isDefault: boolean;
-    }) => {
-      const gen = ++saveGen.current;
+  const timerRef = useRef<number | null>(null);
+  const inflightRef = useRef<Promise<void> | null>(null);
+  const pendingRef = useRef(false);
+  const lastOkJsonRef = useRef("");
+
+  const persistNow = useCallback(
+    async (opts?: { keepalive?: boolean }) => {
+      const snap = snapRef.current;
+      const payload = snapshotPayload(snap);
+      const encoded = JSON.stringify(payload);
+      if (encoded === lastOkJsonRef.current && !opts?.keepalive) {
+        pendingRef.current = false;
+        return;
+      }
+
       setSaving(true);
       setStatus("Saving…");
-
       try {
-        const sectionsRes = await fetch(`/api/pages/${page.id}/sections`, {
+        const res = await fetch(`/api/pages/${page.id}/autosave`, {
           method: "PUT",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            sections: payload.sections.map((s, i) => {
-              const html = s.templateBlock?.defaultHtml || "";
-              const fields = parseStoredContent(s.content, html).fields;
-              return {
-                id: s.id,
-                sortOrder: i,
-                isHidden: s.isHidden,
-                css: s.css,
-                fields,
-              };
-            }),
-          }),
+          body: encoded,
+          credentials: "same-origin",
+          keepalive: Boolean(opts?.keepalive),
         });
-
-        if (!sectionsRes.ok) {
-          if (gen === saveGen.current) {
-            setSaving(false);
-            setStatus("Save failed");
-          }
-          return;
-        }
-
-        const res = await fetch(`/api/pages/${page.id}`, {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            title: payload.title,
-            menuTitle: payload.menuTitle,
-            slug: payload.slug,
-            metaDescription: payload.metaDescription,
-            isHidden: payload.isHidden,
-            isDefault: payload.isDefault,
-          }),
-        });
-
-        if (gen !== saveGen.current) return;
-
-        setSaving(false);
         if (!res.ok) {
-          setStatus("Save failed");
-          return;
-        }
-        setStatus("Saved");
-      } catch {
-        if (gen === saveGen.current) {
           setSaving(false);
           setStatus("Save failed");
+          return;
         }
+        lastOkJsonRef.current = encoded;
+        setSaving(false);
+        setStatus("Saved");
+      } catch {
+        setSaving(false);
+        setStatus("Save failed");
       }
     },
     [page.id],
   );
 
-  // Debounced autosave whenever content or meta changes
+  const scheduleSave = useCallback(
+    (immediate = false) => {
+      if (skipFirstSave.current) return;
+      pendingRef.current = true;
+      if (timerRef.current) {
+        window.clearTimeout(timerRef.current);
+        timerRef.current = null;
+      }
+      const run = async () => {
+        if (inflightRef.current) await inflightRef.current;
+        if (!pendingRef.current) return;
+        pendingRef.current = false;
+        const job = persistNow();
+        inflightRef.current = job;
+        await job;
+        inflightRef.current = null;
+        if (pendingRef.current) void run();
+      };
+      if (immediate) {
+        void run();
+        return;
+      }
+      timerRef.current = window.setTimeout(() => {
+        timerRef.current = null;
+        void run();
+      }, AUTOSAVE_MS);
+    },
+    [persistNow],
+  );
+
   useEffect(() => {
     if (skipFirstSave.current) {
       skipFirstSave.current = false;
+      lastOkJsonRef.current = JSON.stringify(
+        snapshotPayload(snapRef.current),
+      );
       return;
     }
-    const t = window.setTimeout(() => {
-      void persist({
-        sections,
-        title,
-        menuTitle,
-        slug,
-        metaDescription,
-        isHidden,
-        isDefault,
-      });
-    }, AUTOSAVE_MS);
-    return () => window.clearTimeout(t);
+    scheduleSave(false);
   }, [
     sections,
     title,
@@ -173,8 +212,32 @@ export function PageEditor({
     metaDescription,
     isHidden,
     isDefault,
-    persist,
+    scheduleSave,
+    page.id,
   ]);
+
+  useEffect(() => {
+    const flush = () => {
+      if (timerRef.current) {
+        window.clearTimeout(timerRef.current);
+        timerRef.current = null;
+      }
+      pendingRef.current = true;
+      void persistNow({ keepalive: true });
+    };
+    const onHide = () => {
+      if (document.visibilityState === "hidden") flush();
+    };
+    window.addEventListener("beforeunload", flush);
+    window.addEventListener("pagehide", flush);
+    document.addEventListener("visibilitychange", onHide);
+    return () => {
+      flush();
+      window.removeEventListener("beforeunload", flush);
+      window.removeEventListener("pagehide", flush);
+      document.removeEventListener("visibilitychange", onHide);
+    };
+  }, [persistNow]);
 
   const onDelete = useCallback(async () => {
     if (!confirm("Delete this page?")) return;
@@ -223,7 +286,19 @@ export function PageEditor({
           sections={sections}
           catalog={catalog}
           linkPages={linkPages}
-          onChange={setSections}
+          onChange={(next) => {
+            setSections((prev) => {
+              const resolved =
+                typeof next === "function" ? next(prev) : next;
+              const structChanged =
+                prev.length !== resolved.length ||
+                prev.some((s, i) => s.id !== resolved[i]?.id);
+              if (structChanged) {
+                queueMicrotask(() => scheduleSave(true));
+              }
+              return resolved;
+            });
+          }}
           device={device}
           onDeviceChange={setDevice}
           chromeMode

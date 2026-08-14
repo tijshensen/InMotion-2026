@@ -62,6 +62,7 @@ export function PagesTable({ pages }: { pages: PageRow[] }) {
                 <td className="px-4 py-3">
                   <Link
                     href={`/admin/pages/${p.id}`}
+                    prefetch={false}
                     className="font-medium text-blue-600 hover:underline"
                   >
                     {p.title || "(untitled)"}
@@ -89,6 +90,7 @@ export function PagesTable({ pages }: { pages: PageRow[] }) {
                 <td className="px-4 py-3">
                   <Link
                     href={`/admin/pages/${p.id}`}
+                    prefetch={false}
                     className="text-blue-600 hover:underline"
                   >
                     Builder

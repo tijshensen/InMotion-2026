@@ -853,12 +853,14 @@ export function VisualPageBuilder({
   }
 
   function move(id: string, dir: -1 | 1) {
-    const list = [...ordered];
-    const idx = list.findIndex((s) => s.id === id);
-    const swap = idx + dir;
-    if (idx < 0 || swap < 0 || swap >= list.length) return;
-    [list[idx], list[swap]] = [list[swap], list[idx]];
-    onChange(list.map((s, i) => ({ ...s, sortOrder: i })));
+    onChange((prev) => {
+      const list = [...prev].sort((a, b) => a.sortOrder - b.sortOrder);
+      const idx = list.findIndex((s) => s.id === id);
+      const swap = idx + dir;
+      if (idx < 0 || swap < 0 || swap >= list.length) return prev;
+      [list[idx], list[swap]] = [list[swap], list[idx]];
+      return list.map((s, i) => ({ ...s, sortOrder: i }));
+    });
   }
 
   async function addSection(templateBlockId: string) {
@@ -875,7 +877,7 @@ export function VisualPageBuilder({
         return;
       }
       const block = await res.json();
-      onChange([...sections, block]);
+      onChange((prev) => [...prev, block]);
       setSelectedSectionId(block.id);
       setPanelTab("content");
       setShowAdd(false);
@@ -893,10 +895,11 @@ export function VisualPageBuilder({
       alert("Delete failed");
       return;
     }
-    const next = sections
-      .filter((s) => s.id !== id)
-      .map((s, i) => ({ ...s, sortOrder: i }));
-    onChange(next);
+    onChange((prev) =>
+      prev
+        .filter((s) => s.id !== id)
+        .map((s, i) => ({ ...s, sortOrder: i })),
+    );
     if (selectedSectionId === id) setSelectedSectionId(null);
   }
 
@@ -1087,8 +1090,8 @@ export function VisualPageBuilder({
                   <HtmlCodeEditor
                     value={selected.css}
                     onChange={(css) =>
-                      onChange(
-                        sections.map((s) =>
+                      onChange((prev) =>
+                        prev.map((s) =>
                           s.id === selected.id ? { ...s, css } : s,
                         ),
                       )
@@ -1120,8 +1123,8 @@ export function VisualPageBuilder({
                   type="checkbox"
                   checked={selected.isHidden}
                   onChange={(e) =>
-                    onChange(
-                      sections.map((s) =>
+                    onChange((prev) =>
+                      prev.map((s) =>
                         s.id === selected.id
                           ? { ...s, isHidden: e.target.checked }
                           : s,

@@ -10,6 +10,10 @@ const nextConfig: NextConfig = {
     serverActions: {
       bodySizeLimit: "6mb",
     },
+    // Don't serve a stale RSC payload of an empty canvas after edits
+    staleTimes: {
+      dynamic: 0,
+    },
   },
   trailingSlash: false,
   /**

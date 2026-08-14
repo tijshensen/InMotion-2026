@@ -1,6 +1,9 @@
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/db";
 import { requireUser } from "@/lib/auth";
+
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
 import { renderMenuHtml, type MenuPage } from "@/lib/menu";
 import { isFullThemeShell, renderBootstrapMenuHtml } from "@/lib/theme";
 import { PageEditor } from "./page-editor";
