@@ -1,7 +1,8 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { OrganizationsAdminClient } from "../organizations/organizations-admin-client";
 
 type OrgOption = {
   id: string;
@@ -24,17 +25,35 @@ type UserRow = {
   sites: { id: string; name: string; slug: string; role: string }[];
 };
 
+type OrgManageRow = {
+  id: string;
+  name: string;
+  slug: string;
+  isActive: boolean;
+  createdAt: string;
+  siteCount: number;
+  memberCount: number;
+  myRole: string;
+  canManage: boolean;
+  owners: { id: string; email: string; name: string }[];
+  sites: { id: string; name: string; slug: string }[];
+};
+
 type Props = {
   currentUserId: string;
   isSuperadmin: boolean;
+  canCreateOrg: boolean;
   organizations: OrgOption[];
+  initialOrgs: OrgManageRow[];
   initialUsers: UserRow[];
 };
 
 export function UsersAdminClient({
   currentUserId,
   isSuperadmin,
+  canCreateOrg,
   organizations,
+  initialOrgs,
   initialUsers,
 }: Props) {
   const router = useRouter();
@@ -42,6 +61,7 @@ export function UsersAdminClient({
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [showForm, setShowForm] = useState(false);
+  const [showOrgs, setShowOrgs] = useState(false);
 
   const [email, setEmail] = useState("");
   const [firstName, setFirstName] = useState("");
@@ -55,6 +75,15 @@ export function UsersAdminClient({
     "EDITOR",
   );
   const [selectedSites, setSelectedSites] = useState<string[]>([]);
+
+  useEffect(() => {
+    if (!showOrgs) return;
+    function onKey(e: KeyboardEvent) {
+      if (e.key === "Escape") setShowOrgs(false);
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [showOrgs]);
 
   const orgSites = useMemo(
     () => organizations.find((o) => o.id === organizationId)?.sites || [],
@@ -160,13 +189,22 @@ export function UsersAdminClient({
             {isSuperadmin ? " You are a superadmin." : ""}
           </p>
         </div>
-        <button
-          type="button"
-          onClick={() => setShowForm((v) => !v)}
-          className="rounded-lg bg-blue-600 px-3 py-2 text-sm font-medium text-white hover:bg-blue-700"
-        >
-          {showForm ? "Cancel" : "Invite user"}
-        </button>
+        <div className="flex flex-wrap gap-2">
+          <button
+            type="button"
+            onClick={() => setShowOrgs(true)}
+            className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-medium hover:bg-slate-50"
+          >
+            Organizations
+          </button>
+          <button
+            type="button"
+            onClick={() => setShowForm((v) => !v)}
+            className="rounded-lg bg-blue-600 px-3 py-2 text-sm font-medium text-white hover:bg-blue-700"
+          >
+            {showForm ? "Cancel" : "Invite user"}
+          </button>
+        </div>
       </div>
 
       {error && (
@@ -175,43 +213,17 @@ export function UsersAdminClient({
         </p>
       )}
 
-      <section className="rounded-xl border border-slate-200 bg-white p-4">
-        <div className="flex items-center justify-between gap-2 mb-3">
-          <h2 className="text-sm font-semibold text-slate-800">
-            Organizations
-          </h2>
-          <a
-            href="/admin/organizations"
-            className="text-xs text-blue-600 hover:underline"
-          >
-            Manage organizations →
-          </a>
-        </div>
-        <ul className="grid gap-2 sm:grid-cols-2">
-          {organizations.map((o) => (
-            <li
-              key={o.id}
-              className="rounded-lg border border-slate-100 bg-slate-50 px-3 py-2 text-sm"
-            >
-              <p className="font-medium text-slate-900">{o.name}</p>
-              <p className="text-xs text-slate-500">
-                /{o.slug} · {o.siteCount} site(s) · {o.memberCount} member(s)
-              </p>
-            </li>
-          ))}
-          {organizations.length === 0 && (
-            <li className="text-sm text-slate-500">
-              No organizations yet.{" "}
-              <a
-                href="/admin/organizations"
-                className="text-blue-600 hover:underline"
-              >
-                Create one
-              </a>
-            </li>
-          )}
-        </ul>
-      </section>
+      <OrganizationsAdminClient
+        currentUserId={currentUserId}
+        isSuperadmin={isSuperadmin}
+        canCreate={canCreateOrg}
+        initialOrgs={initialOrgs}
+        open={showOrgs}
+        onClose={() => {
+          setShowOrgs(false);
+          router.refresh();
+        }}
+      />
 
       {showForm && (
         <form

@@ -1,5 +1,9 @@
 import { requireUser } from "@/lib/auth";
-import { isPlatformSuperadmin, listUserOrganizations } from "@/lib/access";
+import {
+  isPlatformSuperadmin,
+  listOrganizationsForAdmin,
+  listUserOrganizations,
+} from "@/lib/access";
 import { prisma } from "@/lib/db";
 import { UsersAdminClient } from "./users-admin-client";
 
@@ -109,10 +113,13 @@ export default async function UsersAdminPage() {
     return true;
   });
 
+  const adminOrgs = await listOrganizationsForAdmin(user.id);
+
   return (
     <UsersAdminClient
       currentUserId={user.id}
       isSuperadmin={superadmin}
+      canCreateOrg={true}
       organizations={organizations.map((o) => ({
         id: o.id,
         name: o.name,
@@ -121,6 +128,36 @@ export default async function UsersAdminPage() {
         memberCount: o._count.members,
         siteCount: o._count.sites,
       }))}
+      initialOrgs={adminOrgs.map((o) => {
+        const myRole =
+          "myRole" in o && typeof o.myRole === "string"
+            ? o.myRole
+            : superadmin
+              ? "OWNER"
+              : "MEMBER";
+        const canManage = superadmin || myRole === "OWNER";
+        return {
+          id: o.id,
+          name: o.name,
+          slug: o.slug,
+          isActive: o.isActive,
+          createdAt: o.createdAt.toISOString(),
+          siteCount: o._count.sites,
+          memberCount: o._count.members,
+          myRole,
+          canManage,
+          owners: o.members.map((m) => ({
+            id: m.user.id,
+            email: m.user.email,
+            name: `${m.user.firstName} ${m.user.lastName}`.trim(),
+          })),
+          sites: o.sites.map((s) => ({
+            id: s.id,
+            name: s.name,
+            slug: s.slug,
+          })),
+        };
+      })}
       initialUsers={uniqueUsers.map((u) => ({
         id: u.id,
         email: u.email,

@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 type OrgRow = {
   id: string;
@@ -23,15 +23,22 @@ type Props = {
   isSuperadmin: boolean;
   canCreate: boolean;
   initialOrgs: OrgRow[];
+  open: boolean;
+  onClose: () => void;
 };
 
 export function OrganizationsAdminClient({
   isSuperadmin,
   canCreate,
   initialOrgs,
+  open,
+  onClose,
 }: Props) {
   const router = useRouter();
   const [orgs, setOrgs] = useState(initialOrgs);
+  useEffect(() => {
+    setOrgs(initialOrgs);
+  }, [initialOrgs]);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -190,30 +197,59 @@ export function OrganizationsAdminClient({
   }
 
   return (
-    <div className="space-y-6">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-semibold">Organizations</h1>
-          <p className="text-slate-500 mt-1 text-sm max-w-2xl">
-            A workspace for a client or agency. Organization{" "}
-            <strong>owners</strong> can create multiple websites and invite
-            users. Superadmins can manage every organization.
+    <>
+      {open && (
+        <div
+          className="fixed inset-0 z-[56] bg-slate-900/30"
+          style={{ top: "var(--admin-header-h, 56px)" }}
+          onClick={onClose}
+        />
+      )}
+      <aside
+        className={[
+          "fixed right-0 z-[57] flex w-full max-w-lg flex-col border-l border-slate-200 bg-white shadow-2xl transition-transform duration-200 ease-out",
+          "bottom-0",
+          open ? "translate-x-0" : "translate-x-full pointer-events-none",
+        ].join(" ")}
+        style={{ top: "var(--admin-header-h, 56px)" }}
+        aria-hidden={!open}
+      >
+        <div className="flex items-center justify-between border-b border-slate-200 px-4 py-3 shrink-0">
+          <div>
+            <p className="text-[11px] uppercase tracking-wide text-slate-400">
+              Users
+            </p>
+            <h3 className="font-semibold text-slate-900">Organizations</h3>
+          </div>
+          <div className="flex items-center gap-2">
+            {canCreate && (
+              <button
+                type="button"
+                onClick={() => {
+                  setShowCreate((v) => !v);
+                  setError(null);
+                }}
+                className="rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-blue-700"
+              >
+                {showCreate ? "Cancel" : "New"}
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={onClose}
+              className="rounded-lg border border-slate-200 px-2 py-1 text-xs text-slate-600 hover:bg-slate-50"
+            >
+              Close
+            </button>
+          </div>
+        </div>
+
+        <div className="flex-1 overflow-y-auto p-4 space-y-4">
+          <p className="text-xs text-slate-500">
+            A workspace for a client or agency. Owners can create websites and
+            invite users.
             {isSuperadmin ? " You are a superadmin." : ""}
           </p>
-        </div>
-        {canCreate && (
-          <button
-            type="button"
-            onClick={() => {
-              setShowCreate((v) => !v);
-              setError(null);
-            }}
-            className="rounded-lg bg-blue-600 px-3 py-2 text-sm font-medium text-white hover:bg-blue-700"
-          >
-            {showCreate ? "Cancel" : "New organization"}
-          </button>
-        )}
-      </div>
 
       {error && (
         <p className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
@@ -331,12 +367,6 @@ export function OrganizationsAdminClient({
                     >
                       Websites
                     </Link>
-                    <Link
-                      href="/admin/users"
-                      className="rounded-lg border border-slate-200 px-3 py-1.5 text-sm hover:bg-slate-50"
-                    >
-                      Users
-                    </Link>
                     {o.canManage && (
                       <>
                         <button
@@ -440,6 +470,8 @@ export function OrganizationsAdminClient({
           </p>
         )}
       </div>
-    </div>
+        </div>
+      </aside>
+    </>
   );
 }

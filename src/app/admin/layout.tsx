@@ -15,7 +15,6 @@ const nav = [
   { href: "/admin/media", label: "Media" },
   { href: "/admin/inserts", label: "Inserts" },
   { href: "/admin/sites", label: "Websites" },
-  { href: "/admin/organizations", label: "Organizations" },
   { href: "/admin/users", label: "Users" },
 ];
 
