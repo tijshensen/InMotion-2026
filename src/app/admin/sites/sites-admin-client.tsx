@@ -30,22 +30,12 @@ type SiteCard = {
   languages: string;
 };
 
-type CloudflareStatus = {
-  configured: boolean;
-  ok: boolean;
-  accountIdSuffix: string;
-  projectCount: number | null;
-  error: string | null;
-};
-
 type Props = {
   sites: SiteCard[];
   canCreate: boolean;
   isSuperadmin: boolean;
   importPrompt: string;
   hasXaiKey: boolean;
-  hasCloudflare: boolean;
-  cloudflare: CloudflareStatus;
   organizations: Org[];
 };
 
@@ -55,7 +45,6 @@ export function SitesAdminClient({
   isSuperadmin,
   importPrompt,
   hasXaiKey,
-  cloudflare,
   organizations,
 }: Props) {
   const router = useRouter();
@@ -186,23 +175,6 @@ export function SitesAdminClient({
       {error && (
         <p className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
           {error}
-        </p>
-      )}
-
-      {cloudflare.ok ? (
-        <p className="text-xs text-slate-400">
-          Cloudflare connected · …{cloudflare.accountIdSuffix}
-          {cloudflare.projectCount != null
-            ? ` · ${cloudflare.projectCount} project(s)`
-            : ""}
-        </p>
-      ) : cloudflare.configured ? (
-        <p className="text-xs text-red-600">
-          Cloudflare API check failed: {cloudflare.error}
-        </p>
-      ) : (
-        <p className="text-xs text-slate-400">
-          Cloudflare Pages is not configured yet.
         </p>
       )}
 
