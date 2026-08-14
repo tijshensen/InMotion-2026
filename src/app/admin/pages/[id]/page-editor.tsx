@@ -264,7 +264,8 @@ export function PageEditor({
       showMeta,
       setShowMeta,
       showAdd,
-      editorMode: layoutModeAvailable ? editorMode : "content",
+      editorMode:
+        !layoutModeAvailable && editorMode === "layout" ? "content" : editorMode,
       setEditorMode,
       layoutModeAvailable,
       onDelete: () => {
@@ -323,7 +324,11 @@ export function PageEditor({
           chromeMode
           showAdd={showAdd}
           onShowAddChange={setShowAdd}
-          editorMode={layoutModeAvailable ? editorMode : "content"}
+          editorMode={
+            !layoutModeAvailable && editorMode === "layout"
+              ? "content"
+              : editorMode
+          }
         />
       </div>
 

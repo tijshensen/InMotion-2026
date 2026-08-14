@@ -16,7 +16,7 @@ import {
 } from "react";
 
 export type CanvasDevice = "desktop" | "tablet" | "phone";
-export type EditorMode = "content" | "layout";
+export type EditorMode = "content" | "layout" | "view";
 
 export type EditorChromeState = {
   device: CanvasDevice;

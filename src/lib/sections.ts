@@ -703,6 +703,16 @@ export function buildEditorPreviewHtml(opts: {
   .cms-edit-body { pointer-events: none; }
   html[data-cms-mode="layout"] .cms-edit-body { pointer-events: auto; }
   html[data-cms-mode="layout"] .cms-edit-section { cursor: default; }
+  html[data-cms-mode="view"] .cms-edit-body { pointer-events: auto; }
+  html[data-cms-mode="view"] .cms-edit-section {
+    cursor: default;
+    outline: none !important;
+  }
+  html[data-cms-mode="view"] .cms-edit-section:hover,
+  html[data-cms-mode="view"] .cms-edit-section.is-selected {
+    outline: none !important;
+  }
+  html[data-cms-mode="view"] .cms-edit-badge { display: none !important; }
   html[data-cms-mode="layout"] .cms-edit-body [data-cms-nid]:hover {
     outline: 1px dashed #60a5fa;
     outline-offset: 1px;
@@ -757,6 +767,19 @@ export function buildEditorPreviewHtml(opts: {
   }
   document.addEventListener("click", function (e) {
     var mode = document.documentElement.getAttribute("data-cms-mode") || "content";
+    if (mode === "view") {
+      var link = e.target && e.target.closest ? e.target.closest("a") : null;
+      if (link) {
+        var href = link.getAttribute("href") || "";
+        var stay = !href || href === "#" || href.charAt(0) === "#" || href.indexOf("javascript:") === 0;
+        if (!stay) {
+          e.preventDefault();
+          e.stopPropagation();
+          try { window.open(link.href, "_blank", "noopener"); } catch (err) {}
+        }
+      }
+      return;
+    }
     if (mode === "layout") {
       e.preventDefault();
       e.stopPropagation();
@@ -822,8 +845,10 @@ export function buildEditorPreviewHtml(opts: {
       selectSection(el.getAttribute("data-section-id"));
     }
   }, true);
-  // prevent navigation inside preview
+  // prevent navigation inside preview (View mode handles its own links)
   document.addEventListener("click", function (e) {
+    var mode = document.documentElement.getAttribute("data-cms-mode") || "content";
+    if (mode === "view") return;
     var a = e.target && e.target.closest ? e.target.closest("a") : null;
     if (a) { e.preventDefault(); }
   }, true);

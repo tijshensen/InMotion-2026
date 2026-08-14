@@ -438,18 +438,21 @@ export function AdminShell({
         {/* Canvas controls: device + add section + settings + save */}
         {isCanvas && chrome && (
           <div className="flex items-center gap-2 shrink-0">
-            {chrome.layoutModeAvailable && chrome.setEditorMode && (
+            {chrome.setEditorMode && (
               <div className="flex rounded-lg border border-slate-700 p-0.5 text-[11px]">
                 {(
                   [
-                    ["content", "Content"],
-                    ["layout", "Layout"],
-                  ] as const
-                ).map(([id, label]) => (
+                    { id: "content" as const, label: "Content" },
+                    ...(chrome.layoutModeAvailable
+                      ? [{ id: "layout" as const, label: "Layout" }]
+                      : []),
+                    { id: "view" as const, label: "View" },
+                  ] as { id: EditorMode; label: string }[]
+                ).map(({ id, label }) => (
                   <button
                     key={id}
                     type="button"
-                    onClick={() => chrome.setEditorMode?.(id as EditorMode)}
+                    onClick={() => chrome.setEditorMode?.(id)}
                     className={[
                       "rounded-md px-2 py-1 whitespace-nowrap",
                       (chrome.editorMode || "content") === id

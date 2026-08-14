@@ -90,7 +90,7 @@ type Props = {
   /** Controlled add-section dialog (top bar when chromeMode) */
   showAdd?: boolean;
   onShowAddChange?: (open: boolean) => void;
-  editorMode?: "content" | "layout";
+  editorMode?: "content" | "layout" | "view";
 };
 
 export function FieldEditors({
@@ -1029,10 +1029,12 @@ export function VisualPageBuilder({
   const deviceWidth =
     device === "desktop" ? "100%" : device === "tablet" ? "768px" : "390px";
   const panelOpen =
-    editorMode === "layout"
-      ? Boolean(layoutHit) ||
-        (Boolean(selected) && !skipAutoLayoutRef.current)
-      : Boolean(selected);
+    editorMode === "view"
+      ? false
+      : editorMode === "layout"
+        ? Boolean(layoutHit) ||
+          (Boolean(selected) && !skipAutoLayoutRef.current)
+        : Boolean(selected);
 
   return (
     <div
@@ -1129,7 +1131,7 @@ export function VisualPageBuilder({
               style={{ height: "100%", minHeight: "100%" }}
               srcDoc={documentHtml}
               onLoad={onIframeLoad}
-              sandbox="allow-same-origin allow-scripts"
+              sandbox="allow-same-origin allow-scripts allow-popups allow-popups-to-escape-sandbox"
             />
           )}
         </div>
