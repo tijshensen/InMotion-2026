@@ -5,6 +5,10 @@ import { requireUser } from "@/lib/auth";
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
 import { renderMenuHtml, type MenuPage } from "@/lib/menu";
+import {
+  renderMenuFromSnippets,
+  resolveMenuSnippets,
+} from "@/lib/menu-snippets";
 import { isFullThemeShell, renderBootstrapMenuHtml } from "@/lib/theme";
 import { PageEditor } from "./page-editor";
 
@@ -29,7 +33,11 @@ export default async function EditPageAdmin({ params }: Props) {
         },
       },
       language: true,
-      template: true,
+      template: {
+        include: {
+          templateSet: { select: { menuHtml: true, submenuHtml: true } },
+        },
+      },
     },
   });
 
@@ -73,9 +81,15 @@ export default async function EditPageAdmin({ params }: Props) {
   }));
 
   const shellHtml = page.template?.coreHtml || "";
-  const menuHtml = isFullThemeShell(shellHtml)
-    ? renderBootstrapMenuHtml(page.site.slug, menuPages)
-    : renderMenuHtml(page.site.slug, menuPages);
+  const snippets = resolveMenuSnippets({
+    template: page.template,
+    templateSet: page.template?.templateSet,
+  });
+  const menuHtml =
+    renderMenuFromSnippets(snippets, page.site.slug, menuPages, page.id) ||
+    (isFullThemeShell(shellHtml)
+      ? renderBootstrapMenuHtml(page.site.slug, menuPages)
+      : renderMenuHtml(page.site.slug, menuPages));
   const siteTitle = page.site.siteTitle || page.site.name;
   const inserts = page.site.inserts.map((i) => ({
     tag: i.tag,

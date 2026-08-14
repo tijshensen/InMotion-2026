@@ -16,6 +16,10 @@ import {
   rewriteThemeAssetUrls,
 } from "./theme";
 import { renderMenuHtml, type MenuPage } from "./menu";
+import {
+  renderMenuFromSnippets,
+  resolveMenuSnippets,
+} from "./menu-snippets";
 import { normalizeInsertHtml } from "./insert-html";
 
 const VIEWPORT_W = 1200;
@@ -166,7 +170,8 @@ function fillShell(opts: {
     .replaceAll("{{page.metaDescription}}", "")
     .replaceAll("{{site.title}}", escapeHtml(opts.site.siteTitle || opts.site.name))
     .replaceAll("{{site.slug}}", escapeHtml(opts.site.slug))
-    .replaceAll("{{menu}}", opts.menuHtml);
+    .replaceAll("{{menu}}", opts.menuHtml)
+    .replaceAll("{{submenu}}", "");
   html = html.replace(/\{\{block:[a-zA-Z0-9_-]+\}\}/g, "");
 
   const resolveInsert = (tag: string) => {
@@ -223,9 +228,15 @@ export async function generateSectionPreview(blockId: string): Promise<string | 
     inMenu: p.inMenu,
   })) as MenuPage[];
   const shell = block.template.coreHtml || "";
-  const menuHtml = isFullThemeShell(shell)
-    ? renderBootstrapMenuHtml(site.slug, menuPages)
-    : renderMenuHtml(site.slug, menuPages);
+  const snippets = resolveMenuSnippets({
+    template: block.template,
+    templateSet: block.template.templateSet,
+  });
+  const menuHtml =
+    renderMenuFromSnippets(snippets, site.slug, menuPages) ||
+    (isFullThemeShell(shell)
+      ? renderBootstrapMenuHtml(site.slug, menuPages)
+      : renderMenuHtml(site.slug, menuPages));
 
   const html = fillShell({
     coreHtml: shell,

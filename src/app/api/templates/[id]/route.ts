@@ -30,6 +30,7 @@ const patchSchema = z.object({
   coreHtml: z.string().optional(),
   menuHtml: z.string().optional(),
   submenuHtml: z.string().optional(),
+  saveAsSetDefault: z.boolean().optional(),
 });
 
 export async function PATCH(req: Request, ctx: Ctx) {
@@ -56,6 +57,20 @@ export async function PATCH(req: Request, ctx: Ctx) {
         _count: { select: { blocks: true, pages: true } },
       },
     });
+    if (
+      data.saveAsSetDefault &&
+      (data.menuHtml !== undefined || data.submenuHtml !== undefined)
+    ) {
+      await prisma.templateSet.update({
+        where: { id: template.templateSetId },
+        data: {
+          ...(data.menuHtml !== undefined ? { menuHtml: data.menuHtml } : {}),
+          ...(data.submenuHtml !== undefined
+            ? { submenuHtml: data.submenuHtml }
+            : {}),
+        },
+      });
+    }
     return NextResponse.json(template);
   } catch (e) {
     if (e instanceof z.ZodError) {

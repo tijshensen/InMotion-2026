@@ -9,6 +9,11 @@ import {
   type LinkablePage,
 } from "./internal-links";
 import { renderMenuHtml, type MenuPage } from "./menu";
+import {
+  renderMenuFromSnippets,
+  renderSubmenuFromSnippets,
+  resolveMenuSnippets,
+} from "./menu-snippets";
 import { renderAllSections } from "./sections";
 import { ensureSiteStylesheets } from "./site-context";
 import {
@@ -62,7 +67,11 @@ export async function renderPublicPage({
         orderBy: { sortOrder: "asc" },
         include: { templateBlock: true },
       },
-      template: true,
+      template: {
+        include: {
+          templateSet: { select: { menuHtml: true, submenuHtml: true } },
+        },
+      },
     },
   });
 
@@ -79,7 +88,11 @@ export async function renderPublicPage({
           orderBy: { sortOrder: "asc" },
           include: { templateBlock: true },
         },
-        template: true,
+        template: {
+          include: {
+            templateSet: { select: { menuHtml: true, submenuHtml: true } },
+          },
+        },
       },
     });
     if (!page) return null;
@@ -119,11 +132,17 @@ export async function renderPublicPage({
   let html = page.template?.coreHtml?.trim() || TAILWIND_SHELL;
   const fullTheme = isFullThemeShell(html);
 
-  // Full MotionCMS themes keep Bootstrap markup → Bootstrap menu.
-  // Minimal shells use Tailwind nav. Both exclude hidden pages.
-  const menu = fullTheme
-    ? renderBootstrapMenuHtml(site.slug, menuPages)
-    : renderMenuHtml(site.slug, menuPages);
+  const snippets = resolveMenuSnippets({
+    template: page.template,
+    templateSet: page.template?.templateSet,
+  });
+  const menu =
+    renderMenuFromSnippets(snippets, site.slug, menuPages, page.id) ||
+    (fullTheme
+      ? renderBootstrapMenuHtml(site.slug, menuPages)
+      : renderMenuHtml(site.slug, menuPages));
+  const submenu =
+    renderSubmenuFromSnippets(snippets, site.slug, menuPages, page.id) || "";
 
   // Only force minimal shell when we have no real template
   if (!page.template?.coreHtml?.trim()) {
@@ -154,6 +173,7 @@ export async function renderPublicPage({
     .replaceAll("{{site.title}}", escapeHtml(site.siteTitle || site.name))
     .replaceAll("{{site.slug}}", escapeHtml(site.slug))
     .replaceAll("{{menu}}", menu)
+    .replaceAll("{{submenu}}", submenu)
     .replaceAll("{{sections}}", sectionsHtml);
 
   // Fallback if shell has no {{sections}} token

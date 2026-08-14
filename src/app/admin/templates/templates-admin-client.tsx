@@ -1,8 +1,13 @@
 "use client";
 
-import { FormEvent, useCallback, useEffect, useState } from "react";
+import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { HtmlCodeEditor } from "@/components/html-code-editor";
+import { type MenuPage } from "@/lib/menu";
+import {
+  renderMenuFromSnippets,
+  renderSubmenuFromSnippets,
+} from "@/lib/menu-snippets";
 
 type TemplateRow = {
   id: string;
@@ -18,19 +23,23 @@ type TemplateRow = {
 type Props = {
   siteId: string;
   siteName: string;
+  siteSlug: string;
   cssFramework: string;
   importPrompt: string;
   hasXaiKey: boolean;
   isSuperadmin: boolean;
+  menuPages: MenuPage[];
 };
 
 export function TemplatesAdminClient({
   siteId,
   siteName,
+  siteSlug,
   cssFramework,
   importPrompt,
   hasXaiKey,
   isSuperadmin,
+  menuPages,
 }: Props) {
   const [templates, setTemplates] = useState<TemplateRow[]>([]);
   const [loading, setLoading] = useState(true);
@@ -43,6 +52,7 @@ export function TemplatesAdminClient({
   const [submenuHtml, setSubmenuHtml] = useState("");
   const [saving, setSaving] = useState(false);
   const [tab, setTab] = useState<"shell" | "menu">("shell");
+  const [saveAsSetDefault, setSaveAsSetDefault] = useState(false);
   const [showImport, setShowImport] = useState(false);
   const [sourceUrl, setSourceUrl] = useState("");
   const [importName, setImportName] = useState("");
@@ -99,6 +109,7 @@ export function TemplatesAdminClient({
     setStatus(null);
     setError(null);
     setTab("shell");
+    setSaveAsSetDefault(false);
   }
 
   async function onSave(e?: FormEvent) {
@@ -111,7 +122,13 @@ export function TemplatesAdminClient({
       const res = await fetch(`/api/templates/${selectedId}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name, coreHtml, menuHtml, submenuHtml }),
+        body: JSON.stringify({
+          name,
+          coreHtml,
+          menuHtml,
+          submenuHtml,
+          saveAsSetDefault,
+        }),
       });
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
@@ -522,31 +539,16 @@ export function TemplatesAdminClient({
               )}
 
               {tab === "menu" && (
-                <div className="space-y-4">
-                  <p className="text-xs text-slate-500">
-                    Optional legacy menu/submenu HTML stored with the template
-                    (original MotionCMS fields). The live site usually injects
-                    the menu tree via {"{{menu}}"} in the shell.
-                  </p>
-                  <label className="block space-y-1 text-sm">
-                    <span className="text-slate-600">Menu HTML</span>
-                    <HtmlCodeEditor
-                      value={menuHtml}
-                      onChange={setMenuHtml}
-                      minHeight="160px"
-                      placeholder="<!-- optional menu snippet -->"
-                    />
-                  </label>
-                  <label className="block space-y-1 text-sm">
-                    <span className="text-slate-600">Submenu HTML</span>
-                    <HtmlCodeEditor
-                      value={submenuHtml}
-                      onChange={setSubmenuHtml}
-                      minHeight="120px"
-                      placeholder="<!-- optional submenu snippet -->"
-                    />
-                  </label>
-                </div>
+                <MenuSnippetsEditor
+                  menuHtml={menuHtml}
+                  submenuHtml={submenuHtml}
+                  onMenuHtml={setMenuHtml}
+                  onSubmenuHtml={setSubmenuHtml}
+                  saveAsSetDefault={saveAsSetDefault}
+                  onSaveAsSetDefault={setSaveAsSetDefault}
+                  siteSlug={siteSlug}
+                  menuPages={menuPages}
+                />
               )}
             </form>
           ) : (
@@ -556,6 +558,135 @@ export function TemplatesAdminClient({
           )}
         </div>
       )}
+    </div>
+  );
+}
+
+function MenuSnippetsEditor({
+  menuHtml,
+  submenuHtml,
+  onMenuHtml,
+  onSubmenuHtml,
+  saveAsSetDefault,
+  onSaveAsSetDefault,
+  siteSlug,
+  menuPages,
+}: {
+  menuHtml: string;
+  submenuHtml: string;
+  onMenuHtml: (v: string) => void;
+  onSubmenuHtml: (v: string) => void;
+  saveAsSetDefault: boolean;
+  onSaveAsSetDefault: (v: boolean) => void;
+  siteSlug: string;
+  menuPages: MenuPage[];
+}) {
+  const preview = useMemo(
+    () =>
+      renderMenuFromSnippets(
+        { menuHtml, submenuHtml },
+        siteSlug,
+        menuPages,
+        menuPages.find((p) => p.isDefault)?.id,
+      ),
+    [menuHtml, submenuHtml, siteSlug, menuPages],
+  );
+  const subPreview = useMemo(
+    () =>
+      renderSubmenuFromSnippets(
+        { menuHtml, submenuHtml },
+        siteSlug,
+        menuPages,
+        menuPages.find((p) => p.isDefault)?.id,
+      ),
+    [menuHtml, submenuHtml, siteSlug, menuPages],
+  );
+
+  return (
+    <div className="space-y-4">
+      <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600 space-y-1">
+        <p>
+          These snippets are the <strong>item patterns</strong> for{" "}
+          <code className="bg-white px-1 rounded">{"{{menu}}"}</code> and{" "}
+          <code className="bg-white px-1 rounded">{"{{submenu}}"}</code>. The
+          live page tree from the Menu builder is filled into them.
+        </p>
+        <p>
+          Repeat blocks:{" "}
+          <code className="bg-white px-1 rounded">{'<menu type="head">'}</code>{" "}
+          (top-level),{" "}
+          <code className="bg-white px-1 rounded">
+            {'<menu type="head-with-dropdown">'}
+          </code>
+          ,{" "}
+          <code className="bg-white px-1 rounded">
+            {'<menuitem type="dropdown">'}
+          </code>
+          ,{" "}
+          <code className="bg-white px-1 rounded">
+            {'<menuitem type="submenu">'}
+          </code>
+          .
+        </p>
+        <p>
+          Tokens:{" "}
+          <code className="bg-white px-1 rounded">{"[[href]]"}</code>{" "}
+          <code className="bg-white px-1 rounded">{"[[title]]"}</code>{" "}
+          <code className="bg-white px-1 rounded">
+            {"[[currentindicator]]"}
+          </code>{" "}
+          (becomes <code className="bg-white px-1 rounded">active</code> on the
+          current page).
+        </p>
+      </div>
+      <label className="block space-y-1 text-sm">
+        <span className="text-slate-600">Menu HTML</span>
+        <HtmlCodeEditor
+          value={menuHtml}
+          onChange={onMenuHtml}
+          minHeight="200px"
+          placeholder={'<ul class="nav navbar-nav">\n  <menu type="head">…</menu>\n</ul>'}
+        />
+      </label>
+      <label className="block space-y-1 text-sm">
+        <span className="text-slate-600">Submenu HTML</span>
+        <HtmlCodeEditor
+          value={submenuHtml}
+          onChange={onSubmenuHtml}
+          minHeight="120px"
+          placeholder={'<ul>\n  <menuitem type="submenu">…</menuitem>\n</ul>'}
+        />
+      </label>
+      <label className="flex items-center gap-2 text-sm text-slate-600">
+        <input
+          type="checkbox"
+          checked={saveAsSetDefault}
+          onChange={(e) => onSaveAsSetDefault(e.target.checked)}
+        />
+        Also use as the default for other templates in this set
+      </label>
+      <div className="space-y-2">
+        <p className="text-xs font-medium text-slate-600">
+          Preview with the current menu tree
+        </p>
+        {preview ? (
+          <div
+            className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm overflow-x-auto"
+            dangerouslySetInnerHTML={{ __html: preview }}
+          />
+        ) : (
+          <p className="text-xs text-slate-400">
+            Empty snippet — the site will fall back to the built-in Bootstrap
+            or Tailwind nav.
+          </p>
+        )}
+        {subPreview && (
+          <div
+            className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm overflow-x-auto"
+            dangerouslySetInnerHTML={{ __html: subPreview }}
+          />
+        )}
+      </div>
     </div>
   );
 }
