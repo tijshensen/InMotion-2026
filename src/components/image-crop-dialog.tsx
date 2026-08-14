@@ -1,14 +1,19 @@
 "use client";
 
 /**
- * Cover-fit crop: drag the photo under a frame that uses the *image*
- * aspect ratio (not the section target). At 1× the photo fills the frame
- * exactly; zoom in to pan in both directions and pick e.g. the left side.
- * Confirm returns a crop rect in natural image pixels (same aspect as the
- * source). The server then resizes that region to the section W×H.
+ * Cover-fit crop. The frame is as wide as the modal; its height follows
+ * the photo's own width/height ratio (never a forced square or section
+ * W×H). At 1× the whole photo is visible. Zoom in, then drag to pick
+ * e.g. the right side.
  */
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+} from "react";
 
 export type CropRect = {
   left: number;
@@ -27,12 +32,8 @@ type Props = {
   error?: string | null;
   onCancel: () => void;
   onConfirm: (crop: CropRect) => void;
-  /** Skip crop and use original image URL as-is */
   onUseOriginal?: () => void;
 };
-
-const VIEW_MAX_W = 520;
-const VIEW_MAX_H = 420;
 
 export function ImageCropDialog({
   open,
@@ -47,9 +48,11 @@ export function ImageCropDialog({
   onUseOriginal,
 }: Props) {
   const frameRef = useRef<HTMLDivElement>(null);
+  const imgRef = useRef<HTMLImageElement>(null);
   const [natural, setNatural] = useState({ w: 0, h: 0 });
+  const [framePx, setFramePx] = useState({ w: 0, h: 0 });
   const [zoom, setZoom] = useState(1);
-  const [offset, setOffset] = useState({ x: 0, y: 0 }); // image top-left inside frame
+  const [offset, setOffset] = useState({ x: 0, y: 0 });
   const drag = useRef<{
     startX: number;
     startY: number;
@@ -57,43 +60,13 @@ export function ImageCropDialog({
     origY: number;
   } | null>(null);
 
-  const frameSize = useMemo(() => {
-    if (!natural.w || !natural.h) {
-      return { w: VIEW_MAX_W, h: Math.round(VIEW_MAX_W * 0.66) };
-    }
-    const imgAspect = natural.w / natural.h;
-    let w = VIEW_MAX_W;
-    let h = w / imgAspect;
-    if (h > VIEW_MAX_H) {
-      h = VIEW_MAX_H;
-      w = h * imgAspect;
-    }
-    return { w: Math.round(w), h: Math.round(h) };
-  }, [natural]);
+  const imgAspect =
+    natural.w > 0 && natural.h > 0 ? natural.w / natural.h : 16 / 9;
 
-  // Cover scale: image fills the same-aspect frame exactly at zoom 1
-  const minScale = useMemo(() => {
-    if (!natural.w || !natural.h) return 1;
-    return frameSize.w / natural.w;
-  }, [natural, frameSize]);
-
-  const displayScale = minScale * zoom;
-  const imgDisplayW = natural.w * displayScale;
-  const imgDisplayH = natural.h * displayScale;
-
-  const clampOffset = useCallback(
-    (x: number, y: number, scale: number) => {
-      const dw = natural.w * scale;
-      const dh = natural.h * scale;
-      const minX = Math.min(0, frameSize.w - dw);
-      const minY = Math.min(0, frameSize.h - dh);
-      return {
-        x: Math.min(0, Math.max(minX, x)),
-        y: Math.min(0, Math.max(minY, y)),
-      };
-    },
-    [natural, frameSize],
-  );
+  function readNatural(img: HTMLImageElement | null) {
+    if (!img?.naturalWidth || !img.naturalHeight) return;
+    setNatural({ w: img.naturalWidth, h: img.naturalHeight });
+  }
 
   useEffect(() => {
     if (!open) return;
@@ -101,6 +74,25 @@ export function ImageCropDialog({
     setZoom(1);
     setOffset({ x: 0, y: 0 });
   }, [open, imageUrl]);
+
+  // Cached images may not fire onLoad — read natural size after mount.
+  useEffect(() => {
+    if (!open) return;
+    const img = imgRef.current;
+    if (img?.complete) readNatural(img);
+  }, [open, imageUrl]);
+
+  useLayoutEffect(() => {
+    const el = frameRef.current;
+    if (!el || !open) return;
+    const measure = () => {
+      setFramePx({ w: el.clientWidth, h: el.clientHeight });
+    };
+    measure();
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [open, imgAspect]);
 
   useEffect(() => {
     if (!open) return;
@@ -111,28 +103,59 @@ export function ImageCropDialog({
     return () => window.removeEventListener("keydown", onKey);
   }, [open, busy, onCancel]);
 
+  const minScale =
+    natural.w > 0 && framePx.w > 0 ? framePx.w / natural.w : 1;
+  const displayScale = minScale * zoom;
+  const imgDisplayW = natural.w * displayScale;
+  const imgDisplayH = natural.h * displayScale;
+
+  const clampOffset = useCallback(
+    (x: number, y: number, scale: number) => {
+      const dw = natural.w * scale;
+      const dh = natural.h * scale;
+      const minX = Math.min(0, framePx.w - dw);
+      const minY = Math.min(0, framePx.h - dh);
+      return {
+        x: Math.min(0, Math.max(minX, x)),
+        y: Math.min(0, Math.max(minY, y)),
+      };
+    },
+    [natural, framePx],
+  );
+
+  function onZoomChange(next: number) {
+    const prevScale = minScale * zoom;
+    const nextScale = minScale * next;
+    if (prevScale <= 0) {
+      setZoom(next);
+      return;
+    }
+    const cx = framePx.w / 2;
+    const cy = framePx.h / 2;
+    const imgCx = (cx - offset.x) / prevScale;
+    const imgCy = (cy - offset.y) / prevScale;
+    setZoom(next);
+    setOffset(
+      clampOffset(cx - imgCx * nextScale, cy - imgCy * nextScale, nextScale),
+    );
+  }
+
   useEffect(() => {
     const el = frameRef.current;
     if (!el || !open) return;
     function onWheel(e: WheelEvent) {
       e.preventDefault();
       if (busy || !natural.w) return;
-      const next = Math.min(4, Math.max(1, zoom + (e.deltaY < 0 ? 0.12 : -0.12)));
+      const next = Math.min(
+        4,
+        Math.max(1, zoom + (e.deltaY < 0 ? 0.12 : -0.12)),
+      );
       onZoomChange(next);
     }
     el.addEventListener("wheel", onWheel, { passive: false });
     return () => el.removeEventListener("wheel", onWheel);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, busy, natural.w, zoom, offset.x, offset.y, displayScale]);
-
-  function onImageLoad(e: React.SyntheticEvent<HTMLImageElement>) {
-    const img = e.currentTarget;
-    const w = img.naturalWidth;
-    const h = img.naturalHeight;
-    setNatural({ w, h });
-    setZoom(1);
-    setOffset({ x: 0, y: 0 });
-  }
+  }, [open, busy, natural.w, zoom, offset.x, offset.y, displayScale, framePx]);
 
   function onPointerDown(e: React.PointerEvent) {
     if (busy) return;
@@ -147,12 +170,10 @@ export function ImageCropDialog({
 
   function onPointerMove(e: React.PointerEvent) {
     if (!drag.current) return;
-    const dx = e.clientX - drag.current.startX;
-    const dy = e.clientY - drag.current.startY;
     setOffset(
       clampOffset(
-        drag.current.origX + dx,
-        drag.current.origY + dy,
+        drag.current.origX + (e.clientX - drag.current.startX),
+        drag.current.origY + (e.clientY - drag.current.startY),
         displayScale,
       ),
     );
@@ -162,33 +183,19 @@ export function ImageCropDialog({
     drag.current = null;
   }
 
-  function onZoomChange(next: number) {
-    const prevScale = minScale * zoom;
-    const nextScale = minScale * next;
-    const cx = frameSize.w / 2;
-    const cy = frameSize.h / 2;
-    const imgCx = (cx - offset.x) / prevScale;
-    const imgCy = (cy - offset.y) / prevScale;
-    setZoom(next);
-    setOffset(
-      clampOffset(cx - imgCx * nextScale, cy - imgCy * nextScale, nextScale),
-    );
-  }
-
   function computeCrop(): CropRect | null {
-    if (!natural.w || !natural.h) return null;
-    const scale = displayScale;
+    if (!natural.w || !natural.h || !framePx.w || displayScale <= 0) return null;
     return {
-      left: Math.max(0, -offset.x / scale),
-      top: Math.max(0, -offset.y / scale),
-      width: Math.min(natural.w, frameSize.w / scale),
-      height: Math.min(natural.h, frameSize.h / scale),
+      left: Math.max(0, -offset.x / displayScale),
+      top: Math.max(0, -offset.y / displayScale),
+      width: Math.min(natural.w, framePx.w / displayScale),
+      height: Math.min(natural.h, framePx.h / displayScale),
     };
   }
 
   if (!open) return null;
 
-  const ready = natural.w > 0;
+  const ready = natural.w > 0 && natural.h > 0;
 
   return (
     <div
@@ -200,8 +207,8 @@ export function ImageCropDialog({
         if (e.target === e.currentTarget && !busy) onCancel();
       }}
     >
-      <div className="w-full max-w-xl rounded-2xl bg-white shadow-xl border border-slate-200 overflow-hidden">
-        <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100">
+      <div className="flex w-full max-w-3xl max-h-[92vh] flex-col rounded-2xl bg-white shadow-xl border border-slate-200 overflow-hidden">
+        <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100 shrink-0">
           <div>
             <h2 className="font-semibold text-slate-900">Crop image</h2>
             <p className="text-xs text-slate-500 mt-0.5">
@@ -222,51 +229,50 @@ export function ImageCropDialog({
           </button>
         </div>
 
-        <div className="px-5 py-4 space-y-4">
+        <div className="px-5 py-4 space-y-4 overflow-y-auto min-h-0">
           <p className="text-xs text-slate-500">
-            The frame matches your photo. Zoom in, then drag to choose the
-            area — it is saved at {targetWidth}×{targetHeight}.
+            Zoom in, then drag the photo so the part you want sits in the
+            frame.
           </p>
 
-          <div className="flex justify-center">
-            <div
-              ref={frameRef}
-              className="relative overflow-hidden rounded-xl border-2 border-blue-500 bg-slate-200 shadow-inner touch-none select-none cursor-grab active:cursor-grabbing"
-              style={{ width: frameSize.w, height: frameSize.h }}
-              onPointerDown={onPointerDown}
-              onPointerMove={onPointerMove}
-              onPointerUp={onPointerUp}
-              onPointerCancel={onPointerUp}
-            >
-              {!ready && (
-                <p className="absolute inset-0 z-10 flex items-center justify-center text-xs text-slate-500 pointer-events-none">
-                  Loading image…
-                </p>
-              )}
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                src={imageUrl}
-                alt=""
-                draggable={false}
-                onLoad={onImageLoad}
-                onError={() => {
-                  setNatural({ w: 0, h: 0 });
-                }}
-                className="absolute max-w-none pointer-events-none"
-                style={{
-                  width: imgDisplayW || undefined,
-                  height: imgDisplayH || undefined,
-                  left: offset.x,
-                  top: offset.y,
-                  opacity: ready ? 1 : 0,
-                }}
-              />
-              <div className="pointer-events-none absolute inset-0 border border-white/40" />
-              <div className="pointer-events-none absolute left-1/3 top-0 bottom-0 w-px bg-white/20" />
-              <div className="pointer-events-none absolute left-2/3 top-0 bottom-0 w-px bg-white/20" />
-              <div className="pointer-events-none absolute top-1/3 left-0 right-0 h-px bg-white/20" />
-              <div className="pointer-events-none absolute top-2/3 left-0 right-0 h-px bg-white/20" />
-            </div>
+          <div
+            ref={frameRef}
+            className="relative w-full overflow-hidden rounded-xl border-2 border-blue-500 bg-slate-200 shadow-inner touch-none select-none cursor-grab active:cursor-grabbing"
+            style={{ aspectRatio: `${imgAspect}` }}
+            onPointerDown={onPointerDown}
+            onPointerMove={onPointerMove}
+            onPointerUp={onPointerUp}
+            onPointerCancel={onPointerUp}
+          >
+            {!ready && (
+              <p className="absolute inset-0 z-10 flex items-center justify-center text-xs text-slate-500 pointer-events-none">
+                Loading image…
+              </p>
+            )}
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              ref={imgRef}
+              src={imageUrl}
+              alt=""
+              draggable={false}
+              onLoad={(e) => readNatural(e.currentTarget)}
+              onError={() => setNatural({ w: 0, h: 0 })}
+              className="absolute pointer-events-none"
+              style={{
+                width: imgDisplayW || undefined,
+                height: imgDisplayH || undefined,
+                maxWidth: "none",
+                maxHeight: "none",
+                left: offset.x,
+                top: offset.y,
+                opacity: ready ? 1 : 0,
+              }}
+            />
+            <div className="pointer-events-none absolute inset-0 border border-white/40" />
+            <div className="pointer-events-none absolute left-1/3 top-0 bottom-0 w-px bg-white/20" />
+            <div className="pointer-events-none absolute left-2/3 top-0 bottom-0 w-px bg-white/20" />
+            <div className="pointer-events-none absolute top-1/3 left-0 right-0 h-px bg-white/20" />
+            <div className="pointer-events-none absolute top-2/3 left-0 right-0 h-px bg-white/20" />
           </div>
 
           <div className="flex items-center gap-3">
@@ -288,14 +294,17 @@ export function ImageCropDialog({
 
           {ready && (
             <p className="text-[11px] text-slate-400">
-              Source {natural.w}×{natural.h}px · frame matches photo ratio
+              Photo {natural.w}×{natural.h}px
+              {framePx.w
+                ? ` · frame ${Math.round(framePx.w)}×${Math.round(framePx.h)}px`
+                : ""}
             </p>
           )}
 
           {error && <p className="text-sm text-red-600">{error}</p>}
         </div>
 
-        <div className="flex flex-wrap items-center justify-between gap-2 px-5 py-4 border-t border-slate-100 bg-slate-50">
+        <div className="flex flex-wrap items-center justify-between gap-2 px-5 py-4 border-t border-slate-100 bg-slate-50 shrink-0">
           <div>
             {onUseOriginal && (
               <button
