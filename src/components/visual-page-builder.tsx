@@ -475,6 +475,7 @@ export function VisualPageBuilder({
   layoutHitRef.current = layoutHit;
   const stampedNidsRef = useRef(false);
   const detectedRepeatsRef = useRef<Set<string>>(new Set());
+  const skipAutoLayoutRef = useRef(false);
 
   const ordered = useMemo(
     () => [...sections].sort((a, b) => a.sortOrder - b.sortOrder),
@@ -557,6 +558,58 @@ export function VisualPageBuilder({
     [structureKey, linkPages, editorOrigin],
   );
 
+  function layoutHitFromElement(el: HTMLElement, sectionId: string) {
+    const nid = el.getAttribute("data-cms-nid") || "";
+    const className = (el.getAttribute("class") || "")
+      .replace(/\bis-layout-selected\b/g, "")
+      .replace(/\s+/g, " ")
+      .trim();
+    const body = el.closest(".cms-edit-body");
+    let parent = el.parentElement;
+    while (
+      parent &&
+      parent !== body &&
+      !parent.getAttribute("data-cms-nid")
+    ) {
+      parent = parent.parentElement;
+    }
+    if (parent === body) parent = null;
+    const view = el.ownerDocument.defaultView;
+    return {
+      sectionId,
+      nid,
+      tag: el.tagName.toLowerCase(),
+      className,
+      parentNid: parent?.getAttribute("data-cms-nid") || null,
+      computed: view ? pickComputed(view.getComputedStyle(el)) : null,
+      parentComputed:
+        view && parent ? pickComputed(view.getComputedStyle(parent)) : null,
+    };
+  }
+
+  function activateLayoutInSection(sectionId: string | null) {
+    const doc = iframeRef.current?.contentDocument;
+    if (!doc || !sectionId) return false;
+    const hit = layoutHitRef.current;
+    let el: HTMLElement | null = null;
+    if (hit?.nid && hit.sectionId === sectionId) {
+      el = doc.querySelector(
+        `[data-cms-nid="${hit.nid}"]`,
+      ) as HTMLElement | null;
+    }
+    if (!el) {
+      const wrap = doc.querySelector(sectionSelector(sectionId));
+      el = wrap?.querySelector("[data-cms-nid]") as HTMLElement | null;
+    }
+    if (!el) return false;
+    doc.querySelectorAll(".is-layout-selected").forEach((node) => {
+      node.classList.remove("is-layout-selected");
+    });
+    el.classList.add("is-layout-selected");
+    setLayoutHit(layoutHitFromElement(el, sectionId));
+    return true;
+  }
+
   useEffect(() => {
     const doc = iframeRef.current?.contentDocument;
     if (!doc) return;
@@ -565,9 +618,14 @@ export function VisualPageBuilder({
       doc.querySelectorAll(".is-layout-selected").forEach((el) => {
         el.classList.remove("is-layout-selected");
       });
-      setLayoutHit(null);
+      skipAutoLayoutRef.current = false;
+      return;
     }
-  }, [editorMode, documentHtml]);
+    if (skipAutoLayoutRef.current) return;
+    activateLayoutInSection(selectedSectionId);
+    // Keep the last layout hit when toggling back so the slide-in stays open.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [editorMode, documentHtml, selectedSectionId]);
 
   // Persist stable nids on the class-string HTML the first time Layout is opened.
   useEffect(() => {
@@ -971,7 +1029,10 @@ export function VisualPageBuilder({
   const deviceWidth =
     device === "desktop" ? "100%" : device === "tablet" ? "768px" : "390px";
   const panelOpen =
-    editorMode === "layout" ? Boolean(layoutHit) : Boolean(selected);
+    editorMode === "layout"
+      ? Boolean(layoutHit) ||
+        (Boolean(selected) && !skipAutoLayoutRef.current)
+      : Boolean(selected);
 
   return (
     <div
@@ -1101,7 +1162,10 @@ export function VisualPageBuilder({
               </div>
               <button
                 type="button"
-                onClick={() => setLayoutHit(null)}
+                onClick={() => {
+                  skipAutoLayoutRef.current = true;
+                  setLayoutHit(null);
+                }}
                 className="rounded-lg border border-slate-200 px-2 py-1 text-xs text-slate-600 hover:bg-slate-50"
               >
                 Close
@@ -1125,7 +1189,7 @@ export function VisualPageBuilder({
             </div>
           </>
         )}
-        {editorMode !== "layout" && selected && (
+        {(editorMode !== "layout" || !layoutHit) && selected && (
           <>
             <div className="flex items-start justify-between gap-3 border-b border-slate-100 px-4 py-3">
               <div className="min-w-0">
