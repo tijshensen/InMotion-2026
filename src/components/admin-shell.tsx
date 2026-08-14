@@ -10,7 +10,11 @@ import {
   useState,
   useTransition,
 } from "react";
-import { useEditorChrome, type CanvasDevice } from "@/components/editor-chrome-context";
+import {
+  useEditorChrome,
+  type CanvasDevice,
+  type EditorMode,
+} from "@/components/editor-chrome-context";
 import { PublishModal } from "@/components/publish-modal";
 
 export type AdminPageOption = {
@@ -434,6 +438,30 @@ export function AdminShell({
         {/* Canvas controls: device + add section + settings + save */}
         {isCanvas && chrome && (
           <div className="flex items-center gap-2 shrink-0">
+            {chrome.layoutModeAvailable && chrome.setEditorMode && (
+              <div className="flex rounded-lg border border-slate-700 p-0.5 text-[11px]">
+                {(
+                  [
+                    ["content", "Content"],
+                    ["layout", "Layout"],
+                  ] as const
+                ).map(([id, label]) => (
+                  <button
+                    key={id}
+                    type="button"
+                    onClick={() => chrome.setEditorMode?.(id as EditorMode)}
+                    className={[
+                      "rounded-md px-2 py-1 whitespace-nowrap",
+                      (chrome.editorMode || "content") === id
+                        ? "bg-white text-slate-900"
+                        : "text-slate-400 hover:text-white",
+                    ].join(" ")}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+            )}
             <div className="flex rounded-lg border border-slate-700 p-0.5 text-[11px]">
               {(
                 [

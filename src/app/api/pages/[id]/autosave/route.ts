@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { prisma } from "@/lib/db";
 import { getSessionUser } from "@/lib/auth";
-import { serializeFields } from "@/lib/sections";
+import { parseStoredContent, serializeContent } from "@/lib/sections";
 
 type Ctx = { params: Promise<{ id: string }> };
 
@@ -22,6 +22,7 @@ const bodySchema = z.object({
         isHidden: z.boolean().optional(),
         css: z.string().optional(),
         fields: z.record(z.string(), z.string()).optional(),
+        layoutHtml: z.string().optional(),
         content: z.string().optional(),
       }),
     )
@@ -57,8 +58,19 @@ export async function PUT(req: Request, ctx: Ctx) {
 
     if (data.sections) {
       for (const s of data.sections) {
+        const existing = await prisma.pageBlock.findFirst({
+          where: { id: s.id, pageId },
+          select: { content: true },
+        });
+        const prev = existing
+          ? parseStoredContent(existing.content)
+          : { fields: {}, layoutHtml: undefined };
         const content = s.fields
-          ? serializeFields(asStringFields(s.fields))
+          ? serializeContent({
+              fields: asStringFields(s.fields),
+              layoutHtml:
+                s.layoutHtml !== undefined ? s.layoutHtml : prev.layoutHtml,
+            })
           : s.content;
         const patch = {
           ...(s.sortOrder !== undefined ? { sortOrder: s.sortOrder } : {}),

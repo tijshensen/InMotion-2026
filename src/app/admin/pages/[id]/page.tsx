@@ -111,6 +111,7 @@ export default async function EditPageAdmin({ params }: Props) {
         menuHtml={menuHtml}
         inserts={JSON.parse(JSON.stringify(inserts))}
         linkPages={JSON.parse(JSON.stringify(linkPages))}
+        cssFramework={page.site.cssFramework || "none"}
       />
     </div>
   );

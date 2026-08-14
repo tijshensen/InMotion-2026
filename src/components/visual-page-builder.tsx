@@ -14,6 +14,7 @@ import {
   parseSectionFields,
   parseStoredContent,
   renderSectionHtmlForEditor,
+  serializeContent,
   serializeFields,
   type FieldType,
   type SectionField,
@@ -27,6 +28,9 @@ import {
 import { MediaPicker, type MediaItem } from "@/components/media-picker";
 import { HtmlCodeEditor } from "@/components/html-code-editor";
 import { BlockEditor } from "@/components/block-editor";
+import { TailwindStylePanel } from "@/components/tailwind-style-panel";
+import { setClassAtNid, stampLayoutNids } from "@/lib/layout-html";
+import type { ComputedBox } from "@/lib/tailwind-layout";
 
 type TemplateBlock = {
   id: string;
@@ -81,6 +85,7 @@ type Props = {
   /** Controlled add-section dialog (top bar when chromeMode) */
   showAdd?: boolean;
   onShowAddChange?: (open: boolean) => void;
+  editorMode?: "content" | "layout";
 };
 
 /**
@@ -598,11 +603,21 @@ export function VisualPageBuilder({
   chromeMode = false,
   showAdd: showAddProp,
   onShowAddChange,
+  editorMode = "content",
 }: Props) {
   const [selectedSectionId, setSelectedSectionId] = useState<string | null>(
     null,
   );
   const [panelTab, setPanelTab] = useState<"content" | "style">("content");
+  const [layoutHit, setLayoutHit] = useState<{
+    sectionId: string;
+    nid: string;
+    tag: string;
+    className: string;
+    parentNid: string | null;
+    computed: ComputedBox | null;
+    parentComputed: ComputedBox | null;
+  } | null>(null);
   const [showAddInternal, setShowAddInternal] = useState(false);
   const [adding, setAdding] = useState(false);
   const [deviceInternal, setDeviceInternal] = useState<CanvasDevice>("desktop");
@@ -691,6 +706,18 @@ export function VisualPageBuilder({
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [structureKey, linkPages, editorOrigin],
   );
+
+  useEffect(() => {
+    const doc = iframeRef.current?.contentDocument;
+    if (!doc) return;
+    doc.documentElement.setAttribute("data-cms-mode", editorMode);
+    if (editorMode !== "layout") {
+      doc.querySelectorAll(".is-layout-selected").forEach((el) => {
+        el.classList.remove("is-layout-selected");
+      });
+      setLayoutHit(null);
+    }
+  }, [editorMode, documentHtml]);
 
   const sectionSelector = useCallback((sectionId: string) => {
     const safe =
@@ -785,11 +812,16 @@ export function VisualPageBuilder({
     }
     restoreIframeScroll();
     applySelectionInIframe(selectedSectionId);
+    iframeRef.current?.contentDocument?.documentElement.setAttribute(
+      "data-cms-mode",
+      editorMode,
+    );
   }, [
     ordered,
     restoreIframeScroll,
     applySelectionInIframe,
     selectedSectionId,
+    editorMode,
   ]);
 
   // Capture scroll before rare full reloads (structure change only)
@@ -812,20 +844,77 @@ export function VisualPageBuilder({
     applySelectionInIframe(selectedSectionId);
   }, [selectedSectionId, applySelectionInIframe]);
 
-  // Listen for section clicks from iframe (original: parent.openSidebar)
+  // Listen for section / layout clicks from iframe
   useEffect(() => {
     function onMessage(ev: MessageEvent) {
       const data = ev.data;
-      if (!data || data.type !== "cms-select-section") return;
+      if (!data) return;
+      if (data.type === "cms-select-element") {
+        const win = iframeRef.current?.contentWindow;
+        if (win) scrollRestore.current = win.scrollY || 0;
+        setSelectedSectionId(data.sectionId);
+        setLayoutHit({
+          sectionId: String(data.sectionId || ""),
+          nid: String(data.nid || ""),
+          tag: String(data.tag || "div"),
+          className: String(data.className || ""),
+          parentNid: data.parentNid ? String(data.parentNid) : null,
+          computed: data.computed || null,
+          parentComputed: data.parentComputed || null,
+        });
+        return;
+      }
+      if (data.type !== "cms-select-section") return;
       if (typeof data.sectionId !== "string") return;
       const win = iframeRef.current?.contentWindow;
       if (win) scrollRestore.current = win.scrollY || 0;
       setSelectedSectionId(data.sectionId);
       setPanelTab("content");
+      setLayoutHit(null);
     }
     window.addEventListener("message", onMessage);
     return () => window.removeEventListener("message", onMessage);
   }, []);
+
+  function applyLayoutClass(nextClass: string) {
+    if (!layoutHit) return;
+    const { sectionId, nid } = layoutHit;
+    const cleaned = nextClass
+      .replace(/\bis-layout-selected\b/g, "")
+      .replace(/\s+/g, " ")
+      .trim();
+    onChange((prev) =>
+      prev.map((s) => {
+        if (s.id !== sectionId) return s;
+        const base = s.templateBlock?.defaultHtml || "";
+        const parsed = parseStoredContent(s.content, base);
+        const stamped = stampLayoutNids(parsed.layoutHtml || base);
+        const layoutHtml = setClassAtNid(stamped, nid, cleaned);
+        return {
+          ...s,
+          content: serializeContent({
+            fields: parsed.fields,
+            layoutHtml,
+          }),
+        };
+      }),
+    );
+    setLayoutHit((h) => (h ? { ...h, className: cleaned } : h));
+    const doc = iframeRef.current?.contentDocument;
+    const el = doc?.querySelector(`[data-cms-nid="${nid}"]`) as HTMLElement | null;
+    if (el) {
+      el.className = `${cleaned}${cleaned ? " " : ""}is-layout-selected`;
+    }
+  }
+
+  function jumpLayoutParent() {
+    if (!layoutHit?.parentNid) return;
+    const doc = iframeRef.current?.contentDocument;
+    const el = doc?.querySelector(
+      `[data-cms-nid="${layoutHit.parentNid}"]`,
+    ) as HTMLElement | null;
+    el?.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
+  }
 
   function setField(key: string, value: string) {
     setFields({ [key]: value });
@@ -843,11 +932,15 @@ export function VisualPageBuilder({
       prev.map((s) => {
         if (s.id !== sectionId) return s;
         const html = s.templateBlock?.defaultHtml || "";
-        const fields = {
-          ...parseStoredContent(s.content, html).fields,
-          ...updates,
+        const parsed = parseStoredContent(s.content, html);
+        const fields = { ...parsed.fields, ...updates };
+        return {
+          ...s,
+          content: serializeContent({
+            fields,
+            layoutHtml: parsed.layoutHtml,
+          }),
         };
-        return { ...s, content: serializeFields(fields) };
       }),
     );
   }
@@ -904,7 +997,8 @@ export function VisualPageBuilder({
 
   const deviceWidth =
     device === "desktop" ? "100%" : device === "tablet" ? "768px" : "390px";
-  const panelOpen = Boolean(selected);
+  const panelOpen =
+    editorMode === "layout" ? Boolean(layoutHit) : Boolean(selected);
 
   return (
     <div
@@ -1021,7 +1115,39 @@ export function VisualPageBuilder({
         }}
         aria-hidden={!panelOpen}
       >
-        {selected && (
+        {editorMode === "layout" && layoutHit && (
+          <>
+            <div className="flex items-start justify-between gap-3 border-b border-slate-100 px-4 py-3">
+              <div className="min-w-0">
+                <p className="text-[11px] uppercase tracking-wide text-slate-400">
+                  Layout
+                </p>
+                <h2 className="truncate font-semibold text-slate-900">
+                  &lt;{layoutHit.tag}&gt;
+                </h2>
+              </div>
+              <button
+                type="button"
+                onClick={() => setLayoutHit(null)}
+                className="rounded-lg border border-slate-200 px-2 py-1 text-xs text-slate-600 hover:bg-slate-50"
+              >
+                Close
+              </button>
+            </div>
+            <div className="flex-1 overflow-y-auto px-4 py-4">
+              <TailwindStylePanel
+                tag={layoutHit.tag}
+                className={layoutHit.className}
+                computed={layoutHit.computed}
+                parentComputed={layoutHit.parentComputed}
+                parentNid={layoutHit.parentNid}
+                onChange={applyLayoutClass}
+                onJumpParent={jumpLayoutParent}
+              />
+            </div>
+          </>
+        )}
+        {editorMode !== "layout" && selected && (
           <>
             <div className="flex items-start justify-between gap-3 border-b border-slate-100 px-4 py-3">
               <div className="min-w-0">

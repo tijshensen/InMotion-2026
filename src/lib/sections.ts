@@ -18,6 +18,7 @@
 
 import { TAILWIND_SHELL } from "./bootstrap-to-tailwind";
 import { normalizeInsertHtml } from "./insert-html";
+import { stampLayoutNids } from "./layout-html";
 import {
   resolveInternalLinks,
   type LinkablePage,
@@ -41,6 +42,8 @@ export type SectionField = {
 export type SectionFieldsPayload = {
   v: 1;
   fields: Record<string, string>;
+  /** Page-instance Tailwind/HTML layout (class strings live on elements). */
+  layoutHtml?: string;
 };
 
 export const META = {
@@ -236,7 +239,13 @@ export function parseStoredContent(
   try {
     const data = JSON.parse(content);
     if (data && typeof data === "object" && data.v === 1 && data.fields) {
-      return { v: 1, fields: { ...data.fields } };
+      return {
+        v: 1,
+        fields: { ...data.fields },
+        ...(typeof data.layoutHtml === "string" && data.layoutHtml
+          ? { layoutHtml: data.layoutHtml }
+          : {}),
+      };
     }
     if (Array.isArray(data) && templateHtml) {
       const defs = parseSectionFields(templateHtml);
@@ -265,7 +274,24 @@ export function parseStoredContent(
 }
 
 export function serializeFields(fields: Record<string, string>): string {
-  return JSON.stringify({ v: 1, fields });
+  return serializeContent({ fields });
+}
+
+export function serializeContent(payload: {
+  fields: Record<string, string>;
+  layoutHtml?: string;
+}): string {
+  const out: SectionFieldsPayload = { v: 1, fields: payload.fields };
+  if (payload.layoutHtml?.trim()) out.layoutHtml = payload.layoutHtml;
+  return JSON.stringify(out);
+}
+
+export function resolveSectionTemplate(
+  templateHtml: string,
+  contentJson: string,
+): string {
+  const parsed = parseStoredContent(contentJson, templateHtml);
+  return parsed.layoutHtml?.trim() || templateHtml;
 }
 
 function escapeHtml(s: string) {
@@ -287,11 +313,15 @@ export function renderSectionHtml(
   templateHtml: string,
   contentJson: string,
   sectionCss?: string,
+  opts?: { keepNids?: boolean },
 ): string {
   const normalized = normalizeSectionHtml(templateHtml);
-  const { fields } = parseStoredContent(contentJson, normalized);
-  const defs = parseSectionFields(normalized);
-  let html = normalized;
+  const parsed = parseStoredContent(contentJson, normalized);
+  const { fields } = parsed;
+  let source = normalizeSectionHtml(parsed.layoutHtml || normalized);
+  if (opts?.keepNids) source = stampLayoutNids(source);
+  const defs = parseSectionFields(source);
+  let html = source;
 
   for (const def of defs) {
     const value = cleanFieldValue(fields[def.key] ?? def.defaultValue ?? "");
@@ -386,6 +416,10 @@ export function renderSectionHtml(
     html = `<div class="cms-section"><style>${sectionCss}</style>${html}</div>`;
   }
 
+  if (!opts?.keepNids) {
+    html = html.replace(/\s*data-cms-nid=(["'])[^"']*\1/gi, "");
+  }
+
   return html;
 }
 
@@ -423,7 +457,9 @@ export function renderSectionHtmlForEditor(
     origin?: string;
   },
 ): string {
-  let body = renderSectionHtml(templateHtml, contentJson, sectionCss);
+  let body = renderSectionHtml(templateHtml, contentJson, sectionCss, {
+    keepNids: true,
+  });
   if (opts?.siteSlug && opts.linkPages?.length) {
     body = resolveInternalLinks(body, opts.siteSlug, opts.linkPages);
   }
@@ -591,6 +627,16 @@ export function buildEditorPreviewHtml(opts: {
     opacity: 1;
   }
   .cms-edit-body { pointer-events: none; }
+  html[data-cms-mode="layout"] .cms-edit-body { pointer-events: auto; }
+  html[data-cms-mode="layout"] .cms-edit-section { cursor: default; }
+  html[data-cms-mode="layout"] .cms-edit-body [data-cms-nid]:hover {
+    outline: 1px dashed #60a5fa;
+    outline-offset: 1px;
+  }
+  html[data-cms-mode="layout"] .cms-edit-body .is-layout-selected {
+    outline: 2px solid #2563eb !important;
+    outline-offset: 2px;
+  }
   .cms-edit-body img {
     max-width: 100%;
     height: auto;
@@ -636,6 +682,62 @@ export function buildEditorPreviewHtml(opts: {
     } catch (e) {}
   }
   document.addEventListener("click", function (e) {
+    var mode = document.documentElement.getAttribute("data-cms-mode") || "content";
+    if (mode === "layout") {
+      e.preventDefault();
+      e.stopPropagation();
+      var hit = e.target;
+      if (!hit || !hit.closest) return;
+      var section = hit.closest(".cms-edit-section");
+      var body = hit.closest(".cms-edit-body");
+      if (!section || !body) return;
+      if (hit === body || hit.classList && hit.classList.contains("cms-edit-badge")) {
+        hit = body.querySelector("[data-cms-nid]") || body.firstElementChild || hit;
+      }
+      var node = hit.closest ? hit.closest("[data-cms-nid]") : hit;
+      if (!node || !body.contains(node)) {
+        node = body.querySelector("[data-cms-nid]");
+      }
+      if (!node) return;
+      var all = document.querySelectorAll(".is-layout-selected");
+      for (var i = 0; i < all.length; i++) all[i].classList.remove("is-layout-selected");
+      node.classList.add("is-layout-selected");
+      var parent = node.parentElement;
+      while (parent && parent !== body && !parent.getAttribute("data-cms-nid")) {
+        parent = parent.parentElement;
+      }
+      function box(el) {
+        if (!el) return null;
+        var cs = window.getComputedStyle(el);
+        return {
+          display: cs.display,
+          padding: cs.padding,
+          margin: cs.margin,
+          fontSize: cs.fontSize,
+          fontWeight: cs.fontWeight,
+          lineHeight: cs.lineHeight,
+          color: cs.color,
+          backgroundColor: cs.backgroundColor,
+          textAlign: cs.textAlign,
+          borderRadius: cs.borderRadius,
+          boxShadow: cs.boxShadow === "none" ? "" : cs.boxShadow
+        };
+      }
+      var cls = (node.getAttribute("class") || "").replace(/\\bis-layout-selected\\b/g, "").trim();
+      try {
+        window.parent.postMessage({
+          type: "cms-select-element",
+          sectionId: section.getAttribute("data-section-id"),
+          nid: node.getAttribute("data-cms-nid"),
+          tag: node.tagName.toLowerCase(),
+          className: cls,
+          parentNid: parent && parent.getAttribute ? parent.getAttribute("data-cms-nid") : null,
+          computed: box(node),
+          parentComputed: box(parent && parent !== body ? parent : null)
+        }, "*");
+      } catch (err) {}
+      return;
+    }
     var el = e.target;
     while (el && el !== document && !(el.getAttribute && el.getAttribute("data-section-id"))) {
       el = el.parentNode;

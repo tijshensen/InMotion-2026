@@ -16,10 +16,14 @@ import {
 } from "react";
 
 export type CanvasDevice = "desktop" | "tablet" | "phone";
+export type EditorMode = "content" | "layout";
 
 export type EditorChromeState = {
   device: CanvasDevice;
   setDevice: (d: CanvasDevice) => void;
+  editorMode?: EditorMode;
+  setEditorMode?: (m: EditorMode) => void;
+  layoutModeAvailable?: boolean;
   /** @deprecated Autosave — kept optional for status display only */
   onSave?: () => void;
   saving: boolean;

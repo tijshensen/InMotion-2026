@@ -11,6 +11,7 @@ import { parseStoredContent } from "@/lib/sections";
 import {
   useRegisterEditorChrome,
   type CanvasDevice,
+  type EditorMode,
 } from "@/components/editor-chrome-context";
 
 type TemplateBlock = {
@@ -44,6 +45,7 @@ type Props = {
   menuHtml: string;
   inserts: { tag: string; content: string }[];
   linkPages: LinkPageOption[];
+  cssFramework: string;
 };
 
 const AUTOSAVE_MS = 400;
@@ -68,13 +70,15 @@ function snapshotPayload(snap: Snapshot) {
     isDefault: snap.isDefault,
     sections: snap.sections.map((s, i) => {
       const html = s.templateBlock?.defaultHtml || "";
+      const parsed = parseStoredContent(s.content, html);
       return {
         id: s.id,
         templateBlockId: s.templateBlockId,
         sortOrder: i,
         isHidden: s.isHidden,
         css: s.css,
-        fields: parseStoredContent(s.content, html).fields,
+        fields: parsed.fields,
+        layoutHtml: parsed.layoutHtml,
       };
     }),
   };
@@ -89,6 +93,7 @@ export function PageEditor({
   menuHtml,
   inserts,
   linkPages,
+  cssFramework,
 }: Props) {
   const router = useRouter();
   const [title, setTitle] = useState(page.title);
@@ -103,6 +108,8 @@ export function PageEditor({
   const [showMeta, setShowMeta] = useState(false);
   const [device, setDevice] = useState<CanvasDevice>("desktop");
   const [showAdd, setShowAdd] = useState(false);
+  const [editorMode, setEditorMode] = useState<EditorMode>("content");
+  const layoutModeAvailable = (cssFramework || "").toLowerCase() === "tailwind";
 
   const skipFirstSave = useRef(true);
   const snapRef = useRef<Snapshot>({
@@ -257,12 +264,24 @@ export function PageEditor({
       showMeta,
       setShowMeta,
       showAdd,
+      editorMode: layoutModeAvailable ? editorMode : "content",
+      setEditorMode,
+      layoutModeAvailable,
       onDelete: () => {
         void onDelete();
       },
       onAddSection: () => setShowAdd((v) => !v),
     }),
-    [device, saving, status, showMeta, showAdd, onDelete],
+    [
+      device,
+      saving,
+      status,
+      showMeta,
+      showAdd,
+      onDelete,
+      editorMode,
+      layoutModeAvailable,
+    ],
   );
 
   useRegisterEditorChrome(chrome);
@@ -304,6 +323,7 @@ export function PageEditor({
           chromeMode
           showAdd={showAdd}
           onShowAddChange={setShowAdd}
+          editorMode={layoutModeAvailable ? editorMode : "content"}
         />
       </div>
 
