@@ -64,12 +64,36 @@ export async function fetchPageHtml(url: string): Promise<string> {
   return cleaned.slice(0, 80_000);
 }
 
+const DEFAULT_MENU_SNIPPET = `<ul class="cms-menu flex flex-col md:flex-row md:flex-wrap md:items-center">
+<menu type="head">
+<li class="[[currentindicator]]"><a class="block px-3 py-2 text-sm font-medium" href="[[href]]">[[title]]</a></li>
+</menu>
+<menu type="head-with-dropdown">
+<li class="group relative [[currentindicator]]">
+  <a class="block px-3 py-2 text-sm font-medium" href="[[href]]">[[title]]</a>
+  <ul class="cms-submenu hidden flex-col md:absolute md:left-0 md:top-full md:z-50 md:min-w-[14rem] md:rounded-lg md:border md:bg-white md:py-1 md:shadow-lg md:group-hover:flex">
+    <menuitem type="dropdown">
+    <li><a class="block px-3 py-2 text-sm" href="[[href]]">[[title]]</a></li>
+    </menuitem>
+  </ul>
+</li>
+</menu>
+</ul>`;
+
+const DEFAULT_SUBMENU_SNIPPET = `<ul>
+<menuitem type="submenu">
+<li class="[[currentindicator]]"><a href="[[href]]">[[title]]</a></li>
+</menuitem>
+</ul>`;
+
 const SYSTEM = `You convert a homepage's HTML into a CMSinMotion site using Tailwind CSS.
 
 Return ONLY valid JSON (no markdown) with this shape:
 {
   "siteTitle": "string",
   "coreHtml": "full HTML document for the Home page template (header + footer + tokens)",
+  "menuHtml": "menu item snippet for {{menu}}",
+  "submenuHtml": "submenu item snippet for {{submenu}}",
   "sections": [
     { "name": "Hero", "html": "section markup with CMS markers" }
   ]
@@ -80,7 +104,12 @@ Rules:
   <script src="https://cdn.tailwindcss.com"></script> in <head> of coreHtml.
 - coreHtml MUST include exactly these tokens:
   {{page.title}} {{page.metaDescription}} {{site.title}} {{menu}} {{sections}}
-- Put site-wide header (logo, nav) and footer in coreHtml. Use {{menu}} for the nav.
+- Put site-wide header (logo, nav) and footer in coreHtml. Use {{menu}} for the nav (do not hard-code page links).
+- menuHtml is NOT the live menu. It is a reusable item pattern matching the header style in coreHtml:
+  <menu type="head">…[[href]] [[title]] [[currentindicator]]…</menu>
+  <menu type="head-with-dropdown">… plus <menuitem type="dropdown">…</menuitem> …</menu>
+- submenuHtml uses <menuitem type="submenu"> with the same tokens.
+- Match the source nav's look (colors, spacing) with Tailwind, but keep those MotionCMS tags so the Menu builder can fill the tree later.
 - Split the main content into 3–8 named sections. Each section is a self-contained HTML fragment (no html/body).
 - In section HTML, wrap EVERY editable headline, short line, body copy, and image with CMS markers:
   <singleline name="Headline">Example headline</singleline>
@@ -95,6 +124,8 @@ Rules:
 export type ImportPlan = {
   siteTitle: string;
   coreHtml: string;
+  menuHtml: string;
+  submenuHtml: string;
   sections: { name: string; html: string }[];
 };
 
@@ -141,7 +172,20 @@ ${sourceHtml}`,
     throw new Error("Grok did not return any sections");
   }
 
-  return { siteTitle, coreHtml, sections };
+  const menuHtml = String(parsed.menuHtml || "").trim();
+  const submenuHtml = String(parsed.submenuHtml || "").trim();
+
+  return {
+    siteTitle,
+    coreHtml,
+    menuHtml:
+      /<menu\b/i.test(menuHtml) || /<menuitem\b/i.test(menuHtml)
+        ? menuHtml
+        : DEFAULT_MENU_SNIPPET,
+    submenuHtml:
+      /<menuitem\b/i.test(submenuHtml) ? submenuHtml : DEFAULT_SUBMENU_SNIPPET,
+    sections,
+  };
 }
 
 async function uniquePageSlug(
@@ -200,6 +244,19 @@ export async function applyImportPlanAsTemplate(opts: {
     });
   }
 
+  if (
+    (opts.plan.menuHtml || opts.plan.submenuHtml) &&
+    !(set.menuHtml || "").trim()
+  ) {
+    await prisma.templateSet.update({
+      where: { id: set.id },
+      data: {
+        menuHtml: opts.plan.menuHtml || set.menuHtml,
+        submenuHtml: opts.plan.submenuHtml || set.submenuHtml,
+      },
+    });
+  }
+
   const template = await prisma.template.create({
     data: {
       templateSetId: set.id,
@@ -208,8 +265,8 @@ export async function applyImportPlanAsTemplate(opts: {
         opts.templateName || opts.plan.siteTitle || "Imported",
       ),
       coreHtml: opts.plan.coreHtml,
-      menuHtml: "",
-      submenuHtml: "",
+      menuHtml: opts.plan.menuHtml || "",
+      submenuHtml: opts.plan.submenuHtml || "",
     },
   });
 
