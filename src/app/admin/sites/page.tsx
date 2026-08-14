@@ -7,6 +7,7 @@ import {
 } from "@/lib/access";
 import { prisma } from "@/lib/db";
 import { getImportPrompt } from "@/lib/import-from-url";
+import { getActiveSiteId } from "@/lib/site-context";
 import { SitesAdminClient } from "./sites-admin-client";
 
 export default async function SitesAdminPage() {
@@ -42,6 +43,7 @@ export default async function SitesAdminPage() {
     ? await listOwnedOrganizations(user.id)
     : [];
   const importPrompt = await getImportPrompt();
+  const activeSiteId = (await getActiveSiteId()) || sites[0]?.id || "";
 
   return (
     <SitesAdminClient
@@ -49,6 +51,7 @@ export default async function SitesAdminPage() {
       isSuperadmin={isPlatformSuperadmin(user)}
       importPrompt={importPrompt}
       hasXaiKey={Boolean(process.env.XAI_API_KEY)}
+      activeSiteId={activeSiteId}
       organizations={organizations.map((o) => ({
         id: o.id,
         name: o.name,

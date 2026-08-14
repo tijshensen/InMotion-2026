@@ -36,6 +36,7 @@ type Props = {
   isSuperadmin: boolean;
   importPrompt: string;
   hasXaiKey: boolean;
+  activeSiteId: string;
   organizations: Org[];
 };
 
@@ -45,6 +46,7 @@ export function SitesAdminClient({
   isSuperadmin,
   importPrompt,
   hasXaiKey,
+  activeSiteId,
   organizations,
 }: Props) {
   const router = useRouter();
@@ -65,6 +67,28 @@ export function SitesAdminClient({
   const [prompt, setPrompt] = useState(importPrompt);
   const [savePrompt, setSavePrompt] = useState(false);
   const [importing, setImporting] = useState(false);
+  const [selectedId, setSelectedId] = useState(activeSiteId);
+
+  useEffect(() => {
+    setSelectedId(activeSiteId);
+  }, [activeSiteId]);
+
+  async function selectSite(siteId: string) {
+    if (siteId === selectedId) return;
+    setSelectedId(siteId);
+    try {
+      const res = await fetch("/api/sites/active", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ siteId }),
+      });
+      if (!res.ok) throw new Error("Could not switch website");
+      router.refresh();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not switch website");
+      setSelectedId(activeSiteId);
+    }
+  }
 
   async function onCreate(e: React.FormEvent) {
     e.preventDefault();
@@ -140,8 +164,8 @@ export function SitesAdminClient({
         <div>
           <h1 className="text-2xl font-semibold">Websites</h1>
           <p className="text-slate-500 mt-1 text-sm max-w-2xl">
-            Set the public title, logo, and the Cloudflare project name used in
-            the live URL.
+            Click a website to work on it. Pages, media, and publish then
+            use that site.
           </p>
         </div>
         {canCreate && (
@@ -344,7 +368,12 @@ export function SitesAdminClient({
 
       <div className="grid gap-4">
         {sites.map((site) => (
-          <SiteEditor key={site.id} site={site} />
+          <SiteEditor
+            key={site.id}
+            site={site}
+            selected={site.id === selectedId}
+            onSelect={() => void selectSite(site.id)}
+          />
         ))}
         {sites.length === 0 && (
           <p className="text-slate-500 text-sm">
@@ -359,7 +388,15 @@ export function SitesAdminClient({
   );
 }
 
-function SiteEditor({ site }: { site: SiteCard }) {
+function SiteEditor({
+  site,
+  selected,
+  onSelect,
+}: {
+  site: SiteCard;
+  selected: boolean;
+  onSelect: () => void;
+}) {
   const router = useRouter();
   const [title, setTitle] = useState(site.siteTitle || site.name);
   const [project, setProject] = useState(
@@ -423,7 +460,8 @@ function SiteEditor({ site }: { site: SiteCard }) {
     await patch({ cloudflareProject: next }, "project");
   }
 
-  async function focusSite() {
+  async function openPages() {
+    onSelect();
     await fetch("/api/sites/active", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -434,12 +472,25 @@ function SiteEditor({ site }: { site: SiteCard }) {
   }
 
   return (
-    <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+    <div
+      aria-current={selected ? "true" : undefined}
+      onClick={onSelect}
+      className={[
+        "rounded-xl border p-5 shadow-sm cursor-pointer transition-colors",
+        selected
+          ? "border-blue-500 bg-blue-50 ring-2 ring-blue-200"
+          : "border-slate-200 bg-white hover:border-slate-300",
+      ].join(" ")}
+    >
       <div className="flex flex-col gap-5 sm:flex-row sm:items-start">
         <div className="shrink-0">
           <button
             type="button"
-            onClick={() => setMediaOpen(true)}
+            onClick={(e) => {
+              e.stopPropagation();
+              onSelect();
+              setMediaOpen(true);
+            }}
             className="group relative h-20 w-28 overflow-hidden rounded-lg border border-slate-200 bg-slate-50"
             title="Change logo"
           >
@@ -462,6 +513,17 @@ function SiteEditor({ site }: { site: SiteCard }) {
         </div>
 
         <div className="min-w-0 flex-1 space-y-3">
+          <div className="flex items-center justify-between gap-2">
+            {selected ? (
+              <span className="rounded-full bg-blue-600 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-white">
+                Active
+              </span>
+            ) : (
+              <span className="text-[10px] uppercase tracking-wide text-slate-400">
+                Click to work on this site
+              </span>
+            )}
+          </div>
           <label className="block">
             <span className="text-[11px] uppercase tracking-wide text-slate-400">
               Website title
@@ -469,6 +531,8 @@ function SiteEditor({ site }: { site: SiteCard }) {
             <input
               value={title}
               onChange={(e) => setTitle(e.target.value)}
+              onClick={(e) => e.stopPropagation()}
+              onFocus={onSelect}
               onBlur={() => void saveTitle()}
               onKeyDown={(e) => {
                 if (e.key === "Enter") {
@@ -493,6 +557,8 @@ function SiteEditor({ site }: { site: SiteCard }) {
                     setProject(e.target.value);
                     setError(null);
                   }}
+                  onClick={(e) => e.stopPropagation()}
+                  onFocus={onSelect}
                   onBlur={() => void saveProject()}
                   onKeyDown={(e) => {
                     if (e.key === "Enter") {
@@ -527,7 +593,10 @@ function SiteEditor({ site }: { site: SiteCard }) {
           <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-slate-500">
             <button
               type="button"
-              onClick={() => void focusSite()}
+              onClick={(e) => {
+                e.stopPropagation();
+                void openPages();
+              }}
               className="text-blue-700 hover:underline"
             >
               Pages
