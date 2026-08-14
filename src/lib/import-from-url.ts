@@ -88,7 +88,9 @@ const DEFAULT_SUBMENU_SNIPPET = `<ul>
 
 const SYSTEM = `You convert a homepage's HTML into a CMSinMotion site using Tailwind CSS.
 
-Return ONLY valid JSON (no markdown) with this shape:
+Return ONLY valid JSON (no markdown, no comments). Escape every double
+quote inside string values as \\". HTML attributes must be written as
+class=\\"foo\\" not class="foo". Use \\n for newlines inside strings.
 {
   "siteTitle": "string",
   "coreHtml": "full HTML document for the Home page template (header + footer + tokens)",
@@ -151,6 +153,7 @@ ${opts.prompt.trim()}
 ${sourceHtml}`,
     temperature: 0.35,
     timeoutMs: 180_000,
+    json: true,
   });
 
   const parsed = extractJsonObject(raw) as Partial<ImportPlan>;
