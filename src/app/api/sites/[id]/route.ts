@@ -3,7 +3,7 @@ import { z } from "zod";
 import { getSessionUser } from "@/lib/auth";
 import { assertSiteAccess } from "@/lib/access";
 import { prisma } from "@/lib/db";
-import { sanitizePagesProjectName } from "@/lib/cloudflare-pages";
+import { pagesProjectError } from "@/lib/pages-project-name";
 
 type Ctx = { params: Promise<{ id: string }> };
 
@@ -11,6 +11,8 @@ const patchSchema = z.object({
   cloudflareProject: z.string().max(58).optional(),
   domain: z.string().max(200).optional().nullable(),
   name: z.string().min(1).max(120).optional(),
+  siteTitle: z.string().max(200).optional(),
+  logoPath: z.string().max(500).optional(),
 });
 
 export async function PATCH(req: Request, ctx: Ctx) {
@@ -29,19 +31,43 @@ export async function PATCH(req: Request, ctx: Ctx) {
       cloudflareProject?: string;
       domain?: string | null;
       name?: string;
+      siteTitle?: string;
+      logoPath?: string;
     } = {};
     if (body.cloudflareProject !== undefined) {
-      data.cloudflareProject = body.cloudflareProject.trim()
-        ? sanitizePagesProjectName(body.cloudflareProject)
-        : "";
+      const project = body.cloudflareProject.trim().toLowerCase();
+      const invalid = pagesProjectError(project);
+      if (invalid) {
+        return NextResponse.json({ error: invalid }, { status: 400 });
+      }
+      data.cloudflareProject = project;
     }
     if (body.domain !== undefined) data.domain = body.domain;
-    if (body.name !== undefined) data.name = body.name;
+    if (body.name !== undefined) data.name = body.name.trim();
+    if (body.siteTitle !== undefined) data.siteTitle = body.siteTitle.trim();
+    if (body.logoPath !== undefined) {
+      const logo = body.logoPath.trim();
+      if (logo && !logo.startsWith("/uploads/") && !/^https?:\/\//i.test(logo)) {
+        return NextResponse.json(
+          { error: "Logo must be an uploaded file or URL" },
+          { status: 400 },
+        );
+      }
+      data.logoPath = logo;
+    }
 
     const site = await prisma.site.update({
       where: { id },
       data,
     });
+
+    if (body.siteTitle !== undefined) {
+      await prisma.language.updateMany({
+        where: { siteId: id, isDefault: true },
+        data: { siteTitle: data.siteTitle || "" },
+      });
+    }
+
     return NextResponse.json(site);
   } catch (e) {
     if (e instanceof z.ZodError) {

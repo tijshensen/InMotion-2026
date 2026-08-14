@@ -61,6 +61,8 @@ export default async function SitesAdminPage() {
       sites={sites.map((site) => ({
         id: site.id,
         name: site.name,
+        siteTitle: site.siteTitle || site.name,
+        logoPath: site.logoPath || "",
         slug: site.slug,
         domain: site.domain,
         cssFramework: site.cssFramework || "none",

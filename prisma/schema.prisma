@@ -81,6 +81,7 @@ model Site {
   slug        String   @unique
   domain      String?
   siteTitle   String   @default("")
+  logoPath    String   @default("")
   isActive    Boolean  @default(true)
   /// Visual CSS framework for this site: bootstrap | tailwind | none | custom
   cssFramework String  @default("none")

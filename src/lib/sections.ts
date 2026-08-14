@@ -24,7 +24,11 @@ import {
   resolveInternalLinks,
   type LinkablePage,
 } from "./internal-links";
-import { isFullThemeShell, rewriteThemeAssetUrls } from "./theme";
+import {
+  applySiteLogo,
+  isFullThemeShell,
+  rewriteThemeAssetUrls,
+} from "./theme";
 import { detectVideoSource, isLikelyMediaSrc } from "./video-media";
 
 export type FieldType = "singleline" | "multiline" | "image" | "file";
@@ -605,6 +609,7 @@ export function buildEditorPreviewHtml(opts: {
   inserts?: { tag: string; content: string }[];
   selectedSectionId?: string | null;
   siteSlug?: string;
+  logoPath?: string;
   linkPages?: LinkablePage[];
   /** window.location.origin — required so /uploads images load in srcDoc */
   origin?: string;
@@ -653,6 +658,7 @@ export function buildEditorPreviewHtml(opts: {
   }
 
   shell = rewriteThemeAssetUrls(shell, opts.siteSlug || "kiekeboe");
+  shell = applySiteLogo(shell, opts.logoPath, opts.siteSlug);
   if (origin) {
     shell = absolutizeRootUrls(shell, origin);
   }

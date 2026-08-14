@@ -60,6 +60,25 @@ export function rewriteThemeAssetUrls(
   return s;
 }
 
+/** Swap theme logo.png / {{site.logo}} for the uploaded website logo. */
+export function applySiteLogo(
+  html: string,
+  logoPath: string | null | undefined,
+  themeSlug?: string,
+): string {
+  if (!html) return html;
+  const path = (logoPath || "").trim();
+  const fallback =
+    themeSlug ? `/theme/${themeSlug}/images/logo.png` : "";
+  const src = path || fallback;
+  let s = html.replaceAll("{{site.logo}}", src);
+  if (path && themeSlug) {
+    s = s.replaceAll(`/theme/${themeSlug}/images/logo.png`, path);
+    s = s.replaceAll(`/theme/${themeSlug}/images/logo.PNG`, path);
+  }
+  return s;
+}
+
 /**
  * Normalize a raw legacy template `core` HTML into our token system
  * while preserving the full theme markup.

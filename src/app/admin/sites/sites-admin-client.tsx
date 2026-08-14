@@ -2,13 +2,20 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { MediaPicker, type MediaItem } from "@/components/media-picker";
+import {
+  pagesDevUrl,
+  pagesProjectError,
+} from "@/lib/pages-project-name";
 
 type Org = { id: string; name: string; slug: string };
 
 type SiteCard = {
   id: string;
   name: string;
+  siteTitle: string;
+  logoPath: string;
   slug: string;
   domain: string | null;
   cssFramework: string;
@@ -48,7 +55,6 @@ export function SitesAdminClient({
   isSuperadmin,
   importPrompt,
   hasXaiKey,
-  hasCloudflare,
   cloudflare,
   organizations,
 }: Props) {
@@ -56,7 +62,6 @@ export function SitesAdminClient({
   const [showForm, setShowForm] = useState(false);
   const [showImport, setShowImport] = useState(false);
   const [busy, setBusy] = useState(false);
-  const [publishingId, setPublishingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [name, setName] = useState("");
   const [slug, setSlug] = useState("");
@@ -140,67 +145,14 @@ export function SitesAdminClient({
     }
   }
 
-  async function focusSite(siteId: string) {
-    await fetch("/api/sites/active", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ siteId }),
-    });
-    router.push("/admin/pages");
-    router.refresh();
-  }
-
-  async function publishToCloudflare(siteId: string) {
-    setPublishingId(siteId);
-    setError(null);
-    try {
-      const res = await fetch(`/api/sites/${siteId}/generate`, {
-        method: "POST",
-      });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(data.error || "Publish failed");
-      if (data.cloudflare?.error) {
-        throw new Error(data.cloudflare.error);
-      }
-      if (data.cloudflare?.url) {
-        window.open(data.cloudflare.url, "_blank", "noreferrer");
-      }
-      router.refresh();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Publish failed");
-    } finally {
-      setPublishingId(null);
-    }
-  }
-
-  async function saveCloudflareProject(siteId: string, project: string) {
-    setBusy(true);
-    setError(null);
-    try {
-      const res = await fetch(`/api/sites/${siteId}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ cloudflareProject: project }),
-      });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(data.error || "Could not save project name");
-      router.refresh();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Save failed");
-    } finally {
-      setBusy(false);
-    }
-  }
-
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <h1 className="text-2xl font-semibold">Websites</h1>
           <p className="text-slate-500 mt-1 text-sm max-w-2xl">
-            Each site has its own CSS framework, templates, pages, and theme.
-            Organization owners can create multiple websites under their
-            workspace.
+            Set the public title, logo, and the Cloudflare project name used in
+            the live URL.
           </p>
         </div>
         {canCreate && (
@@ -212,7 +164,7 @@ export function SitesAdminClient({
                 setShowForm(false);
                 setError(null);
               }}
-              className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-medium hover:bg-slate-50"
+              className="text-sm text-slate-600 hover:text-slate-900"
             >
               {showImport ? "Cancel" : "Import from URL"}
             </button>
@@ -223,7 +175,7 @@ export function SitesAdminClient({
                 setShowImport(false);
                 setError(null);
               }}
-              className="rounded-lg bg-blue-600 px-3 py-2 text-sm font-medium text-white hover:bg-blue-700"
+              className="text-sm font-medium text-blue-700 hover:text-blue-900"
             >
               {showForm ? "Cancel" : "New website"}
             </button>
@@ -238,25 +190,19 @@ export function SitesAdminClient({
       )}
 
       {cloudflare.ok ? (
-        <p className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-900">
-          Cloudflare Pages is connected (account …{cloudflare.accountIdSuffix}
+        <p className="text-xs text-slate-400">
+          Cloudflare connected · …{cloudflare.accountIdSuffix}
           {cloudflare.projectCount != null
-            ? ` · ${cloudflare.projectCount} existing project(s)`
+            ? ` · ${cloudflare.projectCount} project(s)`
             : ""}
-          ). Use <strong>Publish to Cloudflare</strong> on a site below, or the
-          button in the top bar.
         </p>
       ) : cloudflare.configured ? (
-        <p className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800">
-          Cloudflare credentials were found but the API check failed:{" "}
-          {cloudflare.error}
+        <p className="text-xs text-red-600">
+          Cloudflare API check failed: {cloudflare.error}
         </p>
       ) : (
-        <p className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
-          Cloudflare Pages is not configured. Set{" "}
-          <code className="text-xs">CLOUDFLARE_API_TOKEN</code> and{" "}
-          <code className="text-xs">CLOUDFLARE_ACCOUNT_ID</code> in{" "}
-          <code className="text-xs">.env</code>, then restart the server.
+        <p className="text-xs text-slate-400">
+          Cloudflare Pages is not configured yet.
         </p>
       )}
 
@@ -276,16 +222,7 @@ export function SitesAdminClient({
           {!hasXaiKey && (
             <p className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
               Set <code className="text-xs">XAI_API_KEY</code> in{" "}
-              <code className="text-xs">.env</code> (from{" "}
-              <a
-                href="https://console.x.ai"
-                target="_blank"
-                rel="noreferrer"
-                className="underline"
-              >
-                console.x.ai
-              </a>
-              ) then restart the server.
+              <code className="text-xs">.env</code> then restart the server.
             </p>
           )}
           <div className="grid gap-3 sm:grid-cols-2">
@@ -384,12 +321,7 @@ export function SitesAdminClient({
               <input
                 required
                 value={name}
-                onChange={(e) => {
-                  setName(e.target.value);
-                  if (!slug) {
-                    /* leave slug empty to auto */
-                  }
-                }}
+                onChange={(e) => setName(e.target.value)}
                 className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2"
                 placeholder="My new site"
               />
@@ -417,9 +349,7 @@ export function SitesAdminClient({
               <select
                 value={cssFramework}
                 onChange={(e) =>
-                  setCssFramework(
-                    e.target.value as typeof cssFramework,
-                  )
+                  setCssFramework(e.target.value as typeof cssFramework)
                 }
                 className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2"
               >
@@ -442,120 +372,7 @@ export function SitesAdminClient({
 
       <div className="grid gap-4">
         {sites.map((site) => (
-          <div
-            key={site.id}
-            className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm flex flex-wrap items-center justify-between gap-4"
-          >
-            <div>
-              <h2 className="font-semibold text-lg">{site.name}</h2>
-              <p className="text-sm text-slate-500">
-                slug: <code className="text-xs">{site.slug}</code>
-                {site.domain ? ` · ${site.domain}` : ""}
-              </p>
-              {site.organizationName && (
-                <p className="text-xs text-slate-400 mt-0.5">
-                  Org: {site.organizationName}
-                </p>
-              )}
-              <p className="text-xs text-slate-400 mt-1">
-                Framework:{" "}
-                <strong className="text-slate-600">
-                  {site.cssFramework || "none"}
-                </strong>
-                {" · "}
-                theme:{" "}
-                <code className="text-xs">
-                  /theme/{site.themeSlug || site.slug}/
-                </code>
-                {site.lastGeneratedAt
-                  ? ` · generated ${new Date(site.lastGeneratedAt).toLocaleString()}`
-                  : " · not generated yet"}
-              </p>
-              <p className="text-xs text-slate-400 mt-1">
-                {site.pageCount} pages · {site.memberCount} members ·{" "}
-                {site.languages} · {site.insertCount} inserts
-              </p>
-              <form
-                className="mt-3 flex flex-wrap items-center gap-2"
-                onSubmit={(e) => {
-                  e.preventDefault();
-                  const fd = new FormData(e.currentTarget);
-                  void saveCloudflareProject(
-                    site.id,
-                    String(fd.get("project") || ""),
-                  );
-                }}
-              >
-                <label className="text-[11px] text-slate-500 shrink-0">
-                  Pages project
-                </label>
-                <input
-                  name="project"
-                  defaultValue={site.cloudflareProject || site.slug}
-                  placeholder={site.slug}
-                  className="rounded-md border border-slate-200 px-2 py-1 text-xs font-mono w-44"
-                />
-                <span className="text-[11px] text-slate-400">.pages.dev</span>
-                <button
-                  type="submit"
-                  disabled={busy}
-                  className="rounded-md border border-slate-200 px-2 py-1 text-[11px] hover:bg-slate-50 disabled:opacity-50"
-                >
-                  Save
-                </button>
-              </form>
-            </div>
-            <div className="flex flex-wrap gap-2">
-              <Link
-                href={`/s/${site.slug}`}
-                target="_blank"
-                className="rounded-lg border border-slate-200 px-3 py-2 text-sm hover:bg-slate-50"
-              >
-                Live ↗
-              </Link>
-              {site.lastGeneratedAt && (
-                <Link
-                  href={`/sites/${site.slug}`}
-                  target="_blank"
-                  className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-800 hover:bg-emerald-100"
-                >
-                  Generated ↗
-                </Link>
-              )}
-              {site.cloudflareUrl && (
-                <a
-                  href={site.cloudflareUrl}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="rounded-lg border border-orange-200 bg-orange-50 px-3 py-2 text-sm text-orange-900 hover:bg-orange-100"
-                >
-                  Cloudflare ↗
-                </a>
-              )}
-              <button
-                type="button"
-                disabled={!hasCloudflare || publishingId === site.id}
-                onClick={() => void publishToCloudflare(site.id)}
-                className="rounded-lg bg-orange-600 px-3 py-2 text-sm text-white hover:bg-orange-500 disabled:opacity-50"
-                title={
-                  hasCloudflare
-                    ? "Generate static HTML and deploy to Cloudflare Pages"
-                    : "Cloudflare is not connected yet"
-                }
-              >
-                {publishingId === site.id
-                  ? "Publishing…"
-                  : "Publish to Cloudflare"}
-              </button>
-              <button
-                type="button"
-                onClick={() => void focusSite(site.id)}
-                className="rounded-lg bg-blue-600 px-3 py-2 text-sm text-white hover:bg-blue-700"
-              >
-                Manage pages
-              </button>
-            </div>
-          </div>
+          <SiteEditor key={site.id} site={site} />
         ))}
         {sites.length === 0 && (
           <p className="text-slate-500 text-sm">
@@ -566,6 +383,224 @@ export function SitesAdminClient({
           </p>
         )}
       </div>
+    </div>
+  );
+}
+
+function SiteEditor({ site }: { site: SiteCard }) {
+  const router = useRouter();
+  const [title, setTitle] = useState(site.siteTitle || site.name);
+  const [project, setProject] = useState(
+    site.cloudflareProject || site.slug,
+  );
+  const [logo, setLogo] = useState(site.logoPath || "");
+  const [saving, setSaving] = useState<string | null>(null);
+  const [saved, setSaved] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [mediaOpen, setMediaOpen] = useState(false);
+
+  useEffect(() => {
+    setTitle(site.siteTitle || site.name);
+    setProject(site.cloudflareProject || site.slug);
+    setLogo(site.logoPath || "");
+  }, [site.siteTitle, site.name, site.cloudflareProject, site.slug, site.logoPath]);
+
+  const projectErr = pagesProjectError(project);
+  const liveProject = (project.trim() || site.slug).toLowerCase();
+  const previewUrl = pagesDevUrl(liveProject);
+
+  async function patch(body: Record<string, string>, field: string) {
+    setSaving(field);
+    setError(null);
+    setSaved(null);
+    try {
+      const res = await fetch(`/api/sites/${site.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || "Could not save");
+      setSaved(field);
+      router.refresh();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Save failed");
+    } finally {
+      setSaving(null);
+    }
+  }
+
+  async function saveTitle() {
+    const next = title.trim();
+    if (!next) {
+      setError("Website title cannot be empty");
+      return;
+    }
+    if (next === (site.siteTitle || site.name)) return;
+    await patch({ siteTitle: next, name: next }, "title");
+  }
+
+  async function saveProject() {
+    const next = project.trim().toLowerCase();
+    const invalid = pagesProjectError(next);
+    if (invalid) {
+      setError(invalid);
+      return;
+    }
+    if (next === (site.cloudflareProject || site.slug)) return;
+    await patch({ cloudflareProject: next }, "project");
+  }
+
+  async function focusSite() {
+    await fetch("/api/sites/active", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ siteId: site.id }),
+    });
+    router.push("/admin/pages");
+    router.refresh();
+  }
+
+  return (
+    <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+      <div className="flex flex-col gap-5 sm:flex-row sm:items-start">
+        <div className="shrink-0">
+          <button
+            type="button"
+            onClick={() => setMediaOpen(true)}
+            className="group relative h-20 w-28 overflow-hidden rounded-lg border border-slate-200 bg-slate-50"
+            title="Change logo"
+          >
+            {logo ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={logo}
+                alt=""
+                className="h-full w-full object-contain p-1"
+              />
+            ) : (
+              <span className="flex h-full items-center justify-center px-2 text-center text-[11px] text-slate-400">
+                Add logo
+              </span>
+            )}
+            <span className="absolute inset-x-0 bottom-0 bg-slate-900/60 py-0.5 text-center text-[10px] text-white opacity-0 group-hover:opacity-100">
+              Change
+            </span>
+          </button>
+        </div>
+
+        <div className="min-w-0 flex-1 space-y-3">
+          <label className="block">
+            <span className="text-[11px] uppercase tracking-wide text-slate-400">
+              Website title
+            </span>
+            <input
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+              onBlur={() => void saveTitle()}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  e.preventDefault();
+                  (e.currentTarget as HTMLInputElement).blur();
+                }
+              }}
+              className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm font-medium"
+              placeholder="Shown in the header and browser tab"
+            />
+          </label>
+
+          <div>
+            <label className="block">
+              <span className="text-[11px] uppercase tracking-wide text-slate-400">
+                Project name
+              </span>
+              <div className="mt-1 flex flex-wrap items-center gap-2">
+                <input
+                  value={project}
+                  onChange={(e) => {
+                    setProject(e.target.value);
+                    setError(null);
+                  }}
+                  onBlur={() => void saveProject()}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      e.preventDefault();
+                      (e.currentTarget as HTMLInputElement).blur();
+                    }
+                  }}
+                  spellCheck={false}
+                  className={[
+                    "min-w-[12rem] flex-1 rounded-lg border px-3 py-2 font-mono text-sm",
+                    projectErr
+                      ? "border-red-300 bg-red-50"
+                      : "border-slate-200",
+                  ].join(" ")}
+                  placeholder={site.slug}
+                  aria-invalid={Boolean(projectErr)}
+                />
+                <span className="text-xs text-slate-400">.pages.dev</span>
+              </div>
+            </label>
+            {projectErr ? (
+              <p className="mt-1 text-xs text-red-600">{projectErr}</p>
+            ) : (
+              <p className="mt-1 text-xs text-slate-400">
+                Live URL{" "}
+                <span className="font-mono text-slate-500">{previewUrl}</span>
+                {site.domain ? ` · ${site.domain}` : ""}
+              </p>
+            )}
+          </div>
+
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-slate-500">
+            <button
+              type="button"
+              onClick={() => void focusSite()}
+              className="text-blue-700 hover:underline"
+            >
+              Pages
+            </button>
+            <Link
+              href={`/s/${site.slug}`}
+              target="_blank"
+              className="hover:underline"
+            >
+              Preview
+            </Link>
+            {site.cloudflareUrl && (
+              <a
+                href={site.cloudflareUrl}
+                target="_blank"
+                rel="noreferrer"
+                className="hover:underline"
+              >
+                Cloudflare
+              </a>
+            )}
+            {site.organizationName && (
+              <span className="text-slate-400">{site.organizationName}</span>
+            )}
+            {saving && <span className="text-slate-400">Saving…</span>}
+            {!saving && saved && <span className="text-emerald-600">Saved</span>}
+          </div>
+          {error && <p className="text-xs text-red-600">{error}</p>}
+        </div>
+      </div>
+
+      {mediaOpen && (
+        <MediaPicker
+          open
+          siteId={site.id}
+          acceptKinds="image"
+          onClose={() => setMediaOpen(false)}
+          onSelect={(asset: MediaItem) => {
+            const path = asset.path || "";
+            setLogo(path);
+            setMediaOpen(false);
+            void patch({ logoPath: path }, "logo");
+          }}
+        />
+      )}
     </div>
   );
 }

@@ -1,0 +1,2 @@
+-- AlterTable
+ALTER TABLE "Site" ADD COLUMN "logoPath" TEXT NOT NULL DEFAULT '';

@@ -18,6 +18,7 @@ import {
 import { renderAllSections } from "./sections";
 import { ensureSiteStylesheets } from "./site-context";
 import {
+  applySiteLogo,
   isFullThemeShell,
   renderBootstrapMenuHtml,
   rewriteThemeAssetUrls,
@@ -169,6 +170,11 @@ export async function renderPublicPage({
   );
   sectionsHtml = resolveInternalLinks(sectionsHtml, site.slug, linkPages);
   sectionsHtml = rewriteThemeAssetUrls(sectionsHtml, site.slug);
+  sectionsHtml = applySiteLogo(
+    sectionsHtml,
+    site.logoPath,
+    site.themeSlug || site.slug,
+  );
 
   // Wrap sections so theme CSS spacing still applies
   if (fullTheme && !sectionsHtml.includes("cms-page-sections")) {
@@ -176,6 +182,7 @@ export async function renderPublicPage({
   }
 
   html = rewriteThemeAssetUrls(html, site.slug);
+  html = applySiteLogo(html, site.logoPath, site.themeSlug || site.slug);
 
   html = html
     .replaceAll("{{page.title}}", escapeHtml(page.title))
