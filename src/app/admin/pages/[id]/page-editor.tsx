@@ -106,7 +106,18 @@ export function PageEditor({
   const [status, setStatus] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [showMeta, setShowMeta] = useState(false);
-  const [device, setDevice] = useState<CanvasDevice>("phone");
+  const [device, setDevice] = useState<CanvasDevice>(() => {
+    if (typeof window === "undefined") return "phone";
+    try {
+      const stored = sessionStorage.getItem("cms_editor_device");
+      if (stored === "phone" || stored === "tablet" || stored === "desktop") {
+        return stored;
+      }
+    } catch {
+      /* ignore */
+    }
+    return "phone";
+  });
   const [showAdd, setShowAdd] = useState(false);
   const [editorMode, setEditorMode] = useState<EditorMode>(() => {
     if (typeof window === "undefined") return "content";
@@ -132,6 +143,14 @@ export function PageEditor({
       /* ignore */
     }
   }, [editorMode]);
+
+  useEffect(() => {
+    try {
+      sessionStorage.setItem("cms_editor_device", device);
+    } catch {
+      /* ignore */
+    }
+  }, [device]);
   const layoutModeAvailable = (cssFramework || "").toLowerCase() === "tailwind";
 
   const skipFirstSave = useRef(true);
