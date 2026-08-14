@@ -42,6 +42,15 @@ export function StylePresetBar({
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [applying, setApplying] = useState(false);
   const [undoHint, setUndoHint] = useState<string | null>(null);
+  const [lastApply, setLastApply] = useState<
+    | { kind: "local"; prevClass: string; name: string }
+    | { kind: "bulk"; presetId: string; name: string; count: number }
+    | null
+  >(null);
+
+  useEffect(() => {
+    setLastApply((cur) => (cur?.kind === "local" ? null : cur));
+  }, [nid, pageBlockId]);
 
   useEffect(() => {
     let cancelled = false;
@@ -63,6 +72,18 @@ export function StylePresetBar({
     setMatches([]);
     setSelected(new Set());
     setUndoHint(null);
+  }
+
+  function applyPresetToElement(p: SavedPreset) {
+    const prev = className;
+    if (normalize(prev) === normalize(p.className)) return;
+    onApplyClass(p.className);
+    setLastApply({ kind: "local", prevClass: prev, name: p.name });
+    setUndoHint(null);
+  }
+
+  function normalize(s: string) {
+    return s.split(/\s+/).filter(Boolean).join(" ");
   }
 
   async function savePreset() {
@@ -127,7 +148,16 @@ export function StylePresetBar({
         updatedPageBlocks: data.updatedPageBlocks || [],
         updatedTemplateBlocks: data.updatedTemplateBlocks || [],
       });
-      setUndoHint(`Replaced ${data.replaced} element${data.replaced === 1 ? "" : "s"}`);
+      const count = Number(data.replaced) || hits.length;
+      setUndoHint(
+        `Replaced ${count} element${count === 1 ? "" : "s"}`,
+      );
+      setLastApply({
+        kind: "bulk",
+        presetId: preset.id,
+        name: preset.name,
+        count,
+      });
       setMatches([]);
     } catch {
       setError("Replace failed");
@@ -137,14 +167,20 @@ export function StylePresetBar({
   }
 
   async function undoLast() {
-    if (!preset) return;
+    if (!lastApply) return;
+    if (lastApply.kind === "local") {
+      onApplyClass(lastApply.prevClass);
+      setLastApply(null);
+      setUndoHint(null);
+      return;
+    }
     setApplying(true);
     try {
       const res = await fetch(`/api/sites/${siteId}/style-presets/undo`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "same-origin",
-        body: JSON.stringify({ presetId: preset.id }),
+        body: JSON.stringify({ presetId: lastApply.presetId }),
       });
       const data = await res.json();
       if (res.ok) {
@@ -157,6 +193,7 @@ export function StylePresetBar({
             ? `Undid ${data.restored} change${data.restored === 1 ? "" : "s"}`
             : "Nothing to undo",
         );
+        setLastApply(null);
       }
     } finally {
       setApplying(false);
@@ -194,7 +231,7 @@ export function StylePresetBar({
             defaultValue=""
             onChange={(e) => {
               const p = presets.find((x) => x.id === e.target.value);
-              if (p) onApplyClass(p.className);
+              if (p) applyPresetToElement(p);
               e.target.value = "";
             }}
           >
@@ -207,6 +244,23 @@ export function StylePresetBar({
           </select>
         ) : null}
       </div>
+      {lastApply ? (
+        <div className="flex items-center justify-between gap-2 rounded-md bg-slate-50 px-2 py-1.5 text-[11px] text-slate-600">
+          <span className="min-w-0 truncate">
+            {lastApply.kind === "local"
+              ? `Applied “${lastApply.name}”`
+              : `Replaced ${lastApply.count} with “${lastApply.name}”`}
+          </span>
+          <button
+            type="button"
+            disabled={applying}
+            onClick={() => void undoLast()}
+            className="shrink-0 font-medium text-blue-700 underline disabled:opacity-40"
+          >
+            Undo
+          </button>
+        </div>
+      ) : null}
 
       {open ? (
         <div className="fixed inset-0 z-[70] flex items-start justify-center bg-slate-900/40 px-4 py-10">
