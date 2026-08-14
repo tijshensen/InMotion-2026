@@ -220,6 +220,26 @@ export function AdminShell({
     activeSite && (localHasChanges || hasCloudflare),
   );
 
+  function livePageUrl(page: AdminPageOption): string | null {
+    if (!activeSite) return null;
+    const path =
+      page.isDefault || page.slug === "home" || !page.slug
+        ? ""
+        : `/${page.slug.replace(/^\//, "")}`;
+    if (activeSite.domain) {
+      const host = activeSite.domain
+        .replace(/^https?:\/\//, "")
+        .replace(/\/$/, "");
+      return `https://${host}${path || "/"}`;
+    }
+    if (activeSite.cloudflareUrl) {
+      return `${activeSite.cloudflareUrl.replace(/\/$/, "")}${path || "/"}`;
+    }
+    const origin =
+      typeof window !== "undefined" ? window.location.origin : "";
+    return `${origin}/s/${activeSite.slug}${path}`;
+  }
+
   return (
     <div
       className={[
@@ -289,11 +309,17 @@ export function AdminShell({
           </div>
         )}
 
+        <div
+          className={[
+            "flex min-w-0 items-center gap-2",
+            isCanvas ? "" : "flex-1 max-w-md",
+          ].join(" ")}
+        >
         {/* Filterable page selector — dropdown uses fixed positioning so header overflow doesn't clip it */}
         <div
           className={[
-            "relative min-w-0 flex-1",
-            isCanvas ? "max-w-sm" : "max-w-md",
+            "relative min-w-0",
+            isCanvas ? "w-[16rem] sm:w-[18rem]" : "flex-1",
           ].join(" ")}
           ref={pageMenuRef}
         >
@@ -378,7 +404,7 @@ export function AdminShell({
                     setPageMenuOpen(false);
                     setPageQuery("");
                   }}
-                  className="block px-3 py-2 text-xs text-slate-400 hover:bg-slate-800 hover:text-white"
+                  className="block px-3 py-2 text-xs font-medium text-slate-200 hover:bg-slate-800 hover:text-white"
                 >
                   All pages…
                 </Link>
@@ -395,8 +421,9 @@ export function AdminShell({
               )}
               {filteredPages.map((p) => {
                 const active = currentPage?.id === p.id;
+                const live = livePageUrl(p);
                 return (
-                  <li key={p.id}>
+                  <li key={p.id} className="flex items-stretch">
                     <button
                       type="button"
                       role="option"
@@ -407,7 +434,7 @@ export function AdminShell({
                         setPageQuery("");
                       }}
                       className={[
-                        "flex w-full flex-col items-start px-3 py-2 text-left hover:bg-slate-800",
+                        "flex min-w-0 flex-1 flex-col items-start px-3 py-2 text-left hover:bg-slate-800",
                         active ? "bg-slate-800/80" : "",
                       ].join(" ")}
                     >
@@ -428,25 +455,68 @@ export function AdminShell({
                         /{p.slug}
                       </span>
                     </button>
+                    {live ? (
+                      <a
+                        href={live}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        title="Open live page"
+                        onClick={(e) => e.stopPropagation()}
+                        className="flex shrink-0 items-center px-2.5 text-slate-400 hover:bg-slate-800 hover:text-white"
+                      >
+                        <svg
+                          width="14"
+                          height="14"
+                          viewBox="0 0 24 24"
+                          fill="none"
+                          stroke="currentColor"
+                          strokeWidth="2"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          aria-hidden
+                        >
+                          <path d="M18 13v6a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
+                          <polyline points="15 3 21 3 21 9" />
+                          <line x1="10" y1="14" x2="21" y2="3" />
+                        </svg>
+                        <span className="sr-only">Open live page</span>
+                      </a>
+                    ) : null}
                   </li>
                 );
               })}
             </ul>
           )}
         </div>
-
-        {/* Canvas controls: device + add section + settings + save */}
         {isCanvas && chrome && (
-          <div className="flex items-center gap-2 shrink-0">
+          <div className="flex rounded-lg border border-slate-700 p-0.5 text-[11px] shrink-0">
+            <button
+              type="button"
+              onClick={() => chrome.onAddSection?.()}
+              className={[
+                "rounded-md px-2 py-1 whitespace-nowrap",
+                chrome.showAdd
+                  ? "bg-white text-slate-900"
+                  : "text-slate-300 hover:text-white",
+              ].join(" ")}
+            >
+              + Add section
+            </button>
+          </div>
+        )}
+        </div>
+
+        {isCanvas && chrome && (
+          <div className="flex flex-1 items-center justify-center gap-2 min-w-0">
             {chrome.setEditorMode && (
               <div className="flex rounded-lg border border-slate-700 p-0.5 text-[11px]">
                 {(
                   [
+                    { id: "view" as const, label: "View" },
                     { id: "content" as const, label: "Content" },
                     ...(chrome.layoutModeAvailable
                       ? [{ id: "layout" as const, label: "Layout" }]
                       : []),
-                    { id: "view" as const, label: "View" },
                   ] as { id: EditorMode; label: string }[]
                 ).map(({ id, label }) => (
                   <button
@@ -488,49 +558,49 @@ export function AdminShell({
                 </button>
               ))}
             </div>
-            <button
-              type="button"
-              onClick={() => chrome.onAddSection?.()}
-              className={[
-                "rounded-lg border px-2.5 py-1.5 text-xs font-medium whitespace-nowrap",
-                chrome.showAdd
-                  ? "border-blue-500 bg-blue-600/20 text-blue-200"
-                  : "border-slate-600 bg-slate-800 text-white hover:bg-slate-700",
-              ].join(" ")}
-            >
-              + Add section
-            </button>
-            <button
-              type="button"
-              onClick={() => chrome.setShowMeta((v) => !v)}
-              className={[
-                "rounded-lg border px-2.5 py-1.5 text-xs whitespace-nowrap",
-                chrome.showMeta
-                  ? "border-blue-500 bg-blue-600/20 text-blue-200"
-                  : "border-slate-700 text-slate-300 hover:bg-slate-800",
-              ].join(" ")}
-            >
-              Page settings
-            </button>
-            {chrome.saveStatus && (
-              <span
-                className={[
-                  "text-[11px] hidden sm:inline whitespace-nowrap",
-                  chrome.saving
-                    ? "text-amber-300/90"
-                    : chrome.saveStatus === "Saved"
-                      ? "text-emerald-400/90"
-                      : "text-slate-400",
-                ].join(" ")}
-              >
-                {chrome.saveStatus}
-              </span>
-            )}
           </div>
         )}
 
-        {/* Publish menu */}
-        <div className="ml-auto relative shrink-0" ref={publishMenuRef}>
+        {/* Publish + page settings */}
+        <div
+          className={[
+            "relative shrink-0 flex items-center gap-2",
+            isCanvas ? "" : "ml-auto",
+          ].join(" ")}
+          ref={publishMenuRef}
+        >
+          {isCanvas && chrome && (
+            <>
+              {chrome.saveStatus && (
+                <span
+                  className={[
+                    "text-[11px] hidden sm:inline whitespace-nowrap",
+                    chrome.saving
+                      ? "text-amber-300/90"
+                      : chrome.saveStatus === "Saved"
+                        ? "text-emerald-400/90"
+                        : "text-slate-400",
+                  ].join(" ")}
+                >
+                  {chrome.saveStatus}
+                </span>
+              )}
+              <div className="flex rounded-lg border border-slate-700 p-0.5 text-[11px]">
+                <button
+                  type="button"
+                  onClick={() => chrome.setShowMeta((v) => !v)}
+                  className={[
+                    "rounded-md px-2 py-1 whitespace-nowrap",
+                    chrome.showMeta
+                      ? "bg-white text-slate-900"
+                      : "text-slate-300 hover:text-white",
+                  ].join(" ")}
+                >
+                  Page settings
+                </button>
+              </div>
+            </>
+          )}
           <button
             type="button"
             disabled={!activeSite || publishing}

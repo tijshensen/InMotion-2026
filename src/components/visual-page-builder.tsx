@@ -220,13 +220,13 @@ export function FieldEditors({
       {fields.map((f) => (
         <div
           key={f.key}
-          className="space-y-2 border-b border-slate-100 pb-5 last:border-0"
+          className="space-y-2 border-b border-slate-800 pb-5 last:border-0"
         >
           <div className="flex items-baseline justify-between gap-2">
-            <label className="text-sm font-medium text-slate-800">
+            <label className="text-sm font-medium text-slate-100">
               {f.label}
             </label>
-            <span className="text-[10px] uppercase tracking-wide text-slate-400">
+            <span className="text-[10px] uppercase tracking-wide text-slate-500">
               {f.type}
               {f.width ? ` · ${f.width}×${f.height || "auto"}` : ""}
               {f.type === "image" && f.width && f.height
@@ -249,7 +249,7 @@ export function FieldEditors({
                     end > start ? { key: f.key, start, end } : null,
                   );
                 }}
-                className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+                className="w-full rounded-lg border border-slate-700 bg-slate-800 px-3 py-2 text-sm text-white"
               />
               <TextLinkComposer
                 linkPages={linkPages}
@@ -295,7 +295,7 @@ export function FieldEditors({
           {f.type === "image" && (
             <div className="space-y-2">
               <div className="flex gap-3">
-                <div className="h-20 w-28 shrink-0 overflow-hidden rounded-lg border border-slate-200 bg-slate-50 flex items-center justify-center">
+                <div className="h-20 w-28 shrink-0 overflow-hidden rounded-lg border border-slate-700 bg-slate-800 flex items-center justify-center">
                   {displayValues[f.key] &&
                   displayValues[f.key] !== "." &&
                   displayValues[f.key] !== "#" ? (
@@ -320,7 +320,7 @@ export function FieldEditors({
                       onChange(f.key, v);
                     }}
                     placeholder="Image URL"
-                    className="w-full rounded-lg border border-slate-200 px-2 py-1.5 font-mono text-xs"
+                    className="w-full rounded-lg border border-slate-700 bg-slate-800 px-2 py-1.5 font-mono text-xs text-white"
                   />
                   <button
                     type="button"
@@ -336,7 +336,7 @@ export function FieldEditors({
                 placeholder="Alt text"
                 value={displayValues[f.key + META.alt] ?? f.alt ?? ""}
                 onChange={(e) => onChange(f.key + META.alt, e.target.value)}
-                className="w-full rounded-lg border border-slate-200 px-2 py-1.5 text-xs"
+                className="w-full rounded-lg border border-slate-700 bg-slate-800 px-2 py-1.5 text-xs text-white"
               />
               <TextLinkComposer
                 linkPages={linkPages}
@@ -375,7 +375,7 @@ export function FieldEditors({
                 placeholder="File URL / path"
                 value={displayValues[f.key] ?? ""}
                 onChange={(e) => onChange(f.key, e.target.value)}
-                className="w-full rounded-lg border border-slate-200 px-2 py-1.5 font-mono text-xs"
+                className="w-full rounded-lg border border-slate-700 bg-slate-800 px-2 py-1.5 font-mono text-xs text-white"
               />
               <input
                 type="text"
@@ -384,12 +384,12 @@ export function FieldEditors({
                 onChange={(e) =>
                   onChange(f.key + META.fileLabel, e.target.value)
                 }
-                className="w-full rounded-lg border border-slate-200 px-2 py-1.5 text-xs"
+                className="w-full rounded-lg border border-slate-700 bg-slate-800 px-2 py-1.5 text-xs text-white"
               />
               <button
                 type="button"
                 onClick={() => openMedia(f)}
-                className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs hover:bg-slate-50"
+                className="rounded-lg border border-slate-700 px-3 py-1.5 text-xs text-slate-200 hover:bg-slate-800"
               >
                 Pick from media…
               </button>
@@ -1140,7 +1140,7 @@ export function VisualPageBuilder({
       {/* Section editor — always below measured top bar */}
       <aside
         className={[
-          "fixed right-0 z-[55] flex w-full max-w-md flex-col border-l border-slate-200 bg-white shadow-2xl transition-transform duration-200 ease-out",
+          "cms-editor-panel fixed right-0 z-[55] flex w-full max-w-md flex-col border-l border-slate-800 bg-slate-900 text-slate-100 shadow-2xl transition-transform duration-200 ease-out",
           "bottom-0",
           panelOpen ? "translate-x-0" : "translate-x-full",
         ].join(" ")}
@@ -1153,12 +1153,12 @@ export function VisualPageBuilder({
       >
         {editorMode === "layout" && layoutHit && (
           <>
-            <div className="flex items-start justify-between gap-3 border-b border-slate-100 px-4 py-3">
+            <div className="flex items-start justify-between gap-3 border-b border-slate-800 px-4 py-3">
               <div className="min-w-0">
-                <p className="text-[11px] uppercase tracking-wide text-slate-400">
+                <p className="text-[11px] uppercase tracking-wide text-slate-500">
                   Layout
                 </p>
-                <h2 className="truncate font-semibold text-slate-900">
+                <h2 className="truncate font-semibold text-white">
                   &lt;{layoutHit.tag}&gt;
                 </h2>
               </div>
@@ -1168,7 +1168,7 @@ export function VisualPageBuilder({
                   skipAutoLayoutRef.current = true;
                   setLayoutHit(null);
                 }}
-                className="rounded-lg border border-slate-200 px-2 py-1 text-xs text-slate-600 hover:bg-slate-50"
+                className="rounded-lg border border-slate-700 px-2 py-1 text-xs text-slate-300 hover:bg-slate-800"
               >
                 Close
               </button>
@@ -1193,19 +1193,19 @@ export function VisualPageBuilder({
         )}
         {(editorMode !== "layout" || !layoutHit) && selected && (
           <>
-            <div className="flex items-start justify-between gap-3 border-b border-slate-100 px-4 py-3">
+            <div className="flex items-start justify-between gap-3 border-b border-slate-800 px-4 py-3">
               <div className="min-w-0">
-                <p className="text-[11px] uppercase tracking-wide text-slate-400">
+                <p className="text-[11px] uppercase tracking-wide text-slate-500">
                   Edit section
                 </p>
-                <h2 className="truncate font-semibold text-slate-900">
+                <h2 className="truncate font-semibold text-white">
                   {selected.templateBlock?.name || "Section"}
                 </h2>
               </div>
               <button
                 type="button"
                 onClick={() => setSelectedSectionId(null)}
-                className="rounded-lg border border-slate-200 px-2 py-1 text-xs text-slate-600 hover:bg-slate-50"
+                className="rounded-lg border border-slate-700 px-2 py-1 text-xs text-slate-300 hover:bg-slate-800"
               >
                 Close
               </button>
@@ -1257,22 +1257,22 @@ export function VisualPageBuilder({
               ) : null}
             </div>
 
-            <div className="flex flex-wrap gap-2 border-t border-slate-100 px-4 py-3">
+            <div className="flex flex-wrap gap-2 border-t border-slate-800 px-4 py-3">
               <button
                 type="button"
                 onClick={() => move(selected.id, -1)}
-                className="rounded-lg border border-slate-200 px-2.5 py-1.5 text-xs hover:bg-slate-50"
+                className="rounded-lg border border-slate-700 px-2.5 py-1.5 text-xs text-slate-200 hover:bg-slate-800"
               >
                 ↑ Up
               </button>
               <button
                 type="button"
                 onClick={() => move(selected.id, 1)}
-                className="rounded-lg border border-slate-200 px-2.5 py-1.5 text-xs hover:bg-slate-50"
+                className="rounded-lg border border-slate-700 px-2.5 py-1.5 text-xs text-slate-200 hover:bg-slate-800"
               >
                 ↓ Down
               </button>
-              <label className="flex items-center gap-1.5 text-xs text-slate-600 px-1">
+              <label className="flex items-center gap-1.5 text-xs text-slate-300 px-1">
                 <input
                   type="checkbox"
                   checked={selected.isHidden}
@@ -1291,7 +1291,7 @@ export function VisualPageBuilder({
               <button
                 type="button"
                 onClick={() => void removeSection(selected.id)}
-                className="ml-auto rounded-lg border border-red-100 px-2.5 py-1.5 text-xs text-red-600 hover:bg-red-50"
+                className="ml-auto rounded-lg border border-red-900/60 bg-red-950/40 px-2.5 py-1.5 text-xs text-red-300 hover:bg-red-950/70"
               >
                 Remove
               </button>

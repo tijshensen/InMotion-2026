@@ -43,7 +43,7 @@ function ToolbarButton({
         "inline-flex h-6 min-w-6 shrink-0 items-center justify-center rounded px-1 text-[11px] font-medium transition-colors",
         active
           ? "bg-blue-100 text-blue-800"
-          : "text-slate-600 hover:bg-slate-100",
+          : "text-slate-300 hover:bg-slate-700",
         disabled ? "opacity-40 cursor-not-allowed" : "",
       ].join(" ")}
     >
@@ -64,9 +64,9 @@ function Toolbar({
   onHtml: () => void;
 }) {
   return (
-    <div className="border-b border-slate-200 bg-slate-50">
+    <div className="border-b border-slate-700 bg-slate-800">
       <div className="flex flex-nowrap items-center justify-between gap-1 px-1.5 py-1">
-        <div className="flex shrink-0 rounded border border-slate-200 p-px text-[10px]">
+        <div className="flex shrink-0 rounded border border-slate-600 p-px text-[10px]">
           <button
             type="button"
             onClick={onVisual}
@@ -74,7 +74,7 @@ function Toolbar({
               "rounded px-1.5 py-0.5 font-medium",
               mode === "visual"
                 ? "bg-slate-900 text-white"
-                : "text-slate-600 hover:bg-white",
+                : "text-slate-400 hover:bg-slate-700",
             ].join(" ")}
           >
             Visual
@@ -86,7 +86,7 @@ function Toolbar({
               "rounded px-1.5 py-0.5 font-medium",
               mode === "html"
                 ? "bg-slate-900 text-white"
-                : "text-slate-600 hover:bg-white",
+                : "text-slate-400 hover:bg-slate-700",
             ].join(" ")}
           >
             HTML
@@ -144,7 +144,7 @@ function Toolbar({
             <span className="line-through">S</span>
           </ToolbarButton>
 
-          <span className="mx-0.5 h-4 w-px shrink-0 bg-slate-200" />
+          <span className="mx-0.5 h-4 w-px shrink-0 bg-slate-600" />
 
           <ToolbarButton
             title="Heading 2"
@@ -172,7 +172,7 @@ function Toolbar({
             ¶
           </ToolbarButton>
 
-          <span className="mx-0.5 h-4 w-px shrink-0 bg-slate-200" />
+          <span className="mx-0.5 h-4 w-px shrink-0 bg-slate-600" />
 
           <ToolbarButton
             title="Bullet list"
@@ -315,7 +315,7 @@ export function BlockEditor({
   }
 
   return (
-    <div className="overflow-hidden rounded-lg border border-slate-200">
+    <div className="overflow-hidden rounded-lg border border-slate-700 bg-slate-800">
       <Toolbar
         editor={editor}
         mode={mode}
@@ -331,7 +331,7 @@ export function BlockEditor({
           onChange={(e) => onHtmlChange(e.target.value)}
           rows={12}
           spellCheck={false}
-          className="w-full resize-y border-0 px-3 py-3 font-mono text-xs leading-relaxed text-slate-800 focus:outline-none focus:ring-0"
+          className="w-full resize-y border-0 bg-slate-800 px-3 py-3 font-mono text-xs leading-relaxed text-slate-100 focus:outline-none focus:ring-0"
           placeholder="HTML content"
         />
       )}
@@ -340,7 +340,7 @@ export function BlockEditor({
       editor &&
       linkPages.length > 0 &&
       (hasSelection || linkAttrs) ? (
-        <div className="border-t border-slate-100 px-2 py-2">
+        <div className="border-t border-slate-700 px-2 py-2">
           <TextLinkComposer
             linkPages={linkPages}
             canAdd={hasSelection}

@@ -173,3 +173,45 @@ body {
   border: 1px solid #e2e8f0;
   padding: 0.35rem 0.5rem;
 }
+
+/* Dark editor slide-in (Content / Layout) */
+.cms-editor-panel {
+  color-scheme: dark;
+  color: #e2e8f0;
+}
+
+.cms-editor-panel input:not([type="checkbox"]):not([type="radio"]):not([type="file"]),
+.cms-editor-panel select,
+.cms-editor-panel textarea {
+  background-color: #1e293b;
+  border-color: #334155;
+  color: #f8fafc;
+}
+
+.cms-editor-panel input::placeholder,
+.cms-editor-panel textarea::placeholder {
+  color: #64748b;
+}
+
+.cms-editor-panel .tiptap-editor,
+.cms-editor-panel .ProseMirror {
+  color: #e2e8f0;
+}
+
+.cms-editor-panel .tiptap-editor a {
+  color: #93c5fd;
+}
+
+.cms-editor-panel .tiptap-editor blockquote {
+  border-left-color: #475569;
+  color: #94a3b8;
+}
+
+.cms-editor-panel .tiptap-editor p code {
+  background: #334155;
+  color: #e2e8f0;
+}
+
+.cms-editor-panel .tiptap-editor p.is-editor-empty:first-child::before {
+  color: #64748b;
+}

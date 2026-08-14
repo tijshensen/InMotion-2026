@@ -86,7 +86,7 @@ export function TextLinkComposer({
       <button
         type="button"
         onClick={() => setOpen(true)}
-        className="rounded-md border border-slate-200 bg-white px-2 py-1 text-[11px] font-medium text-slate-700 hover:bg-slate-50"
+        className="rounded-md border border-slate-600 bg-slate-800 px-2 py-1 text-[11px] font-medium text-slate-200 hover:bg-slate-700"
       >
         Add link
       </button>
@@ -94,7 +94,7 @@ export function TextLinkComposer({
   }
 
   return (
-    <div className="space-y-2 rounded-lg border border-slate-200 bg-slate-50 p-3">
+    <div className="space-y-2 rounded-lg border border-slate-700 bg-slate-800 p-3">
       <div className="flex flex-wrap gap-1 text-[11px]">
         <button
           type="button"
@@ -106,7 +106,7 @@ export function TextLinkComposer({
             "rounded-md px-2 py-1 border",
             mode === "internal"
               ? "border-blue-600 bg-blue-600 text-white"
-              : "border-slate-200 bg-white text-slate-600",
+              : "border-slate-600 bg-slate-900 text-slate-300",
           ].join(" ")}
         >
           Internal page
@@ -120,7 +120,7 @@ export function TextLinkComposer({
             "rounded-md px-2 py-1 border",
             mode === "external"
               ? "border-blue-600 bg-blue-600 text-white"
-              : "border-slate-200 bg-white text-slate-600",
+              : "border-slate-600 bg-slate-900 text-slate-300",
           ].join(" ")}
         >
           External URL
@@ -134,7 +134,7 @@ export function TextLinkComposer({
             const page = linkPages.find((p) => p.id === e.target.value);
             if (page) setHref(encodeInternalLink(page));
           }}
-          className="w-full rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-xs"
+          className="w-full rounded-lg border border-slate-600 bg-slate-900 px-2 py-1.5 text-xs text-slate-100"
         >
           <option value="">Select a page…</option>
           {linkPages.map((p) => (
@@ -149,7 +149,7 @@ export function TextLinkComposer({
           placeholder="https://example.com"
           value={href}
           onChange={(e) => setHref(e.target.value)}
-          className="w-full rounded-lg border border-slate-200 bg-white px-2 py-1.5 font-mono text-xs"
+          className="w-full rounded-lg border border-slate-600 bg-slate-900 px-2 py-1.5 font-mono text-xs text-slate-100"
         />
       )}
 
@@ -157,7 +157,7 @@ export function TextLinkComposer({
         <select
           value={target}
           onChange={(e) => setTarget(e.target.value)}
-          className="w-full rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-xs"
+          className="w-full rounded-lg border border-slate-600 bg-slate-900 px-2 py-1.5 text-xs text-slate-100"
         >
           <option value="">Same window</option>
           <option value="_blank">New window</option>
@@ -167,7 +167,7 @@ export function TextLinkComposer({
           placeholder="Title (optional)"
           value={title}
           onChange={(e) => setTitle(e.target.value)}
-          className="w-full rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-xs"
+          className="w-full rounded-lg border border-slate-600 bg-slate-900 px-2 py-1.5 text-xs text-slate-100"
         />
       </div>
 
@@ -175,7 +175,7 @@ export function TextLinkComposer({
         <button
           type="button"
           onClick={() => setOpen(false)}
-          className="rounded-md px-2 py-1 text-[11px] text-slate-500 hover:text-slate-800"
+          className="rounded-md px-2 py-1 text-[11px] text-slate-400 hover:text-white"
         >
           Cancel
         </button>

@@ -221,13 +221,13 @@ export function StylePresetBar({
             setOpen(true);
           }}
           disabled={!className.trim()}
-          className="rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-[11px] font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-40"
+          className="rounded-md border border-slate-600 bg-slate-800 px-2.5 py-1.5 text-[11px] font-medium text-slate-200 hover:bg-slate-700 disabled:opacity-40"
         >
           Save as preset
         </button>
         {presets.length > 0 ? (
           <select
-            className="min-w-0 flex-1 rounded-md border border-slate-200 bg-white px-2 py-1.5 text-[11px] text-slate-700"
+            className="min-w-0 flex-1 rounded-md border border-slate-600 bg-slate-800 px-2 py-1.5 text-[11px] text-slate-200"
             defaultValue=""
             onChange={(e) => {
               const p = presets.find((x) => x.id === e.target.value);
@@ -245,7 +245,7 @@ export function StylePresetBar({
         ) : null}
       </div>
       {lastApply ? (
-        <div className="flex items-center justify-between gap-2 rounded-md bg-slate-50 px-2 py-1.5 text-[11px] text-slate-600">
+        <div className="flex items-center justify-between gap-2 rounded-md bg-slate-800 px-2 py-1.5 text-[11px] text-slate-300">
           <span className="min-w-0 truncate">
             {lastApply.kind === "local"
               ? `Applied “${lastApply.name}”`
@@ -264,8 +264,8 @@ export function StylePresetBar({
 
       {open ? (
         <div className="fixed inset-0 z-[70] flex items-start justify-center bg-slate-900/40 px-4 py-10">
-          <div className="flex max-h-[calc(100vh-5rem)] w-full max-w-lg flex-col overflow-hidden rounded-xl bg-white shadow-2xl">
-            <div className="flex items-start justify-between gap-3 border-b border-slate-100 px-4 py-3">
+          <div className="flex max-h-[calc(100vh-5rem)] w-full max-w-lg flex-col overflow-hidden rounded-xl bg-slate-900 text-slate-100 shadow-2xl">
+            <div className="flex items-start justify-between gap-3 border-b border-slate-800 px-4 py-3">
               <div>
                 <p className="text-[11px] uppercase tracking-wide text-slate-400">
                   Style preset
@@ -277,7 +277,7 @@ export function StylePresetBar({
               <button
                 type="button"
                 onClick={() => setOpen(false)}
-                className="rounded-lg border border-slate-200 px-2 py-1 text-xs text-slate-600 hover:bg-slate-50"
+                className="rounded-lg border border-slate-700 px-2 py-1 text-xs text-slate-300 hover:bg-slate-800"
               >
                 Close
               </button>
@@ -293,7 +293,7 @@ export function StylePresetBar({
                       value={name}
                       onChange={(e) => setName(e.target.value)}
                       placeholder="e.g. Buy Button"
-                      className="w-full rounded-md border border-slate-200 px-3 py-2 text-sm"
+                      className="w-full rounded-md border border-slate-700 bg-slate-800 px-3 py-2 text-sm text-white"
                     />
                   </label>
                   <p className="rounded-md bg-slate-50 px-3 py-2 font-mono text-[11px] text-slate-600 break-words">
@@ -301,7 +301,7 @@ export function StylePresetBar({
                   </p>
                 </>
               ) : undoHint && !matches.length ? (
-                <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-3 text-sm text-slate-700">
+                <div className="rounded-lg border border-slate-700 bg-slate-800 px-3 py-3 text-sm text-slate-200">
                   <p>{undoHint}.</p>
                   <button
                     type="button"
@@ -349,7 +349,7 @@ export function StylePresetBar({
                         <ul className="space-y-1.5">
                           {rows.map((m) => (
                             <li key={m.id}>
-                              <label className="flex items-start gap-2 rounded-md border border-slate-100 px-2 py-1.5 text-xs">
+                              <label className="flex items-start gap-2 rounded-md border border-slate-700 px-2 py-1.5 text-xs">
                                 <input
                                   type="checkbox"
                                   className="mt-0.5"
@@ -394,13 +394,13 @@ export function StylePresetBar({
               ) : null}
             </div>
 
-            <div className="flex flex-wrap items-center justify-end gap-2 border-t border-slate-100 px-4 py-3">
+            <div className="flex flex-wrap items-center justify-end gap-2 border-t border-slate-800 px-4 py-3">
               {!preset ? (
                 <>
                   <button
                     type="button"
                     onClick={() => setOpen(false)}
-                    className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs"
+                    className="rounded-lg border border-slate-700 px-3 py-1.5 text-xs text-slate-300"
                   >
                     Cancel
                   </button>
@@ -418,7 +418,7 @@ export function StylePresetBar({
                   <button
                     type="button"
                     onClick={() => setOpen(false)}
-                    className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs"
+                    className="rounded-lg border border-slate-700 px-3 py-1.5 text-xs text-slate-300"
                   >
                     Skip
                   </button>

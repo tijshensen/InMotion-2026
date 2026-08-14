@@ -87,7 +87,7 @@ function Field({
                 e.preventDefault();
                 onJump();
               }}
-              className="text-[10px] text-slate-400 underline hover:text-blue-600"
+              className="text-[10px] text-slate-400 underline hover:text-blue-400"
             >
               from parent
             </button>
@@ -107,9 +107,9 @@ function Field({
 }
 
 const selectCls =
-  "w-full rounded-md border border-slate-200 bg-white px-2 py-1.5 text-xs text-slate-800";
+  "w-full rounded-md border border-slate-700 bg-slate-800 px-2 py-1.5 text-xs text-slate-100";
 const selectInheritedCls =
-  "w-full rounded-md border border-slate-200 bg-slate-50 px-2 py-1.5 text-xs text-slate-400";
+  "w-full rounded-md border border-slate-700 bg-slate-800/70 px-2 py-1.5 text-xs text-slate-400";
 
 export function TailwindStylePanel({
   tag,
@@ -219,7 +219,7 @@ export function TailwindStylePanel({
           value={className}
           onChange={(e) => onChange(e.target.value)}
           rows={3}
-          className="mt-1 w-full rounded-md border border-slate-200 px-2 py-1.5 font-mono text-[11px] text-slate-800"
+          className="mt-1 w-full rounded-md border border-slate-700 bg-slate-800 px-2 py-1.5 font-mono text-[11px] text-slate-100"
           spellCheck={false}
         />
         <div className="mt-2">
@@ -237,12 +237,12 @@ export function TailwindStylePanel({
 
       <section className="space-y-2">
         <div className="flex items-center justify-between gap-2">
-          <h4 className="text-xs font-semibold text-slate-700">State</h4>
+          <h4 className="text-xs font-semibold text-slate-200">State</h4>
           <span className="font-mono text-[10px] text-slate-400">
             {variant || "base"} · {deviceLabel}
           </span>
         </div>
-        <div className="flex rounded-lg border border-slate-200 p-0.5 text-[11px]">
+        <div className="flex rounded-lg border border-slate-700 p-0.5 text-[11px]">
           {STATES.map((s) => (
             <button
               key={s.id}
@@ -252,7 +252,7 @@ export function TailwindStylePanel({
                 "flex-1 rounded-md px-2 py-1",
                 state === s.id
                   ? "bg-slate-900 text-white"
-                  : "text-slate-500 hover:text-slate-800",
+                  : "text-slate-400 hover:text-white",
               ].join(" ")}
             >
               {s.label}
@@ -266,7 +266,7 @@ export function TailwindStylePanel({
       </section>
 
       <section className="space-y-2">
-        <h4 className="text-xs font-semibold text-slate-700">Spacing</h4>
+        <h4 className="text-xs font-semibold text-slate-200">Spacing</h4>
         <div className="grid grid-cols-4 gap-2">
           {spaceSelect("p", computed?.padding)}
           {spaceSelect("px")}
@@ -287,7 +287,7 @@ export function TailwindStylePanel({
       </section>
 
       <section className="space-y-2">
-        <h4 className="text-xs font-semibold text-slate-700">Flex / Grid</h4>
+        <h4 className="text-xs font-semibold text-slate-200">Flex / Grid</h4>
         <div className="grid grid-cols-2 gap-2">
           <Field
             label="display"
@@ -385,7 +385,7 @@ export function TailwindStylePanel({
       </section>
 
       <section className="space-y-2">
-        <h4 className="text-xs font-semibold text-slate-700">Size</h4>
+        <h4 className="text-xs font-semibold text-slate-200">Size</h4>
         <div className="grid grid-cols-2 gap-2">
           {prefixSelect("width", "w", WIDTHS)}
           {prefixSelect("max width", "max-w", MAX_WIDTHS)}
@@ -394,7 +394,7 @@ export function TailwindStylePanel({
       </section>
 
       <section className="space-y-2">
-        <h4 className="text-xs font-semibold text-slate-700">Typography</h4>
+        <h4 className="text-xs font-semibold text-slate-200">Typography</h4>
         <div className="grid grid-cols-2 gap-2">
           <Field
             label="size"
@@ -499,7 +499,7 @@ export function TailwindStylePanel({
       </section>
 
       <section className="space-y-2">
-        <h4 className="text-xs font-semibold text-slate-700">Colors</h4>
+        <h4 className="text-xs font-semibold text-slate-200">Colors</h4>
         <div className="grid grid-cols-2 gap-2">
           <Field
             label="background"
@@ -553,7 +553,7 @@ export function TailwindStylePanel({
       </section>
 
       <section className="space-y-2">
-        <h4 className="text-xs font-semibold text-slate-700">Borders</h4>
+        <h4 className="text-xs font-semibold text-slate-200">Borders</h4>
         <div className="grid grid-cols-2 gap-2">
           <Field
             label="width"
@@ -619,7 +619,7 @@ export function TailwindStylePanel({
       </section>
 
       {computed ? (
-        <section className="space-y-2 border-t border-slate-100 pt-4">
+        <section className="space-y-2 border-t border-slate-800 pt-4">
           <h4 className="text-xs font-semibold text-slate-500">
             Computed / Inherited
           </h4>
