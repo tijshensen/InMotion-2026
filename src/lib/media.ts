@@ -286,7 +286,9 @@ export async function cropAndResizeImage(opts: {
   const buffer = await sharp(abs)
     .extract({ left: cropLeft, top: cropTop, width: cropW, height: cropH })
     .resize(targetWidth, targetHeight, {
-      fit: "fill",
+      // Crop region keeps the photo's aspect; cover into the slot without stretching
+      fit: "cover",
+      position: "centre",
       withoutEnlargement: false,
     })
     .jpeg({ quality: 90, mozjpeg: true })
