@@ -878,9 +878,8 @@ export function VisualPageBuilder({
       }
       const block = await res.json();
       onChange((prev) => [...prev, block]);
-      setSelectedSectionId(block.id);
-      setPanelTab("content");
-      setShowAdd(false);
+      // Keep the Add section slide open so several layouts can be added
+      // in a row. Edit a section by clicking it on the canvas.
     } finally {
       setAdding(false);
     }
