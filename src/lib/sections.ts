@@ -264,19 +264,16 @@ export function parseStoredContent(
   try {
     const data = JSON.parse(content);
     if (data && typeof data === "object" && data.v === 1 && data.fields) {
-      return rebasePayloadOnTemplate(
-        {
-          v: 1,
-          fields: { ...data.fields },
-          ...(typeof data.layoutHtml === "string" && data.layoutHtml
-            ? { layoutHtml: data.layoutHtml }
-            : {}),
-          ...(Array.isArray(data.repeatGroups) && data.repeatGroups.length
-            ? { repeatGroups: data.repeatGroups as RepeatGroupDef[] }
-            : {}),
-        },
-        templateHtml,
-      );
+      return {
+        v: 1,
+        fields: { ...data.fields },
+        ...(typeof data.layoutHtml === "string" && data.layoutHtml
+          ? { layoutHtml: data.layoutHtml }
+          : {}),
+        ...(Array.isArray(data.repeatGroups) && data.repeatGroups.length
+          ? { repeatGroups: data.repeatGroups as RepeatGroupDef[] }
+          : {}),
+      };
     }
     if (Array.isArray(data) && templateHtml) {
       const defs = parseSectionFields(templateHtml);
@@ -302,50 +299,6 @@ export function parseStoredContent(
   }
 
   return { v: 1, fields: {} };
-}
-
-/**
- * If the section catalog gained new CMS markers (e.g. wrapping 1/2/3/4
- * in <singleline>), page instances still hold an older layoutHtml /
- * repeat item snapshot. Rebase onto the template so the new fields
- * appear in the editor and render.
- */
-export function layoutMissingTemplateMarkers(
-  layoutHtml: string | undefined,
-  templateHtml: string | undefined,
-): boolean {
-  if (!templateHtml?.trim()) return false;
-  const wanted = parseSectionFields(templateHtml);
-  if (!wanted.length) return false;
-  const have = parseSectionFields(layoutHtml || "");
-  const haveKeys = new Set(have.map((f) => f.key));
-  return wanted.some((f) => !haveKeys.has(f.key));
-}
-
-function rebasePayloadOnTemplate(
-  payload: SectionFieldsPayload,
-  templateHtml?: string,
-): SectionFieldsPayload {
-  if (!templateHtml?.trim()) return payload;
-  const source = payload.layoutHtml || templateHtml;
-  if (!layoutMissingTemplateMarkers(source, templateHtml)) {
-    return payload;
-  }
-  const fields = {
-    ...emptyFieldsFromTemplate(templateHtml),
-    ...payload.fields,
-  };
-  const next: SectionFieldsPayload = {
-    v: 1,
-    fields,
-    layoutHtml: stampLayoutNids(normalizeSectionHtml(templateHtml)),
-  };
-  // Catalog HTML is the full section (no {{repeat}} slot) — stop using
-  // the frozen item snapshot so 1/2/3/4 become real fields.
-  if (/\{\{repeat:/i.test(templateHtml) && payload.repeatGroups?.length) {
-    next.repeatGroups = payload.repeatGroups;
-  }
-  return next;
 }
 
 export function serializeFields(fields: Record<string, string>): string {

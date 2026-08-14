@@ -20,12 +20,10 @@ import { useRouter } from "next/navigation";
 import {
   META,
   buildEditorPreviewHtml,
-  layoutMissingTemplateMarkers,
   parseSectionFields,
   parseStoredContent,
   renderSectionHtmlForEditor,
   rewriteStoredContent,
-  serializeContent,
   type FieldType,
   type SectionField,
 } from "@/lib/sections";
@@ -697,36 +695,6 @@ export function VisualPageBuilder({
   const selectedValues = selectedParsed?.fields || {};
   const selectedRepeatGroups = selectedParsed?.repeatGroups || [];
 
-  const sectionSyncKey = sections
-    .map(
-      (s) =>
-        `${s.id}:${s.content.length}:${s.templateBlock?.defaultHtml?.length ?? 0}`,
-    )
-    .join("|");
-
-  // Persist catalog marker updates (new <singleline> wraps) onto the page
-  // instance so field edits write into the new layout, not the stale snapshot.
-  useEffect(() => {
-    let changed = false;
-    const next = sections.map((s) => {
-      const html = s.templateBlock?.defaultHtml || "";
-      if (!html.trim()) return s;
-      let oldLayout = "";
-      try {
-        const raw = JSON.parse(s.content) as { layoutHtml?: string };
-        oldLayout = raw.layoutHtml || "";
-      } catch {
-        oldLayout = "";
-      }
-      if (!layoutMissingTemplateMarkers(oldLayout || html, html)) return s;
-      const parsed = parseStoredContent(s.content, html);
-      changed = true;
-      return { ...s, content: serializeContent(parsed) };
-    });
-    if (changed) onChange(next);
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- sectionSyncKey covers html/content
-  }, [sectionSyncKey]);
-
   /**
    * Full iframe document only rebuilds when page structure changes
    * (add/remove/reorder sections, shell, menu, page meta).
@@ -743,14 +711,10 @@ export function VisualPageBuilder({
         siteSlug,
         inserts.map((i) => `${i.tag}:${i.content}`).join("||"),
         ordered
-          .map((s) => {
-            const html = s.templateBlock?.defaultHtml || "";
-            const parsed = parseStoredContent(s.content, html);
-            const markers = parseSectionFields(
-              parsed.layoutHtml || html,
-            ).length;
-            return `${s.id}:${s.templateBlockId ?? ""}:${s.sortOrder}:${html.length}:${markers}`;
-          })
+          .map(
+            (s) =>
+              `${s.id}:${s.templateBlockId ?? ""}:${s.sortOrder}:${s.templateBlock?.defaultHtml?.length ?? 0}`,
+          )
           .join("|"),
       ].join("###"),
     [
