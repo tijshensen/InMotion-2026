@@ -286,9 +286,8 @@ export async function cropAndResizeImage(opts: {
   const buffer = await sharp(abs)
     .extract({ left: cropLeft, top: cropTop, width: cropW, height: cropH })
     .resize(targetWidth, targetHeight, {
-      // Crop region keeps the photo's aspect; cover into the slot without stretching
-      fit: "cover",
-      position: "centre",
+      // Same as MotionCMS imagecopyresampled: fill the holder exactly
+      fit: "fill",
       withoutEnlargement: false,
     })
     .jpeg({ quality: 90, mozjpeg: true })

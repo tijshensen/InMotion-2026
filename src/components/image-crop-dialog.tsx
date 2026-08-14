@@ -1,10 +1,10 @@
 "use client";
 
 /**
- * Cover-fit crop. The frame is as wide as the modal; its height follows
- * the photo's own width/height ratio (never a forced square or section
- * W×H). At 1× the whole photo is visible. Zoom in, then drag to pick
- * e.g. the right side.
+ * MotionCMS crop: the frame is the *image holder* (size="W/H" / width×height
+ * on the <img>), not the photo. The photo cover-fits that slot — same as
+ * crop.js imgSize() — so a wider photo can be dragged left/right, a taller
+ * one up/down. Zoom unlocks the other axis. Output is exactly W×H.
  */
 
 import {
@@ -60,8 +60,10 @@ export function ImageCropDialog({
     origY: number;
   } | null>(null);
 
-  const imgAspect =
-    natural.w > 0 && natural.h > 0 ? natural.w / natural.h : 16 / 9;
+  const holderAspect =
+    targetWidth > 0 && targetHeight > 0
+      ? targetWidth / targetHeight
+      : 16 / 9;
 
   function readNatural(img: HTMLImageElement | null) {
     if (!img?.naturalWidth || !img.naturalHeight) return;
@@ -75,7 +77,6 @@ export function ImageCropDialog({
     setOffset({ x: 0, y: 0 });
   }, [open, imageUrl]);
 
-  // Cached images may not fire onLoad — read natural size after mount.
   useEffect(() => {
     if (!open) return;
     const img = imgRef.current;
@@ -92,7 +93,7 @@ export function ImageCropDialog({
     const ro = new ResizeObserver(measure);
     ro.observe(el);
     return () => ro.disconnect();
-  }, [open, imgAspect]);
+  }, [open, holderAspect]);
 
   useEffect(() => {
     if (!open) return;
@@ -103,11 +104,16 @@ export function ImageCropDialog({
     return () => window.removeEventListener("keydown", onKey);
   }, [open, busy, onCancel]);
 
+  // Cover: image always fills the holder (old crop.js imgSize)
   const minScale =
-    natural.w > 0 && framePx.w > 0 ? framePx.w / natural.w : 1;
+    natural.w > 0 && natural.h > 0 && framePx.w > 0 && framePx.h > 0
+      ? Math.max(framePx.w / natural.w, framePx.h / natural.h)
+      : 1;
   const displayScale = minScale * zoom;
   const imgDisplayW = natural.w * displayScale;
   const imgDisplayH = natural.h * displayScale;
+  const canPanX = imgDisplayW - framePx.w > 0.5;
+  const canPanY = imgDisplayH - framePx.h > 0.5;
 
   const clampOffset = useCallback(
     (x: number, y: number, scale: number) => {
@@ -122,6 +128,20 @@ export function ImageCropDialog({
     },
     [natural, framePx],
   );
+
+  function centerOffset(scale: number) {
+    return clampOffset(
+      (framePx.w - natural.w * scale) / 2,
+      (framePx.h - natural.h * scale) / 2,
+      scale,
+    );
+  }
+
+  useEffect(() => {
+    if (!natural.w || !framePx.w) return;
+    setOffset(centerOffset(minScale * zoom));
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- only when the photo or holder size is known
+  }, [natural.w, natural.h, framePx.w, framePx.h]);
 
   function onZoomChange(next: number) {
     const prevScale = minScale * zoom;
@@ -196,6 +216,15 @@ export function ImageCropDialog({
   if (!open) return null;
 
   const ready = natural.w > 0 && natural.h > 0;
+  const hint = !ready
+    ? "Loading…"
+    : canPanX && !canPanY
+      ? "Drag left or right to choose the part that fills this slot."
+      : !canPanX && canPanY
+        ? "Drag up or down to choose the part that fills this slot."
+        : canPanX && canPanY
+          ? "Drag to choose the part that fills this slot."
+          : "Zoom in, then drag to choose the part that fills this slot.";
 
   return (
     <div
@@ -212,7 +241,7 @@ export function ImageCropDialog({
           <div>
             <h2 className="font-semibold text-slate-900">Crop image</h2>
             <p className="text-xs text-slate-500 mt-0.5">
-              Saved at{" "}
+              Image slot{" "}
               <span className="font-medium text-slate-700">
                 {targetWidth}×{targetHeight}px
               </span>
@@ -230,15 +259,12 @@ export function ImageCropDialog({
         </div>
 
         <div className="px-5 py-4 space-y-4 overflow-y-auto min-h-0">
-          <p className="text-xs text-slate-500">
-            Zoom in, then drag the photo so the part you want sits in the
-            frame.
-          </p>
+          <p className="text-xs text-slate-500">{hint}</p>
 
           <div
             ref={frameRef}
             className="relative w-full overflow-hidden rounded-xl border-2 border-blue-500 bg-slate-200 shadow-inner touch-none select-none cursor-grab active:cursor-grabbing"
-            style={{ aspectRatio: `${imgAspect}` }}
+            style={{ aspectRatio: `${holderAspect}` }}
             onPointerDown={onPointerDown}
             onPointerMove={onPointerMove}
             onPointerUp={onPointerUp}
@@ -294,10 +320,10 @@ export function ImageCropDialog({
 
           {ready && (
             <p className="text-[11px] text-slate-400">
-              Photo {natural.w}×{natural.h}px
-              {framePx.w
-                ? ` · frame ${Math.round(framePx.w)}×${Math.round(framePx.h)}px`
-                : ""}
+              Photo {natural.w}×{natural.h}px · slot {targetWidth}×
+              {targetHeight}px
+              {canPanX ? " · drag left/right" : ""}
+              {canPanY ? " · drag up/down" : ""}
             </p>
           )}
 

@@ -196,19 +196,23 @@ export function parseSectionFields(html: string): SectionField[] {
         attr(attrs, "label") ||
         attr(attrs, "alt") ||
         "Image";
-      // Prefer explicit dimensions; size="W/H" was MotionCMS crop hint
+      // MotionCMS crop frame is size="W/H" (the img holder). Fall back to width/height.
       const size = attr(attrs, "size") || "";
       const [sizeW, sizeH] = size.includes("/")
         ? size.split("/")
         : [undefined, undefined];
+      const rawW = sizeW || attr(attrs, "width") || "";
+      const rawH = sizeH || attr(attrs, "height") || "";
+      const width = rawW.replace(/px$/i, "").trim() || undefined;
+      const height = rawH.replace(/px$/i, "").trim() || undefined;
       fields.push({
         key: makeKey(label, "image", used),
         type: "image",
         label,
         defaultValue: attr(attrs, "src") || "",
         raw: full,
-        width: attr(attrs, "width") || sizeW || undefined,
-        height: attr(attrs, "height") || sizeH || undefined,
+        width,
+        height,
         alt: attr(attrs, "alt") || undefined,
         size: size || undefined,
       });
