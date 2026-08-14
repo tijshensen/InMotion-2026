@@ -24,7 +24,10 @@ export default async function EditPageAdmin({ params }: Props) {
     include: {
       blocks: {
         orderBy: { sortOrder: "asc" },
-        include: { templateBlock: true },
+        include: {
+          templateBlock: true,
+          repeatItems: { orderBy: { sortOrder: "asc" } },
+        },
       },
       site: {
         include: {

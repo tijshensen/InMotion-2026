@@ -5,7 +5,7 @@
 
 import { prisma } from "@/lib/db";
 import { setClassAtNid, stampLayoutNids } from "@/lib/layout-html";
-import { parseStoredContent, serializeContent } from "@/lib/sections";
+import { parseStoredContent, rewriteStoredContent } from "@/lib/sections";
 import {
   classSimilarity,
   extractClassedElements,
@@ -201,8 +201,7 @@ export async function applyPresetHits(opts: {
       });
       let html = stampLayoutNids(before);
       for (const nid of g.nids) html = setClassAtNid(html, nid, nextClass);
-      const content = serializeContent({
-        fields: parsed.fields,
+      const content = rewriteStoredContent(block.content, templateHtml, {
         layoutHtml: html,
       });
       await prisma.pageBlock.update({

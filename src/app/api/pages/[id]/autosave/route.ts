@@ -64,12 +64,13 @@ export async function PUT(req: Request, ctx: Ctx) {
         });
         const prev = existing
           ? parseStoredContent(existing.content)
-          : { fields: {}, layoutHtml: undefined };
+          : { fields: {}, layoutHtml: undefined, repeatGroups: undefined };
         const content = s.fields
           ? serializeContent({
               fields: asStringFields(s.fields),
               layoutHtml:
                 s.layoutHtml !== undefined ? s.layoutHtml : prev.layoutHtml,
+              repeatGroups: prev.repeatGroups,
             })
           : s.content;
         const patch = {

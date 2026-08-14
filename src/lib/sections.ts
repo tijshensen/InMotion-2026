@@ -39,11 +39,25 @@ export type SectionField = {
   size?: string;
 };
 
+export type RepeatGroupDef = {
+  key: string;
+  itemHtml: string;
+  label?: string;
+};
+
+export type RepeatItemRender = {
+  groupKey: string;
+  content: string;
+  isHidden?: boolean;
+};
+
 export type SectionFieldsPayload = {
   v: 1;
   fields: Record<string, string>;
   /** Page-instance Tailwind/HTML layout (class strings live on elements). */
   layoutHtml?: string;
+  /** Templates for {{repeat:key}} slots inside layoutHtml. */
+  repeatGroups?: RepeatGroupDef[];
 };
 
 export const META = {
@@ -245,6 +259,9 @@ export function parseStoredContent(
         ...(typeof data.layoutHtml === "string" && data.layoutHtml
           ? { layoutHtml: data.layoutHtml }
           : {}),
+        ...(Array.isArray(data.repeatGroups) && data.repeatGroups.length
+          ? { repeatGroups: data.repeatGroups as RepeatGroupDef[] }
+          : {}),
       };
     }
     if (Array.isArray(data) && templateHtml) {
@@ -277,12 +294,34 @@ export function serializeFields(fields: Record<string, string>): string {
   return serializeContent({ fields });
 }
 
+/** Merge a patch into stored section JSON without dropping layout/repeats. */
+export function rewriteStoredContent(
+  content: string,
+  templateHtml: string,
+  patch: Partial<
+    Pick<SectionFieldsPayload, "fields" | "layoutHtml" | "repeatGroups">
+  >,
+): string {
+  const parsed = parseStoredContent(content, templateHtml);
+  return serializeContent({
+    fields: patch.fields ?? parsed.fields,
+    layoutHtml:
+      patch.layoutHtml !== undefined ? patch.layoutHtml : parsed.layoutHtml,
+    repeatGroups:
+      patch.repeatGroups !== undefined
+        ? patch.repeatGroups
+        : parsed.repeatGroups,
+  });
+}
+
 export function serializeContent(payload: {
   fields: Record<string, string>;
   layoutHtml?: string;
+  repeatGroups?: RepeatGroupDef[];
 }): string {
   const out: SectionFieldsPayload = { v: 1, fields: payload.fields };
   if (payload.layoutHtml?.trim()) out.layoutHtml = payload.layoutHtml;
+  if (payload.repeatGroups?.length) out.repeatGroups = payload.repeatGroups;
   return JSON.stringify(out);
 }
 
@@ -306,6 +345,26 @@ function escapeAttr(s: string) {
   return escapeHtml(s).replaceAll("'", "&#39;");
 }
 
+export function expandRepeatTokens(
+  html: string,
+  groups: RepeatGroupDef[] | undefined,
+  items: RepeatItemRender[] = [],
+): string {
+  if (!html || !groups?.length) return html;
+  return html.replace(/\{\{repeat:([a-z0-9_-]+)\}\}/gi, (_m, key: string) => {
+    const group = groups.find((g) => g.key === key);
+    if (!group?.itemHtml) return "";
+    return items
+      .filter((it) => it.groupKey === key && !it.isHidden)
+      .map((it) =>
+        renderSectionHtml(group.itemHtml, it.content, undefined, {
+          skipRepeats: true,
+        }),
+      )
+      .join("\n");
+  });
+}
+
 /**
  * Public (and canvas) render — final HTML as visitors see it.
  */
@@ -313,12 +372,23 @@ export function renderSectionHtml(
   templateHtml: string,
   contentJson: string,
   sectionCss?: string,
-  opts?: { keepNids?: boolean },
+  opts?: {
+    keepNids?: boolean;
+    repeatItems?: RepeatItemRender[];
+    skipRepeats?: boolean;
+  },
 ): string {
   const normalized = normalizeSectionHtml(templateHtml);
   const parsed = parseStoredContent(contentJson, normalized);
   const { fields } = parsed;
   let source = normalizeSectionHtml(parsed.layoutHtml || normalized);
+  if (!opts?.skipRepeats) {
+    source = expandRepeatTokens(
+      source,
+      parsed.repeatGroups,
+      opts?.repeatItems || [],
+    );
+  }
   if (opts?.keepNids) source = stampLayoutNids(source);
   const defs = parseSectionFields(source);
   let html = source;
@@ -430,6 +500,7 @@ export type EditorPreviewSection = {
   css?: string;
   isHidden?: boolean;
   name?: string;
+  repeatItems?: RepeatItemRender[];
 };
 
 /**
@@ -455,10 +526,12 @@ export function renderSectionHtmlForEditor(
     siteSlug?: string;
     linkPages?: LinkablePage[];
     origin?: string;
+    repeatItems?: RepeatItemRender[];
   },
 ): string {
   let body = renderSectionHtml(templateHtml, contentJson, sectionCss, {
     keepNids: true,
+    repeatItems: opts?.repeatItems,
   });
   if (opts?.siteSlug && opts.linkPages?.length) {
     body = resolveInternalLinks(body, opts.siteSlug, opts.linkPages);
@@ -498,6 +571,7 @@ export function buildEditorPreviewHtml(opts: {
           siteSlug: opts.siteSlug,
           linkPages: opts.linkPages,
           origin,
+          repeatItems: s.repeatItems,
         },
       );
       const active = opts.selectedSectionId === s.id;
@@ -811,11 +885,16 @@ export function renderAllSections(
     content: string;
     css?: string;
     isHidden?: boolean;
+    repeatItems?: RepeatItemRender[];
   }[],
 ): string {
   return sections
     .filter((s) => !s.isHidden)
-    .map((s) => renderSectionHtml(s.templateHtml, s.content, s.css))
+    .map((s) =>
+      renderSectionHtml(s.templateHtml, s.content, s.css, {
+        repeatItems: s.repeatItems,
+      }),
+    )
     .join("\n");
 }
 

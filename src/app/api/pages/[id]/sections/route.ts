@@ -72,7 +72,10 @@ export async function POST(req: Request, ctx: Ctx) {
       content,
       sortOrder: maxOrder + 1,
     },
-    include: { templateBlock: true },
+    include: {
+      templateBlock: true,
+      repeatItems: { orderBy: { sortOrder: "asc" } },
+    },
   });
 
   return NextResponse.json(block, { status: 201 });
@@ -122,7 +125,10 @@ export async function PUT(req: Request, ctx: Ctx) {
   const blocks = await prisma.pageBlock.findMany({
     where: { pageId },
     orderBy: { sortOrder: "asc" },
-    include: { templateBlock: true },
+    include: {
+      templateBlock: true,
+      repeatItems: { orderBy: { sortOrder: "asc" } },
+    },
   });
 
   return NextResponse.json({ ok: true, blocks });

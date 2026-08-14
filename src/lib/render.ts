@@ -66,7 +66,10 @@ export async function renderPublicPage({
     include: {
       blocks: {
         orderBy: { sortOrder: "asc" },
-        include: { templateBlock: true },
+        include: {
+          templateBlock: true,
+          repeatItems: { orderBy: { sortOrder: "asc" } },
+        },
       },
       template: {
         include: {
@@ -87,7 +90,10 @@ export async function renderPublicPage({
       include: {
         blocks: {
           orderBy: { sortOrder: "asc" },
-          include: { templateBlock: true },
+          include: {
+          templateBlock: true,
+          repeatItems: { orderBy: { sortOrder: "asc" } },
+        },
         },
         template: {
           include: {
@@ -158,6 +164,7 @@ export async function renderPublicPage({
       content: b.content,
       css: b.css,
       isHidden: b.isHidden,
+      repeatItems: b.repeatItems,
     })),
   );
   sectionsHtml = resolveInternalLinks(sectionsHtml, site.slug, linkPages);

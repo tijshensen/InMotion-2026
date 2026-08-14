@@ -15,7 +15,10 @@ export async function GET(_req: Request, ctx: Ctx) {
     include: {
       blocks: {
         orderBy: { sortOrder: "asc" },
-        include: { templateBlock: true },
+        include: {
+          templateBlock: true,
+          repeatItems: { orderBy: { sortOrder: "asc" } },
+        },
       },
       language: true,
       template: true,
@@ -85,7 +88,10 @@ export async function PATCH(req: Request, ctx: Ctx) {
       include: {
         blocks: {
           orderBy: { sortOrder: "asc" },
-          include: { templateBlock: true },
+          include: {
+          templateBlock: true,
+          repeatItems: { orderBy: { sortOrder: "asc" } },
+        },
         },
       },
     });

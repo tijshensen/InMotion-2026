@@ -14,7 +14,7 @@ import {
   parseSectionFields,
   parseStoredContent,
   renderSectionHtmlForEditor,
-  serializeContent,
+  rewriteStoredContent,
   type FieldType,
   type SectionField,
 } from "@/lib/sections";
@@ -28,6 +28,7 @@ import { MediaPicker, type MediaItem } from "@/components/media-picker";
 import { HtmlCodeEditor } from "@/components/html-code-editor";
 import { BlockEditor } from "@/components/block-editor";
 import { TailwindStylePanel } from "@/components/tailwind-style-panel";
+import { SectionRepeatEditor } from "@/components/section-repeat-editor";
 import { getClassAtNid, setClassAtNid, stampLayoutNids } from "@/lib/layout-html";
 import { pickComputed, type ComputedBox } from "@/lib/tailwind-layout";
 
@@ -40,6 +41,15 @@ type TemplateBlock = {
   previewPath?: string;
 };
 
+export type RepeatItem = {
+  id: string;
+  groupKey: string;
+  sortOrder: number;
+  origin: string;
+  isHidden: boolean;
+  content: string;
+};
+
 export type PageSection = {
   id: string;
   content: string;
@@ -48,6 +58,7 @@ export type PageSection = {
   isHidden: boolean;
   templateBlockId: string | null;
   templateBlock: TemplateBlock | null;
+  repeatItems?: RepeatItem[];
 };
 
 type InsertLite = { tag: string; content: string };
@@ -266,7 +277,7 @@ function FieldLinkEditor({
   );
 }
 
-function FieldEditors({
+export function FieldEditors({
   fields,
   values,
   siteId,
@@ -632,6 +643,7 @@ export function VisualPageBuilder({
   const layoutHitRef = useRef(layoutHit);
   layoutHitRef.current = layoutHit;
   const stampedNidsRef = useRef(false);
+  const detectedRepeatsRef = useRef<Set<string>>(new Set());
 
   const ordered = useMemo(
     () => [...sections].sort((a, b) => a.sortOrder - b.sortOrder),
@@ -640,10 +652,14 @@ export function VisualPageBuilder({
 
   const selected = ordered.find((s) => s.id === selectedSectionId) || null;
   const selectedHtml = selected?.templateBlock?.defaultHtml || "";
-  const selectedFields = parseSectionFields(selectedHtml);
-  const selectedValues = selected
-    ? parseStoredContent(selected.content, selectedHtml).fields
-    : {};
+  const selectedParsed = selected
+    ? parseStoredContent(selected.content, selectedHtml)
+    : null;
+  const selectedFields = parseSectionFields(
+    selectedParsed?.layoutHtml || selectedHtml,
+  );
+  const selectedValues = selectedParsed?.fields || {};
+  const selectedRepeatGroups = selectedParsed?.repeatGroups || [];
 
   /**
    * Full iframe document only rebuilds when page structure changes
@@ -702,6 +718,7 @@ export function VisualPageBuilder({
           css: s.css,
           isHidden: s.isHidden,
           name: s.templateBlock?.name,
+          repeatItems: s.repeatItems,
         })),
       }),
     // structureKey encodes structural deps; ordered content is snapshotted at rebuild time
@@ -736,8 +753,7 @@ export function VisualPageBuilder({
         changed = true;
         return {
           ...s,
-          content: serializeContent({
-            fields: parsed.fields,
+          content: rewriteStoredContent(s.content, base, {
             layoutHtml: stamped,
           }),
         };
@@ -778,7 +794,9 @@ export function VisualPageBuilder({
       const body = wrap.querySelector(".cms-edit-body");
       if (!body) return false;
 
-      const paintKey = `${s.content}\n/*css*/\n${s.css}\n/*hidden*/\n${s.isHidden}`;
+      const paintKey = `${s.content}\n/*css*/\n${s.css}\n/*hidden*/\n${s.isHidden}\n/*rep*/\n${(s.repeatItems || [])
+        .map((i) => `${i.id}:${i.isHidden}:${i.content}`)
+        .join("|")}`;
       if (paintedContentRef.current.get(s.id) === paintKey) {
         return true;
       }
@@ -789,7 +807,12 @@ export function VisualPageBuilder({
         s.templateBlock?.defaultHtml || "",
         s.content,
         s.css,
-        { siteSlug, linkPages, origin },
+        {
+          siteSlug,
+          linkPages,
+          origin,
+          repeatItems: s.repeatItems,
+        },
       );
 
       // Preserve scroll: only replace the section body, never the document
@@ -841,7 +864,9 @@ export function VisualPageBuilder({
     // Seed paint cache so we don't rewrite immediately.
     paintedContentRef.current.clear();
     for (const s of ordered) {
-      const paintKey = `${s.content}\n/*css*/\n${s.css}\n/*hidden*/\n${s.isHidden}`;
+      const paintKey = `${s.content}\n/*css*/\n${s.css}\n/*hidden*/\n${s.isHidden}\n/*rep*/\n${(s.repeatItems || [])
+        .map((i) => `${i.id}:${i.isHidden}:${i.content}`)
+        .join("|")}`;
       paintedContentRef.current.set(s.id, paintKey);
     }
     restoreIframeScroll();
@@ -872,6 +897,41 @@ export function VisualPageBuilder({
   useEffect(() => {
     paintAllSectionsInIframe();
   }, [paintAllSectionsInIframe]);
+
+  // Detect similar sibling blocks inside a section (once per section).
+  useEffect(() => {
+    if (!selectedSectionId || editorMode !== "content") return;
+    const section = ordered.find((s) => s.id === selectedSectionId);
+    if (!section) return;
+    if (section.repeatItems?.length) return;
+    const parsed = parseStoredContent(
+      section.content,
+      section.templateBlock?.defaultHtml || "",
+    );
+    if (parsed.repeatGroups?.length) return;
+    if (detectedRepeatsRef.current.has(section.id)) return;
+    detectedRepeatsRef.current.add(section.id);
+    void fetch(`/api/pages/${pageId}/sections/${section.id}/repeats/detect`, {
+      method: "POST",
+      credentials: "same-origin",
+    })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data) => {
+        if (!data?.block) return;
+        onChange((prev) =>
+          prev.map((s) =>
+            s.id === data.block.id
+              ? {
+                  ...s,
+                  content: data.block.content,
+                  repeatItems: data.block.repeatItems || [],
+                }
+              : s,
+          ),
+        );
+      })
+      .catch(() => {});
+  }, [selectedSectionId, editorMode, ordered, pageId, onChange]);
 
   // Selection highlight without reloading the iframe
   useEffect(() => {
@@ -926,10 +986,7 @@ export function VisualPageBuilder({
         const layoutHtml = setClassAtNid(stamped, nid, cleaned);
         return {
           ...s,
-          content: serializeContent({
-            fields: parsed.fields,
-            layoutHtml,
-          }),
+          content: rewriteStoredContent(s.content, base, { layoutHtml }),
         };
       }),
     );
@@ -1025,10 +1082,7 @@ export function VisualPageBuilder({
         const fields = { ...parsed.fields, ...updates };
         return {
           ...s,
-          content: serializeContent({
-            fields,
-            layoutHtml: parsed.layoutHtml,
-          }),
+          content: rewriteStoredContent(s.content, html, { fields }),
         };
       }),
     );
@@ -1290,15 +1344,51 @@ export function VisualPageBuilder({
 
             <div className="flex-1 overflow-y-auto px-4 py-4">
               {panelTab === "content" && (
-                <FieldEditors
-                  fields={selectedFields}
-                  values={selectedValues}
-                  siteId={siteId}
-                  sectionId={selected.id}
-                  linkPages={linkPages}
-                  onChange={setField}
-                  onChangeMany={setFields}
-                />
+                <>
+                  <FieldEditors
+                    fields={selectedFields}
+                    values={selectedValues}
+                    siteId={siteId}
+                    sectionId={selected.id}
+                    linkPages={linkPages}
+                    onChange={setField}
+                    onChangeMany={setFields}
+                  />
+                  {selectedRepeatGroups.length ? (
+                    <SectionRepeatEditor
+                      pageId={pageId}
+                      sectionId={selected.id}
+                      groups={selectedRepeatGroups}
+                      items={selected.repeatItems || []}
+                      onChangeItems={(next) =>
+                        onChange((prev) =>
+                          prev.map((s) =>
+                            s.id === selected.id
+                              ? { ...s, repeatItems: next }
+                              : s,
+                          ),
+                        )
+                      }
+                      renderFields={({
+                        item,
+                        fields,
+                        values,
+                        onChange: onItemField,
+                        onChangeMany,
+                      }) => (
+                        <FieldEditors
+                          fields={fields}
+                          values={values}
+                          siteId={siteId}
+                          sectionId={`${selected.id}:${item.id}`}
+                          linkPages={linkPages}
+                          onChange={onItemField}
+                          onChangeMany={onChangeMany}
+                        />
+                      )}
+                    />
+                  ) : null}
+                </>
               )}
               {panelTab === "style" && (
                 <div className="space-y-2">

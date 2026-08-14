@@ -248,6 +248,25 @@ model PageBlock {
   sortOrder       Int      @default(0)
   isHidden        Boolean  @default(false)
   updatedAt       DateTime @updatedAt
+  repeatItems     PageBlockRepeatItem[]
+}
+
+/// Extra / extracted items inside a section (cards, columns).
+/// Scraped originals are kept (origin=scraped); user clones are origin=added.
+model PageBlockRepeatItem {
+  id          String    @id @default(cuid())
+  pageBlockId String
+  pageBlock   PageBlock @relation(fields: [pageBlockId], references: [id], onDelete: Cascade)
+  groupKey    String    @default("items")
+  sortOrder   Int       @default(0)
+  /// scraped | added
+  origin      String    @default("added")
+  isHidden    Boolean   @default(false)
+  content     String    @default("")
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@index([pageBlockId, groupKey, sortOrder])
 }
 
 /// Reusable snippets (old "inserts")
