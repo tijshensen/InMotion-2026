@@ -1,33 +1,55 @@
 "use client";
 
+import { useState } from "react";
 import {
   COLOR_HUES,
   COLOR_STEPS,
   DISPLAYS,
   FONT_WEIGHTS,
+  HEIGHTS,
   ITEMS,
   JUSTIFY,
+  MAX_WIDTHS,
   ROUNDED,
   SHADOWS,
   SPACE_SCALE,
   TEXT_SIZES,
+  WIDTHS,
+  classVariant,
+  computedLooksInherited,
   getColorToken,
   getExactGroup,
   getPrefixValue,
   setColorToken,
   setExactGroup,
   setPrefixValue,
+  type CanvasBreakpointDevice,
   type ComputedBox,
+  type LayoutState,
 } from "@/lib/tailwind-layout";
 
 type Props = {
   tag: string;
   className: string;
+  device: CanvasBreakpointDevice;
   computed: ComputedBox | null;
   parentComputed: ComputedBox | null;
   parentNid: string | null;
   onChange: (next: string) => void;
   onJumpParent: () => void;
+};
+
+const STATES: { id: LayoutState; label: string }[] = [
+  { id: "default", label: "Default" },
+  { id: "hover", label: "Hover" },
+  { id: "focus", label: "Focus" },
+  { id: "active", label: "Active" },
+];
+
+const DEVICE_LABEL: Record<CanvasBreakpointDevice, string> = {
+  phone: "Mobile",
+  tablet: "Tablet",
+  desktop: "Desktop",
 };
 
 function Field({
@@ -53,7 +75,10 @@ function Field({
           fromParent ? (
             <button
               type="button"
-              onClick={onJump}
+              onClick={(e) => {
+                e.preventDefault();
+                onJump();
+              }}
               className="text-[10px] text-slate-400 underline hover:text-blue-600"
             >
               from parent
@@ -75,39 +100,49 @@ function Field({
 
 const selectCls =
   "w-full rounded-md border border-slate-200 bg-white px-2 py-1.5 text-xs text-slate-800";
-
-function same(a?: string, b?: string) {
-  if (!a || !b) return false;
-  return a.replace(/\s+/g, "") === b.replace(/\s+/g, "");
-}
+const selectInheritedCls =
+  "w-full rounded-md border border-slate-200 bg-slate-50 px-2 py-1.5 text-xs text-slate-400";
 
 export function TailwindStylePanel({
   tag,
   className,
+  device,
   computed,
   parentComputed,
   parentNid,
   onChange,
   onJumpParent,
 }: Props) {
+  const [state, setState] = useState<LayoutState>("default");
+  const variant = classVariant(device, state);
   const jump = () => {
     if (parentNid) onJumpParent();
   };
 
-  function spaceSelect(prefix: string, inherited?: string) {
-    const own = getPrefixValue(className, prefix);
+  function spaceSelect(
+    prefix: string,
+    inherited?: string,
+    inheritKey?: keyof ComputedBox,
+  ) {
+    const own = getPrefixValue(className, prefix, variant);
+    const fromParent = Boolean(
+      inheritKey &&
+        computedLooksInherited(inheritKey, computed, parentComputed),
+    );
     return (
       <Field
         label={prefix}
         own={Boolean(own)}
-        inherited={inherited}
-        fromParent={Boolean(parentNid) && same(inherited, parentComputed?.padding)}
+        inherited={own ? undefined : inherited}
+        fromParent={fromParent}
         onJump={jump}
       >
         <select
-          className={selectCls}
+          className={own ? selectCls : selectInheritedCls}
           value={own}
-          onChange={(e) => onChange(setPrefixValue(className, prefix, e.target.value))}
+          onChange={(e) =>
+            onChange(setPrefixValue(className, prefix, e.target.value, variant))
+          }
         >
           {SPACE_SCALE.map((v) => (
             <option key={v || "none"} value={v}>
@@ -119,9 +154,48 @@ export function TailwindStylePanel({
     );
   }
 
-  const textColor = getColorToken(className, "text");
-  const bgColor = getColorToken(className, "bg");
-  const borderColor = getColorToken(className, "border");
+  function prefixSelect(
+    label: string,
+    prefix: string,
+    options: readonly string[],
+  ) {
+    const own = getPrefixValue(className, prefix, variant);
+    return (
+      <Field label={label} own={Boolean(own)} onJump={jump}>
+        <select
+          className={own ? selectCls : selectInheritedCls}
+          value={own}
+          onChange={(e) =>
+            onChange(setPrefixValue(className, prefix, e.target.value, variant))
+          }
+        >
+          {options.map((v) => (
+            <option key={v || "none"} value={v}>
+              {v || "—"}
+            </option>
+          ))}
+        </select>
+      </Field>
+    );
+  }
+
+  const textColor = getColorToken(className, "text", variant);
+  const bgColor = getColorToken(className, "bg", variant);
+  const borderColor = getColorToken(className, "border", variant);
+  const displayOwn = getExactGroup(className, DISPLAYS, variant);
+  const flexDir = getExactGroup(className, ["flex-row", "flex-col"], variant);
+  const justifyOwn = getExactGroup(className, JUSTIFY, variant);
+  const itemsOwn = getExactGroup(className, ITEMS, variant);
+  const gridCols = getPrefixValue(className, "grid-cols", variant);
+  const textSize = getExactGroup(className, TEXT_SIZES, variant);
+  const fontWeight = getExactGroup(className, FONT_WEIGHTS, variant);
+  const ALIGN = ["text-left", "text-center", "text-right", "text-justify"] as const;
+  const alignOwn = getExactGroup(className, ALIGN, variant);
+  const BORDERS = ["border", "border-0", "border-2", "border-4", "border-8"] as const;
+  const borderWidth = getExactGroup(className, BORDERS, variant);
+  const radiusOwn = getExactGroup(className, ROUNDED, variant);
+  const shadowOwn = getExactGroup(className, SHADOWS, variant);
+  const deviceLabel = DEVICE_LABEL[device];
 
   return (
     <div className="space-y-5">
@@ -137,6 +211,36 @@ export function TailwindStylePanel({
           spellCheck={false}
         />
       </div>
+
+      <section className="space-y-2">
+        <div className="flex items-center justify-between gap-2">
+          <h4 className="text-xs font-semibold text-slate-700">State</h4>
+          <span className="font-mono text-[10px] text-slate-400">
+            {variant || "base"} · {deviceLabel}
+          </span>
+        </div>
+        <div className="flex rounded-lg border border-slate-200 p-0.5 text-[11px]">
+          {STATES.map((s) => (
+            <button
+              key={s.id}
+              type="button"
+              onClick={() => setState(s.id)}
+              className={[
+                "flex-1 rounded-md px-2 py-1",
+                state === s.id
+                  ? "bg-slate-900 text-white"
+                  : "text-slate-500 hover:text-slate-800",
+              ].join(" ")}
+            >
+              {s.label}
+            </button>
+          ))}
+        </div>
+        <p className="text-[10px] text-slate-400">
+          Controls edit {deviceLabel.toLowerCase()}
+          {state !== "default" ? ` :${state}` : ""} classes only.
+        </p>
+      </section>
 
       <section className="space-y-2">
         <h4 className="text-xs font-semibold text-slate-700">Spacing</h4>
@@ -164,16 +268,15 @@ export function TailwindStylePanel({
         <div className="grid grid-cols-2 gap-2">
           <Field
             label="display"
-            own={Boolean(getExactGroup(className, DISPLAYS))}
-            inherited={computed?.display}
-            fromParent={same(computed?.display, parentComputed?.display)}
+            own={Boolean(displayOwn)}
+            inherited={displayOwn ? undefined : computed?.display}
             onJump={jump}
           >
             <select
-              className={selectCls}
-              value={getExactGroup(className, DISPLAYS)}
+              className={displayOwn ? selectCls : selectInheritedCls}
+              value={displayOwn}
               onChange={(e) =>
-                onChange(setExactGroup(className, DISPLAYS, e.target.value))
+                onChange(setExactGroup(className, DISPLAYS, e.target.value, variant))
               }
             >
               {DISPLAYS.map((v) => (
@@ -183,19 +286,18 @@ export function TailwindStylePanel({
               ))}
             </select>
           </Field>
-          <Field label="direction" own={/flex-(row|col)/.test(className)} onJump={jump}>
+          <Field label="direction" own={Boolean(flexDir)} onJump={jump}>
             <select
-              className={selectCls}
-              value={
-                className.includes("flex-col")
-                  ? "flex-col"
-                  : className.includes("flex-row")
-                    ? "flex-row"
-                    : ""
-              }
+              className={flexDir ? selectCls : selectInheritedCls}
+              value={flexDir}
               onChange={(e) =>
                 onChange(
-                  setExactGroup(className, ["flex-row", "flex-col"], e.target.value),
+                  setExactGroup(
+                    className,
+                    ["flex-row", "flex-col"],
+                    e.target.value,
+                    variant,
+                  ),
                 )
               }
             >
@@ -204,12 +306,12 @@ export function TailwindStylePanel({
               <option value="flex-col">column</option>
             </select>
           </Field>
-          <Field label="justify" own={Boolean(getExactGroup(className, JUSTIFY))} onJump={jump}>
+          <Field label="justify" own={Boolean(justifyOwn)} onJump={jump}>
             <select
-              className={selectCls}
-              value={getExactGroup(className, JUSTIFY)}
+              className={justifyOwn ? selectCls : selectInheritedCls}
+              value={justifyOwn}
               onChange={(e) =>
-                onChange(setExactGroup(className, JUSTIFY, e.target.value))
+                onChange(setExactGroup(className, JUSTIFY, e.target.value, variant))
               }
             >
               {JUSTIFY.map((v) => (
@@ -219,12 +321,12 @@ export function TailwindStylePanel({
               ))}
             </select>
           </Field>
-          <Field label="items" own={Boolean(getExactGroup(className, ITEMS))} onJump={jump}>
+          <Field label="items" own={Boolean(itemsOwn)} onJump={jump}>
             <select
-              className={selectCls}
-              value={getExactGroup(className, ITEMS)}
+              className={itemsOwn ? selectCls : selectInheritedCls}
+              value={itemsOwn}
               onChange={(e) =>
-                onChange(setExactGroup(className, ITEMS, e.target.value))
+                onChange(setExactGroup(className, ITEMS, e.target.value, variant))
               }
             >
               {ITEMS.map((v) => (
@@ -236,14 +338,16 @@ export function TailwindStylePanel({
           </Field>
           <Field
             label="grid cols"
-            own={Boolean(getPrefixValue(className, "grid-cols"))}
+            own={Boolean(gridCols)}
             onJump={jump}
           >
             <select
-              className={selectCls}
-              value={getPrefixValue(className, "grid-cols")}
+              className={gridCols ? selectCls : selectInheritedCls}
+              value={gridCols}
               onChange={(e) =>
-                onChange(setPrefixValue(className, "grid-cols", e.target.value))
+                onChange(
+                  setPrefixValue(className, "grid-cols", e.target.value, variant),
+                )
               }
             >
               <option value="">—</option>
@@ -258,20 +362,29 @@ export function TailwindStylePanel({
       </section>
 
       <section className="space-y-2">
+        <h4 className="text-xs font-semibold text-slate-700">Size</h4>
+        <div className="grid grid-cols-2 gap-2">
+          {prefixSelect("width", "w", WIDTHS)}
+          {prefixSelect("max width", "max-w", MAX_WIDTHS)}
+          {prefixSelect("height", "h", HEIGHTS)}
+        </div>
+      </section>
+
+      <section className="space-y-2">
         <h4 className="text-xs font-semibold text-slate-700">Typography</h4>
         <div className="grid grid-cols-2 gap-2">
           <Field
             label="size"
-            own={Boolean(getExactGroup(className, TEXT_SIZES))}
-            inherited={computed?.fontSize}
-            fromParent={same(computed?.fontSize, parentComputed?.fontSize)}
+            own={Boolean(textSize)}
+            inherited={textSize ? undefined : computed?.fontSize}
+            fromParent={computedLooksInherited("fontSize", computed, parentComputed)}
             onJump={jump}
           >
             <select
-              className={selectCls}
-              value={getExactGroup(className, TEXT_SIZES)}
+              className={textSize ? selectCls : selectInheritedCls}
+              value={textSize}
               onChange={(e) =>
-                onChange(setExactGroup(className, TEXT_SIZES, e.target.value))
+                onChange(setExactGroup(className, TEXT_SIZES, e.target.value, variant))
               }
             >
               {TEXT_SIZES.map((v) => (
@@ -283,16 +396,22 @@ export function TailwindStylePanel({
           </Field>
           <Field
             label="weight"
-            own={Boolean(getExactGroup(className, FONT_WEIGHTS))}
-            inherited={computed?.fontWeight}
-            fromParent={same(computed?.fontWeight, parentComputed?.fontWeight)}
+            own={Boolean(fontWeight)}
+            inherited={fontWeight ? undefined : computed?.fontWeight}
+            fromParent={computedLooksInherited(
+              "fontWeight",
+              computed,
+              parentComputed,
+            )}
             onJump={jump}
           >
             <select
-              className={selectCls}
-              value={getExactGroup(className, FONT_WEIGHTS)}
+              className={fontWeight ? selectCls : selectInheritedCls}
+              value={fontWeight}
               onChange={(e) =>
-                onChange(setExactGroup(className, FONT_WEIGHTS, e.target.value))
+                onChange(
+                  setExactGroup(className, FONT_WEIGHTS, e.target.value, variant),
+                )
               }
             >
               {FONT_WEIGHTS.map((v) => (
@@ -304,26 +423,20 @@ export function TailwindStylePanel({
           </Field>
           <Field
             label="align"
-            own={/text-(left|center|right|justify)/.test(className)}
-            inherited={computed?.textAlign}
-            fromParent={same(computed?.textAlign, parentComputed?.textAlign)}
+            own={Boolean(alignOwn)}
+            inherited={alignOwn ? undefined : computed?.textAlign}
+            fromParent={computedLooksInherited(
+              "textAlign",
+              computed,
+              parentComputed,
+            )}
             onJump={jump}
           >
             <select
-              className={selectCls}
-              value={
-                ["text-left", "text-center", "text-right", "text-justify"].find(
-                  (t) => className.split(/\s+/).includes(t),
-                ) || ""
-              }
+              className={alignOwn ? selectCls : selectInheritedCls}
+              value={alignOwn}
               onChange={(e) =>
-                onChange(
-                  setExactGroup(
-                    className,
-                    ["text-left", "text-center", "text-right", "text-justify"],
-                    e.target.value,
-                  ),
-                )
+                onChange(setExactGroup(className, ALIGN, e.target.value, variant))
               }
             >
               <option value="">—</option>
@@ -336,15 +449,15 @@ export function TailwindStylePanel({
           <Field
             label="text color"
             own={Boolean(textColor)}
-            inherited={computed?.color}
-            fromParent={same(computed?.color, parentComputed?.color)}
+            inherited={textColor ? undefined : computed?.color}
+            fromParent={computedLooksInherited("color", computed, parentComputed)}
             onJump={jump}
           >
             <select
-              className={selectCls}
+              className={textColor ? selectCls : selectInheritedCls}
               value={textColor}
               onChange={(e) =>
-                onChange(setColorToken(className, "text", e.target.value))
+                onChange(setColorToken(className, "text", e.target.value, variant))
               }
             >
               <option value="">—</option>
@@ -368,18 +481,14 @@ export function TailwindStylePanel({
           <Field
             label="background"
             own={Boolean(bgColor)}
-            inherited={computed?.backgroundColor}
-            fromParent={same(
-              computed?.backgroundColor,
-              parentComputed?.backgroundColor,
-            )}
+            inherited={bgColor ? undefined : computed?.backgroundColor}
             onJump={jump}
           >
             <select
-              className={selectCls}
+              className={bgColor ? selectCls : selectInheritedCls}
               value={bgColor}
               onChange={(e) =>
-                onChange(setColorToken(className, "bg", e.target.value))
+                onChange(setColorToken(className, "bg", e.target.value, variant))
               }
             >
               <option value="">—</option>
@@ -401,10 +510,10 @@ export function TailwindStylePanel({
             onJump={jump}
           >
             <select
-              className={selectCls}
+              className={borderColor ? selectCls : selectInheritedCls}
               value={borderColor}
               onChange={(e) =>
-                onChange(setColorToken(className, "border", e.target.value))
+                onChange(setColorToken(className, "border", e.target.value, variant))
               }
             >
               <option value="">—</option>
@@ -425,25 +534,14 @@ export function TailwindStylePanel({
         <div className="grid grid-cols-2 gap-2">
           <Field
             label="width"
-            own={/\bborder(?:-\d+)?\b/.test(className)}
+            own={Boolean(borderWidth)}
             onJump={jump}
           >
             <select
-              className={selectCls}
-              value={
-                className.split(/\s+/).includes("border")
-                  ? "border"
-                  : className.split(/\s+/).find((c) => /^border-[0248]$/.test(c)) ||
-                    ""
-              }
+              className={borderWidth ? selectCls : selectInheritedCls}
+              value={borderWidth}
               onChange={(e) =>
-                onChange(
-                  setExactGroup(
-                    className,
-                    ["border", "border-0", "border-2", "border-4", "border-8"],
-                    e.target.value,
-                  ),
-                )
+                onChange(setExactGroup(className, BORDERS, e.target.value, variant))
               }
             >
               <option value="">—</option>
@@ -456,16 +554,15 @@ export function TailwindStylePanel({
           </Field>
           <Field
             label="radius"
-            own={Boolean(getExactGroup(className, ROUNDED))}
-            inherited={computed?.borderRadius}
-            fromParent={same(computed?.borderRadius, parentComputed?.borderRadius)}
+            own={Boolean(radiusOwn)}
+            inherited={radiusOwn ? undefined : computed?.borderRadius}
             onJump={jump}
           >
             <select
-              className={selectCls}
-              value={getExactGroup(className, ROUNDED)}
+              className={radiusOwn ? selectCls : selectInheritedCls}
+              value={radiusOwn}
               onChange={(e) =>
-                onChange(setExactGroup(className, ROUNDED, e.target.value))
+                onChange(setExactGroup(className, ROUNDED, e.target.value, variant))
               }
             >
               {ROUNDED.map((v) => (
@@ -477,16 +574,15 @@ export function TailwindStylePanel({
           </Field>
           <Field
             label="shadow"
-            own={Boolean(getExactGroup(className, SHADOWS))}
-            inherited={computed?.boxShadow}
-            fromParent={same(computed?.boxShadow, parentComputed?.boxShadow)}
+            own={Boolean(shadowOwn)}
+            inherited={shadowOwn ? undefined : computed?.boxShadow}
             onJump={jump}
           >
             <select
-              className={selectCls}
-              value={getExactGroup(className, SHADOWS)}
+              className={shadowOwn ? selectCls : selectInheritedCls}
+              value={shadowOwn}
               onChange={(e) =>
-                onChange(setExactGroup(className, SHADOWS, e.target.value))
+                onChange(setExactGroup(className, SHADOWS, e.target.value, variant))
               }
             >
               {SHADOWS.map((v) => (
@@ -498,6 +594,56 @@ export function TailwindStylePanel({
           </Field>
         </div>
       </section>
+
+      {computed ? (
+        <section className="space-y-2 border-t border-slate-100 pt-4">
+          <h4 className="text-xs font-semibold text-slate-500">
+            Computed / Inherited
+          </h4>
+          <ul className="space-y-1 text-[11px] text-slate-400">
+            {(
+              [
+                ["display", computed.display, "display"],
+                ["font-size", computed.fontSize, "fontSize"],
+                ["font-weight", computed.fontWeight, "fontWeight"],
+                ["color", computed.color, "color"],
+                ["text-align", computed.textAlign, "textAlign"],
+                ["padding", computed.padding, "padding"],
+                ["margin", computed.margin, "margin"],
+                ["background", computed.backgroundColor, "backgroundColor"],
+              ] as const
+            ).map(([label, value, key]) => {
+              const fromParent = computedLooksInherited(
+                key,
+                computed,
+                parentComputed,
+              );
+              return (
+                <li
+                  key={label}
+                  className="flex items-baseline justify-between gap-2"
+                >
+                  <span className="shrink-0">{label}</span>
+                  <span className="min-w-0 truncate text-right" title={value}>
+                    {value || "—"}
+                  </span>
+                  {fromParent && parentNid ? (
+                    <button
+                      type="button"
+                      onClick={jump}
+                      className="shrink-0 underline hover:text-blue-600"
+                    >
+                      from parent
+                    </button>
+                  ) : (
+                    <span className="shrink-0 text-slate-300">computed</span>
+                  )}
+                </li>
+              );
+            })}
+          </ul>
+        </section>
+      ) : null}
     </div>
   );
 }

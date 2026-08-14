@@ -136,81 +136,133 @@ export const COLOR_STEPS = [
   "950",
 ] as const;
 
-const PREFIX_RE: Record<string, RegExp> = {
-  p: /(?:^|\s)p-(?:auto|px|[\d.]+)(?=\s|$)/g,
-  px: /(?:^|\s)px-(?:auto|px|[\d.]+)(?=\s|$)/g,
-  py: /(?:^|\s)py-(?:auto|px|[\d.]+)(?=\s|$)/g,
-  pt: /(?:^|\s)pt-(?:auto|px|[\d.]+)(?=\s|$)/g,
-  pr: /(?:^|\s)pr-(?:auto|px|[\d.]+)(?=\s|$)/g,
-  pb: /(?:^|\s)pb-(?:auto|px|[\d.]+)(?=\s|$)/g,
-  pl: /(?:^|\s)pl-(?:auto|px|[\d.]+)(?=\s|$)/g,
-  m: /(?:^|\s)m-(?:auto|px|[\d.]+)(?=\s|$)/g,
-  mx: /(?:^|\s)mx-(?:auto|px|[\d.]+)(?=\s|$)/g,
-  my: /(?:^|\s)my-(?:auto|px|[\d.]+)(?=\s|$)/g,
-  mt: /(?:^|\s)mt-(?:auto|px|[\d.]+)(?=\s|$)/g,
-  mr: /(?:^|\s)mr-(?:auto|px|[\d.]+)(?=\s|$)/g,
-  mb: /(?:^|\s)mb-(?:auto|px|[\d.]+)(?=\s|$)/g,
-  ml: /(?:^|\s)ml-(?:auto|px|[\d.]+)(?=\s|$)/g,
-  gap: /(?:^|\s)gap-(?:px|[\d.]+)(?=\s|$)/g,
-  "gap-x": /(?:^|\s)gap-x-(?:px|[\d.]+)(?=\s|$)/g,
-  "gap-y": /(?:^|\s)gap-y-(?:px|[\d.]+)(?=\s|$)/g,
-  w: /(?:^|\s)w-(?:full|auto|screen|fit|min|max|px|[\d.]+|1\/2|1\/3|2\/3|1\/4|3\/4)(?=\s|$)/g,
-  h: /(?:^|\s)h-(?:full|auto|screen|fit|min|max|px|[\d.]+)(?=\s|$)/g,
-  "max-w": /(?:^|\s)max-w-(?:none|xs|sm|md|lg|xl|2xl|3xl|4xl|5xl|6xl|7xl|full|prose)(?=\s|$)/g,
-  "grid-cols": /(?:^|\s)grid-cols-(?:none|[\d]+)(?=\s|$)/g,
-  border: /(?:^|\s)border(?:-(?:0|2|4|8))?(?=\s|$)/g,
-};
+export type CanvasBreakpointDevice = "desktop" | "tablet" | "phone";
+export type LayoutState = "default" | "hover" | "focus" | "active";
+
+/** Mobile-first: phone = base, tablet = md, desktop = lg. */
+export function breakpointFromDevice(
+  device: CanvasBreakpointDevice,
+): "base" | "md" | "lg" {
+  if (device === "tablet") return "md";
+  if (device === "desktop") return "lg";
+  return "base";
+}
+
+/** Tailwind variant prefix including trailing colon, or "" for base/default. */
+export function classVariant(
+  device: CanvasBreakpointDevice,
+  state: LayoutState = "default",
+): string {
+  const parts: string[] = [];
+  const bp = breakpointFromDevice(device);
+  if (bp !== "base") parts.push(bp);
+  if (state !== "default") parts.push(state);
+  return parts.length ? `${parts.join(":")}:` : "";
+}
 
 export function tokens(className: string): string[] {
   return className.split(/\s+/).filter(Boolean);
 }
 
-export function getPrefixValue(className: string, prefix: string): string {
-  const re = PREFIX_RE[prefix];
-  if (re) {
-    re.lastIndex = 0;
-    const m = className.match(new RegExp(`(?:^|\\s)${prefix}-(auto|px|[\\d.]+|full|none|xs|sm|md|lg|xl|2xl|3xl|4xl|5xl|6xl|7xl|prose|screen|fit|min|max|1\\/2|1\\/3|2\\/3|1\\/4|3\\/4)(?:\\s|$)`));
-    return m?.[1] || "";
+/** Split `md:hover:p-4` → { variant: "md:hover:", utility: "p-4" }. Ignores colons inside []. */
+export function splitVariant(token: string): { variant: string; utility: string } {
+  let depth = 0;
+  let lastColon = -1;
+  for (let i = 0; i < token.length; i++) {
+    const ch = token[i];
+    if (ch === "[") depth += 1;
+    else if (ch === "]") depth = Math.max(0, depth - 1);
+    else if (ch === ":" && depth === 0) lastColon = i;
+  }
+  if (lastColon < 0) return { variant: "", utility: token };
+  return {
+    variant: token.slice(0, lastColon + 1),
+    utility: token.slice(lastColon + 1),
+  };
+}
+
+function withVariant(variant: string, utility: string): string {
+  return variant ? `${variant}${utility}` : utility;
+}
+
+export function getPrefixValue(
+  className: string,
+  prefix: string,
+  variant = "",
+): string {
+  for (const t of tokens(className)) {
+    const { variant: v, utility } = splitVariant(t);
+    if (v !== variant) continue;
+    if (utility === prefix) return "";
+    if (tokenPrefix(utility) === prefix) {
+      return utility.slice(prefix.length + 1);
+    }
   }
   return "";
+}
+
+/** Token prefix before the last hyphen (`max-w-xl` → `max-w`, `gap-x-4` → `gap-x`). */
+function tokenPrefix(token: string): string {
+  const i = token.lastIndexOf("-");
+  return i > 0 ? token.slice(0, i) : token;
 }
 
 export function setPrefixValue(
   className: string,
   prefix: string,
   value: string,
+  variant = "",
 ): string {
   const stripped = tokens(className)
     .filter((c) => {
-      if (c === prefix) return false;
-      return !c.startsWith(`${prefix}-`);
+      const { variant: v, utility } = splitVariant(c);
+      if (v !== variant) return true;
+      if (utility === prefix) return false;
+      return tokenPrefix(utility) !== prefix;
     })
     .join(" ");
   if (!value) return twMerge(stripped);
-  return twMerge(stripped, `${prefix}-${value}`);
+  return twMerge(stripped, withVariant(variant, `${prefix}-${value}`));
 }
 
-export function hasExact(className: string, token: string): boolean {
-  return tokens(className).includes(token);
+export function hasExact(
+  className: string,
+  token: string,
+  variant = "",
+): boolean {
+  return tokens(className).some((c) => {
+    const { variant: v, utility } = splitVariant(c);
+    return v === variant && utility === token;
+  });
 }
 
 export function setExactGroup(
   className: string,
   group: readonly string[],
   next: string,
+  variant = "",
 ): string {
   const stripped = tokens(className)
-    .filter((c) => !group.includes(c))
+    .filter((c) => {
+      const { variant: v, utility } = splitVariant(c);
+      if (v !== variant) return true;
+      return !group.includes(utility);
+    })
     .join(" ");
   if (!next) return twMerge(stripped);
-  return twMerge(stripped, next);
+  return twMerge(stripped, withVariant(variant, next));
 }
 
 export function getExactGroup(
   className: string,
   group: readonly string[],
+  variant = "",
 ): string {
-  return tokens(className).find((c) => group.includes(c) && c) || "";
+  for (const c of tokens(className)) {
+    const { variant: v, utility } = splitVariant(c);
+    if (v === variant && utility && group.includes(utility)) return utility;
+  }
+  return "";
 }
 
 const COLOR_RE = (kind: "text" | "bg" | "border") =>
@@ -221,25 +273,27 @@ const COLOR_RE = (kind: "text" | "bg" | "border") =>
 export function getColorToken(
   className: string,
   kind: "text" | "bg" | "border",
+  variant = "",
 ): string {
   const re = COLOR_RE(kind);
-  return (
-    tokens(className).find((c) => re.test(c)) ||
-    tokens(className).find((c) =>
-      kind === "text"
-        ? c === "text-white" || c === "text-black" || c === "text-transparent"
-        : kind === "bg"
-          ? c === "bg-white" || c === "bg-black" || c === "bg-transparent"
-          : c === "border-white" || c === "border-black" || c === "border-transparent",
-    ) ||
-    ""
-  );
+  const extras = new Set([
+    `${kind}-white`,
+    `${kind}-black`,
+    `${kind}-transparent`,
+  ]);
+  for (const c of tokens(className)) {
+    const { variant: v, utility } = splitVariant(c);
+    if (v !== variant) continue;
+    if (re.test(utility) || extras.has(utility)) return utility;
+  }
+  return "";
 }
 
 export function setColorToken(
   className: string,
   kind: "text" | "bg" | "border",
   next: string,
+  variant = "",
 ): string {
   const re = COLOR_RE(kind);
   const extras = new Set([
@@ -248,10 +302,14 @@ export function setColorToken(
     `${kind}-transparent`,
   ]);
   const stripped = tokens(className)
-    .filter((c) => !re.test(c) && !extras.has(c))
+    .filter((c) => {
+      const { variant: v, utility } = splitVariant(c);
+      if (v !== variant) return true;
+      return !re.test(utility) && !extras.has(utility);
+    })
     .join(" ");
   if (!next) return twMerge(stripped);
-  return twMerge(stripped, next);
+  return twMerge(stripped, withVariant(variant, next));
 }
 
 export function mergeClasses(base: string, extra: string): string {
@@ -287,3 +345,67 @@ export function pickComputed(cs: CSSStyleDeclaration): ComputedBox {
     boxShadow: cs.boxShadow === "none" ? "" : cs.boxShadow,
   };
 }
+
+/** CSS properties that inherit from the parent box. */
+export const INHERITED_COMPUTED: (keyof ComputedBox)[] = [
+  "fontSize",
+  "fontWeight",
+  "lineHeight",
+  "color",
+  "textAlign",
+];
+
+export function computedLooksInherited(
+  key: keyof ComputedBox,
+  own: ComputedBox | null,
+  parent: ComputedBox | null,
+): boolean {
+  if (!own || !parent) return false;
+  if (!INHERITED_COMPUTED.includes(key)) return false;
+  const a = String(own[key] || "").replace(/\s+/g, "");
+  const b = String(parent[key] || "").replace(/\s+/g, "");
+  return Boolean(a && b && a === b);
+}
+
+export const WIDTHS = [
+  "",
+  "auto",
+  "full",
+  "screen",
+  "fit",
+  "min",
+  "max",
+  "1/2",
+  "1/3",
+  "2/3",
+  "1/4",
+  "3/4",
+] as const;
+
+export const MAX_WIDTHS = [
+  "",
+  "none",
+  "xs",
+  "sm",
+  "md",
+  "lg",
+  "xl",
+  "2xl",
+  "3xl",
+  "4xl",
+  "5xl",
+  "6xl",
+  "7xl",
+  "full",
+  "prose",
+] as const;
+
+export const HEIGHTS = [
+  "",
+  "auto",
+  "full",
+  "screen",
+  "fit",
+  "min",
+  "max",
+] as const;

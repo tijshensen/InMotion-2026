@@ -15,7 +15,6 @@ import {
   parseStoredContent,
   renderSectionHtmlForEditor,
   serializeContent,
-  serializeFields,
   type FieldType,
   type SectionField,
 } from "@/lib/sections";
@@ -30,7 +29,7 @@ import { HtmlCodeEditor } from "@/components/html-code-editor";
 import { BlockEditor } from "@/components/block-editor";
 import { TailwindStylePanel } from "@/components/tailwind-style-panel";
 import { setClassAtNid, stampLayoutNids } from "@/lib/layout-html";
-import type { ComputedBox } from "@/lib/tailwind-layout";
+import { pickComputed, type ComputedBox } from "@/lib/tailwind-layout";
 
 type TemplateBlock = {
   id: string;
@@ -620,7 +619,7 @@ export function VisualPageBuilder({
   } | null>(null);
   const [showAddInternal, setShowAddInternal] = useState(false);
   const [adding, setAdding] = useState(false);
-  const [deviceInternal, setDeviceInternal] = useState<CanvasDevice>("desktop");
+  const [deviceInternal, setDeviceInternal] = useState<CanvasDevice>("phone");
   const device = deviceProp ?? deviceInternal;
   const setDevice = onDeviceChange ?? setDeviceInternal;
   const showAdd = showAddProp ?? showAddInternal;
@@ -630,6 +629,9 @@ export function VisualPageBuilder({
   const scrollRestore = useRef(0);
   /** Last content/css we painted into each section (skip no-op writes) */
   const paintedContentRef = useRef<Map<string, string>>(new Map());
+  const layoutHitRef = useRef(layoutHit);
+  layoutHitRef.current = layoutHit;
+  const stampedNidsRef = useRef(false);
 
   const ordered = useMemo(
     () => [...sections].sort((a, b) => a.sortOrder - b.sortOrder),
@@ -719,6 +721,31 @@ export function VisualPageBuilder({
     }
   }, [editorMode, documentHtml]);
 
+  // Persist stable nids on the class-string HTML the first time Layout is opened.
+  useEffect(() => {
+    if (editorMode !== "layout" || stampedNidsRef.current) return;
+    stampedNidsRef.current = true;
+    onChange((prev) => {
+      let changed = false;
+      const next = prev.map((s) => {
+        const base = s.templateBlock?.defaultHtml || "";
+        const parsed = parseStoredContent(s.content, base);
+        const source = parsed.layoutHtml || base;
+        const stamped = stampLayoutNids(source);
+        if (stamped === parsed.layoutHtml) return s;
+        changed = true;
+        return {
+          ...s,
+          content: serializeContent({
+            fields: parsed.fields,
+            layoutHtml: stamped,
+          }),
+        };
+      });
+      return changed ? next : prev;
+    });
+  }, [editorMode, onChange]);
+
   const sectionSelector = useCallback((sectionId: string) => {
     const safe =
       typeof CSS !== "undefined" && typeof CSS.escape === "function"
@@ -769,6 +796,13 @@ export function VisualPageBuilder({
       body.innerHTML = html || "";
       wrap.classList.toggle("is-hidden", Boolean(s.isHidden));
       paintedContentRef.current.set(s.id, paintKey);
+      const hit = layoutHitRef.current;
+      if (hit && hit.sectionId === s.id && hit.nid) {
+        const el = body.querySelector(
+          `[data-cms-nid="${hit.nid}"]`,
+        ) as HTMLElement | null;
+        el?.classList.add("is-layout-selected");
+      }
       return true;
     },
     [sectionSelector, siteSlug, linkPages],
@@ -899,21 +933,43 @@ export function VisualPageBuilder({
         };
       }),
     );
-    setLayoutHit((h) => (h ? { ...h, className: cleaned } : h));
     const doc = iframeRef.current?.contentDocument;
     const el = doc?.querySelector(`[data-cms-nid="${nid}"]`) as HTMLElement | null;
     if (el) {
       el.className = `${cleaned}${cleaned ? " " : ""}is-layout-selected`;
+      const view = el.ownerDocument.defaultView;
+      const parentEl = layoutHit.parentNid
+        ? (doc?.querySelector(
+            `[data-cms-nid="${layoutHit.parentNid}"]`,
+          ) as HTMLElement | null)
+        : null;
+      setLayoutHit((h) =>
+        h
+          ? {
+              ...h,
+              className: cleaned,
+              computed: view ? pickComputed(view.getComputedStyle(el)) : h.computed,
+              parentComputed:
+                view && parentEl
+                  ? pickComputed(view.getComputedStyle(parentEl))
+                  : h.parentComputed,
+            }
+          : h,
+      );
+    } else {
+      setLayoutHit((h) => (h ? { ...h, className: cleaned } : h));
     }
   }
 
   function jumpLayoutParent() {
     if (!layoutHit?.parentNid) return;
     const doc = iframeRef.current?.contentDocument;
-    const el = doc?.querySelector(
+    if (!doc) return;
+    const el = doc.querySelector(
       `[data-cms-nid="${layoutHit.parentNid}"]`,
     ) as HTMLElement | null;
-    el?.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
+    if (!el) return;
+    el.click();
   }
 
   function setField(key: string, value: string) {
@@ -1018,9 +1074,9 @@ export function VisualPageBuilder({
           <div className="flex rounded-lg border border-slate-200 p-0.5 text-xs">
             {(
               [
-                ["desktop", "Desktop"],
+                ["phone", "Mobile"],
                 ["tablet", "Tablet"],
-                ["phone", "Phone"],
+                ["desktop", "Desktop"],
               ] as const
             ).map(([id, label]) => (
               <button
@@ -1138,6 +1194,7 @@ export function VisualPageBuilder({
               <TailwindStylePanel
                 tag={layoutHit.tag}
                 className={layoutHit.className}
+                device={device}
                 computed={layoutHit.computed}
                 parentComputed={layoutHit.parentComputed}
                 parentNid={layoutHit.parentNid}

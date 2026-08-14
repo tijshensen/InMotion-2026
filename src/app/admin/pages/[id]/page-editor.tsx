@@ -106,7 +106,7 @@ export function PageEditor({
   const [status, setStatus] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [showMeta, setShowMeta] = useState(false);
-  const [device, setDevice] = useState<CanvasDevice>("desktop");
+  const [device, setDevice] = useState<CanvasDevice>("phone");
   const [showAdd, setShowAdd] = useState(false);
   const [editorMode, setEditorMode] = useState<EditorMode>("content");
   const layoutModeAvailable = (cssFramework || "").toLowerCase() === "tailwind";

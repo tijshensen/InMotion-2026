@@ -465,9 +465,9 @@ export function AdminShell({
             <div className="flex rounded-lg border border-slate-700 p-0.5 text-[11px]">
               {(
                 [
-                  ["desktop", "Desktop"],
+                  ["phone", "Mobile"],
                   ["tablet", "Tablet"],
-                  ["phone", "Phone"],
+                  ["desktop", "Desktop"],
                 ] as const
               ).map(([id, label]) => (
                 <button
