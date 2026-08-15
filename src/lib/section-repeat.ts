@@ -5,8 +5,10 @@
 
 import {
   emptyFieldsFromTemplate,
+  parseRepeatableBlocks,
   parseSectionFields,
   parseStoredContent,
+  repeatGroupsFromHtml,
   serializeContent,
   type RepeatGroupDef,
   type SectionField,
@@ -219,6 +221,7 @@ export function extractRepeatGroups(
   sectionFields: Record<string, string> = {},
 ): DetectedRepeats | null {
   if (!html?.trim()) return null;
+  if (/<repeatable\b/i.test(html)) return null;
   if (/\{\{repeat:[a-z0-9_-]+\}\}/i.test(html)) return null;
 
   const { nodes } = parseFrags(html);
@@ -234,7 +237,8 @@ export function extractRepeatGroups(
   const used = new Set<string>();
   const key = groupKeyFromRun(run, used);
   const chunk = html.slice(run[0].start, run[run.length - 1].end);
-  const nextHtml = html.replace(chunk, `{{repeat:${key}}}`);
+  const wrap = `<repeatable name="${key}" items="${run.length}">${firstHtml}</repeatable>`;
+  const nextHtml = html.replace(chunk, wrap);
 
   const items: DetectedRepeatItem[] = run.map((el) => {
     const itemHtml = html.slice(el.start, el.end);
@@ -260,10 +264,45 @@ export function extractRepeatGroups(
       {
         key,
         itemHtml: firstHtml,
+        defaultItems: run.length,
         label: key === "cards" ? "Cards" : key === "columns" ? "Columns" : "Items",
       },
     ],
     items,
+  };
+}
+
+function rowsFromWrap(html: string): DetectedRepeatItem[] {
+  return defaultRepeatRowsFromHtml(html).map((row) => ({
+    groupKey: row.groupKey,
+    origin: "scraped" as const,
+    fields: row.fields,
+  }));
+}
+
+/** Collapse siblings, or keep an existing wrap. Never copies the full catalog over the wrap. */
+export function prepareRepeatableSection(
+  html: string,
+  sectionFields: Record<string, string> = {},
+): {
+  html: string;
+  groups: RepeatGroupDef[];
+  items: DetectedRepeatItem[];
+} {
+  if (!html?.trim()) return { html: html || "", groups: [], items: [] };
+  if (/<repeatable\b/i.test(html)) {
+    return {
+      html,
+      groups: repeatGroupsFromHtml(html),
+      items: rowsFromWrap(html),
+    };
+  }
+  const extracted = extractRepeatGroups(html, sectionFields);
+  if (!extracted) return { html, groups: [], items: [] };
+  return {
+    html: extracted.html,
+    groups: extracted.groups,
+    items: extracted.items,
   };
 }
 
@@ -276,10 +315,22 @@ export function applyExtractToContent(
   detected: boolean;
 } {
   const parsed = parseStoredContent(contentJson, templateHtml);
-  if (parsed.repeatGroups?.length) {
-    return { content: contentJson, items: [], detected: false };
-  }
   const source = parsed.layoutHtml || templateHtml;
+  if (/<repeatable\b/i.test(source)) {
+    const items = rowsFromWrap(source);
+    if (!items.length) {
+      return { content: contentJson, items: [], detected: false };
+    }
+    return {
+      content: serializeContent({
+        fields: parsed.fields,
+        layoutHtml: source,
+        repeatGroups: repeatGroupsFromHtml(source),
+      }),
+      items,
+      detected: true,
+    };
+  }
   const extracted = extractRepeatGroups(source, parsed.fields);
   if (!extracted) {
     return { content: contentJson, items: [], detected: false };
@@ -304,4 +355,19 @@ export function applyExtractToContent(
 
 export function emptyItemContent(itemHtml: string): string {
   return serializeContent({ fields: emptyFieldsFromTemplate(itemHtml) });
+}
+
+export function defaultRepeatRowsFromHtml(html: string): {
+  groupKey: string;
+  fields: Record<string, string>;
+}[] {
+  const rows: { groupKey: string; fields: Record<string, string> }[] = [];
+  for (const b of parseRepeatableBlocks(html)) {
+    const n = Math.max(0, b.items);
+    const fields = emptyFieldsFromTemplate(b.itemHtml);
+    for (let i = 0; i < n; i++) {
+      rows.push({ groupKey: b.name, fields: { ...fields } });
+    }
+  }
+  return rows;
 }

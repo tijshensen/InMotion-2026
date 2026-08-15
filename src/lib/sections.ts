@@ -49,6 +49,14 @@ export type RepeatGroupDef = {
   key: string;
   itemHtml: string;
   label?: string;
+  defaultItems?: number;
+};
+
+export type RepeatableBlock = {
+  name: string;
+  items: number;
+  itemHtml: string;
+  raw: string;
 };
 
 export type RepeatItemRender = {
@@ -82,6 +90,95 @@ const MULTI_RE =
 const IMG_RE =
   /<img\b[^>]*\beditable\s*=\s*["']true["'][^>]*\/?>/gi;
 const FILE_RE = /<file(\s[^>]*)?>([\s\S]*?)<\/file>/gi;
+
+const REPEATABLE_RE =
+  /<repeatable(\s[^>]*)?>([\s\S]*?)<\/repeatable>/gi;
+
+export function parseRepeatableBlocks(html: string): RepeatableBlock[] {
+  const out: RepeatableBlock[] = [];
+  if (!html) return out;
+  REPEATABLE_RE.lastIndex = 0;
+  let m: RegExpExecArray | null;
+  const re = new RegExp(REPEATABLE_RE.source, "gi");
+  while ((m = re.exec(html))) {
+    const attrs = m[1] || "";
+    const name =
+      attr(attrs, "name") ||
+      attr(attrs, "key") ||
+      "items";
+    const items = Math.max(0, parseInt(attr(attrs, "items") || "0", 10) || 0);
+    out.push({
+      name,
+      items,
+      itemHtml: (m[2] || "").trim(),
+      raw: m[0],
+    });
+  }
+  return out;
+}
+
+/** Drop inner card HTML so section-level field parse ignores item markers. */
+export function htmlWithoutRepeatableBodies(html: string): string {
+  return html.replace(
+    /<repeatable\b[^>]*>[\s\S]*?<\/repeatable>/gi,
+    (full) => {
+      const open = full.match(/^<repeatable\b[^>]*>/i)?.[0] || "";
+      return `${open}</repeatable>`;
+    },
+  );
+}
+
+export function migrateLegacyRepeatTokens(
+  html: string,
+  groups?: RepeatGroupDef[],
+  defaultItems = 2,
+): string {
+  if (!html) return html;
+  if (/<repeatable\b/i.test(html)) return html;
+  return html.replace(/\{\{repeat:([a-z0-9_-]+)\}\}/gi, (_m, key: string) => {
+    const g = groups?.find((x) => x.key === key);
+    const inner = g?.itemHtml || "";
+    const n = g?.defaultItems ?? defaultItems;
+    return `<repeatable name="${key}" items="${n}">${inner}</repeatable>`;
+  });
+}
+
+/** Update the card inside an instance wrap from the catalog wrap (keep items=). */
+export function syncRepeatableInners(
+  instanceHtml: string,
+  catalogHtml: string,
+): string {
+  const cat = parseRepeatableBlocks(catalogHtml);
+  if (!cat.length) return instanceHtml;
+  let out = instanceHtml;
+  for (const c of cat) {
+    const inst = parseRepeatableBlocks(out).find((x) => x.name === c.name);
+    if (!inst) continue;
+    if (inst.itemHtml.trim() === c.itemHtml.trim()) continue;
+    const items = inst.items || c.items || 2;
+    out = out.replace(
+      inst.raw,
+      `<repeatable name="${c.name}" items="${items}">${c.itemHtml}</repeatable>`,
+    );
+  }
+  return out;
+}
+
+export function repeatGroupsFromHtml(html: string): RepeatGroupDef[] {
+  return parseRepeatableBlocks(html).map((b) => ({
+    key: b.name,
+    itemHtml: b.itemHtml,
+    defaultItems: b.items,
+    label:
+      b.name === "cards"
+        ? "Cards"
+        : b.name === "columns"
+          ? "Columns"
+          : b.name === "articles"
+            ? "Articles"
+            : "Items",
+  }));
+}
 
 function attr(attrs: string | undefined, name: string): string {
   if (!attrs) return "";
@@ -143,6 +240,9 @@ export function parseSectionFields(html: string): SectionField[] {
   const used = new Map<string, number>();
 
   let rest = normalizeSectionHtml(html);
+  if (/<repeatable\b/i.test(rest)) {
+    rest = htmlWithoutRepeatableBodies(rest);
+  }
   let guard = 0;
   while (rest && guard++ < 200) {
     SINGLE_RE.lastIndex = 0;
@@ -264,16 +364,19 @@ export function parseStoredContent(
   try {
     const data = JSON.parse(content);
     if (data && typeof data === "object" && data.v === 1 && data.fields) {
-      return {
-        v: 1,
-        fields: { ...data.fields },
-        ...(typeof data.layoutHtml === "string" && data.layoutHtml
-          ? { layoutHtml: data.layoutHtml }
-          : {}),
-        ...(Array.isArray(data.repeatGroups) && data.repeatGroups.length
-          ? { repeatGroups: data.repeatGroups as RepeatGroupDef[] }
-          : {}),
-      };
+      return normalizeRepeatablePayload(
+        {
+          v: 1,
+          fields: { ...data.fields },
+          ...(typeof data.layoutHtml === "string" && data.layoutHtml
+            ? { layoutHtml: data.layoutHtml }
+            : {}),
+          ...(Array.isArray(data.repeatGroups) && data.repeatGroups.length
+            ? { repeatGroups: data.repeatGroups as RepeatGroupDef[] }
+            : {}),
+        },
+        templateHtml,
+      );
     }
     if (Array.isArray(data) && templateHtml) {
       const defs = parseSectionFields(templateHtml);
@@ -299,6 +402,30 @@ export function parseStoredContent(
   }
 
   return { v: 1, fields: {} };
+}
+
+function normalizeRepeatablePayload(
+  payload: SectionFieldsPayload,
+  templateHtml?: string,
+): SectionFieldsPayload {
+  const source = payload.layoutHtml || templateHtml || "";
+  if (!source.trim()) return payload;
+  const migrated = migrateLegacyRepeatTokens(
+    source,
+    payload.repeatGroups,
+  );
+  const synced = templateHtml
+    ? syncRepeatableInners(migrated, templateHtml)
+    : migrated;
+  const groups = repeatGroupsFromHtml(synced);
+  if (synced === payload.layoutHtml && groups.length === (payload.repeatGroups?.length || 0)) {
+    return payload;
+  }
+  return {
+    ...payload,
+    layoutHtml: synced,
+    ...(groups.length ? { repeatGroups: groups } : {}),
+  };
 }
 
 export function serializeFields(fields: Record<string, string>): string {
@@ -429,19 +556,41 @@ export function expandRepeatTokens(
   groups: RepeatGroupDef[] | undefined,
   items: RepeatItemRender[] = [],
 ): string {
-  if (!html || !groups?.length) return html;
-  return html.replace(/\{\{repeat:([a-z0-9_-]+)\}\}/gi, (_m, key: string) => {
-    const group = groups.find((g) => g.key === key);
-    if (!group?.itemHtml) return "";
-    return items
-      .filter((it) => it.groupKey === key && !it.isHidden)
-      .map((it) =>
-        renderSectionHtml(group.itemHtml, it.content, undefined, {
-          skipRepeats: true,
-        }),
-      )
-      .join("\n");
-  });
+  if (!html) return html;
+  const migrated = migrateLegacyRepeatTokens(html, groups);
+  return migrated.replace(
+    /<repeatable(\s[^>]*)?>([\s\S]*?)<\/repeatable>/gi,
+    (_full, rawAttrs: string, inner: string) => {
+      const attrs = rawAttrs || "";
+      const key = attr(attrs, "name") || attr(attrs, "key") || "items";
+      const defaultCount = Math.max(
+        0,
+        parseInt(attr(attrs, "items") || "0", 10) || 0,
+      );
+      const itemHtml = (inner || "").trim();
+      const fromGroup = groups?.find((g) => g.key === key)?.itemHtml;
+      const tpl = itemHtml || fromGroup || "";
+      if (!tpl) return "";
+
+      const rows = items.filter((it) => it.groupKey === key && !it.isHidden);
+      const hasStoredRows = items.some((it) => it.groupKey === key);
+      // Stored rows win — hidden defaults stay hidden. Only use items=N
+      // when this page has no rows yet (catalog preview / first paint).
+      const toRender = hasStoredRows
+        ? rows
+        : Array.from({ length: defaultCount || 0 }, () => ({
+            groupKey: key,
+            content: "",
+          }));
+      return toRender
+        .map((it) =>
+          renderSectionHtml(tpl, it.content || "", undefined, {
+            skipRepeats: true,
+          }),
+        )
+        .join("\n");
+    },
+  );
 }
 
 /**

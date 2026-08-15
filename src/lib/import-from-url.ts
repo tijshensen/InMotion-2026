@@ -8,8 +8,10 @@ import { createSiteForOrg, slugifySite } from "./sites";
 import { grokChat, extractJsonObject, xaiApiKey } from "./xai";
 import {
   emptyFieldsFromTemplate,
+  serializeContent,
   serializeFields,
 } from "./sections";
+import { prepareRepeatableSection } from "./section-repeat";
 import { scheduleSectionPreview } from "./section-preview";
 
 export const DEFAULT_IMPORT_PROMPT =
@@ -123,13 +125,35 @@ Rules:
 - Do not invent CMS features. No React/Vue. Semantic HTML + Tailwind only.
 - Header/footer in coreHtml should look complete but not include page-specific hero/content.`;
 
+export type ImportSection = {
+  name: string;
+  html: string;
+  repeatSeeds?: { groupKey: string; fields: Record<string, string> }[];
+};
+
 export type ImportPlan = {
   siteTitle: string;
   coreHtml: string;
   menuHtml: string;
   submenuHtml: string;
-  sections: { name: string; html: string }[];
+  sections: ImportSection[];
 };
+
+/** Collapse similar cards after Grok returns — never part of the prompt. */
+export function collapseRepeatsAfterImport(html: string): {
+  html: string;
+  repeatSeeds: { groupKey: string; fields: Record<string, string> }[];
+} {
+  const prepared = prepareRepeatableSection(html);
+  if (!prepared.items.length) return { html: prepared.html, repeatSeeds: [] };
+  return {
+    html: prepared.html,
+    repeatSeeds: prepared.items.map((it) => ({
+      groupKey: it.groupKey,
+      fields: it.fields,
+    })),
+  };
+}
 
 export async function planSiteFromUrl(opts: {
   sourceUrl: string;
@@ -161,10 +185,15 @@ ${sourceHtml}`,
   const coreHtml = String(parsed.coreHtml || "");
   const sections = Array.isArray(parsed.sections)
     ? parsed.sections
-        .map((s) => ({
-          name: String(s?.name || "Section").slice(0, 80),
-          html: String(s?.html || "").trim(),
-        }))
+        .map((s) => {
+          const rawHtml = String(s?.html || "").trim();
+          const collapsed = collapseRepeatsAfterImport(rawHtml);
+          return {
+            name: String(s?.name || "Section").slice(0, 80),
+            html: collapsed.html,
+            repeatSeeds: collapsed.repeatSeeds,
+          };
+        })
         .filter((s) => s.html)
     : [];
 
@@ -335,8 +364,21 @@ export async function applyImportPlan(opts: {
       blocks: {
         create: blocks.map((b, i) => ({
           templateBlockId: b.id,
-          content: serializeFields(emptyFieldsFromTemplate(b.defaultHtml)),
+          content: serializeContent({
+            fields: emptyFieldsFromTemplate(b.defaultHtml),
+            layoutHtml: b.defaultHtml,
+          }),
           sortOrder: i,
+          repeatItems: {
+            create: (opts.plan.sections[i]?.repeatSeeds || []).map(
+              (seed, ri) => ({
+                groupKey: seed.groupKey,
+                sortOrder: ri,
+                origin: "scraped",
+                content: serializeFields(seed.fields),
+              }),
+            ),
+          },
         })),
       },
     },

@@ -4,8 +4,10 @@ import { prisma } from "@/lib/db";
 import { getSessionUser } from "@/lib/auth";
 import {
   emptyFieldsFromTemplate,
+  serializeContent,
   serializeFields,
 } from "@/lib/sections";
+import { prepareRepeatableSection } from "@/lib/section-repeat";
 
 type Ctx = { params: Promise<{ id: string }> };
 
@@ -61,9 +63,12 @@ export async function POST(req: Request, ctx: Ctx) {
     -1,
   );
 
-  const content = serializeFields(
-    emptyFieldsFromTemplate(tb.defaultHtml),
-  );
+  const prepared = prepareRepeatableSection(tb.defaultHtml);
+  const content = serializeContent({
+    fields: emptyFieldsFromTemplate(prepared.html),
+    ...(prepared.html.trim() ? { layoutHtml: prepared.html } : {}),
+    ...(prepared.groups.length ? { repeatGroups: prepared.groups } : {}),
+  });
 
   const block = await prisma.pageBlock.create({
     data: {
@@ -71,6 +76,18 @@ export async function POST(req: Request, ctx: Ctx) {
       templateBlockId: tb.id,
       content,
       sortOrder: maxOrder + 1,
+      ...(prepared.items.length
+        ? {
+            repeatItems: {
+              create: prepared.items.map((item, i) => ({
+                groupKey: item.groupKey,
+                sortOrder: i,
+                origin: "scraped",
+                content: serializeContent({ fields: item.fields }),
+              })),
+            },
+          }
+        : {}),
     },
     include: {
       templateBlock: true,

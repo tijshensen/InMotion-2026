@@ -149,13 +149,23 @@ export function SectionRepeatEditor({
                 onClick={() => void addItem(group.key)}
                 className="rounded-md border border-slate-600 px-2 py-1 text-[11px] font-medium text-slate-200 hover:bg-slate-800 disabled:opacity-40"
               >
-                + Add
+                + Extra
               </button>
             </div>
             <ul className="space-y-2">
-              {visible.map((item, idx) => {
+              {visible.map((item) => {
                 const values = parseStoredContent(item.content).fields;
                 const open = openId === item.id;
+                const defaultIndex = list
+                  .filter((i) => i.origin === "scraped")
+                  .findIndex((i) => i.id === item.id);
+                const extraIndex = list
+                  .filter((i) => i.origin === "added")
+                  .findIndex((i) => i.id === item.id);
+                const isDefault = item.origin === "scraped";
+                const label = isDefault
+                  ? `Default ${defaultIndex + 1}`
+                  : `Extra ${extraIndex + 1}`;
                 return (
                   <li
                     key={item.id}
@@ -167,16 +177,10 @@ export function SectionRepeatEditor({
                         className="min-w-0 flex-1 text-left text-xs font-medium text-slate-100"
                         onClick={() => setOpenId(open ? null : item.id)}
                       >
-                        Item {idx + 1}
-                        {item.origin === "scraped" ? (
-                          <span className="ml-1.5 text-[10px] font-normal text-slate-400">
-                            scraped
-                          </span>
-                        ) : (
-                          <span className="ml-1.5 text-[10px] font-normal text-slate-400">
-                            added
-                          </span>
-                        )}
+                        {label}
+                        <span className="ml-1.5 text-[10px] font-normal text-slate-400">
+                          {isDefault ? "default" : "extra"}
+                        </span>
                       </button>
                       <button
                         type="button"
@@ -184,7 +188,7 @@ export function SectionRepeatEditor({
                         onClick={() => void removeItem(item)}
                         className="text-[11px] text-red-600 hover:underline disabled:opacity-40"
                       >
-                        {item.origin === "scraped" ? "Hide" : "Remove"}
+                        {isDefault ? "Hide" : "Remove"}
                       </button>
                     </div>
                     {open ? (
@@ -206,7 +210,7 @@ export function SectionRepeatEditor({
             </ul>
             {hidden.length ? (
               <p className="text-[11px] text-slate-400">
-                {hidden.length} scraped item{hidden.length === 1 ? "" : "s"} hidden.{" "}
+                {hidden.length} default item{hidden.length === 1 ? "" : "s"} hidden.{" "}
                 {hidden.map((h) => (
                   <button
                     key={h.id}

@@ -23,6 +23,7 @@ import {
   parseSectionFields,
   parseStoredContent,
   renderSectionHtmlForEditor,
+  repeatGroupsFromHtml,
   rewriteStoredContent,
   type FieldType,
   type SectionField,
@@ -693,7 +694,10 @@ export function VisualPageBuilder({
     selectedParsed?.layoutHtml || selectedHtml,
   );
   const selectedValues = selectedParsed?.fields || {};
-  const selectedRepeatGroups = selectedParsed?.repeatGroups || [];
+  const selectedRepeatGroups =
+    selectedParsed?.repeatGroups?.length
+      ? selectedParsed.repeatGroups
+      : repeatGroupsFromHtml(selectedParsed?.layoutHtml || selectedHtml);
 
   /**
    * Full iframe document only rebuilds when page structure changes
@@ -995,11 +999,6 @@ export function VisualPageBuilder({
     const section = ordered.find((s) => s.id === selectedSectionId);
     if (!section) return;
     if (section.repeatItems?.length) return;
-    const parsed = parseStoredContent(
-      section.content,
-      section.templateBlock?.defaultHtml || "",
-    );
-    if (parsed.repeatGroups?.length) return;
     if (detectedRepeatsRef.current.has(section.id)) return;
     detectedRepeatsRef.current.add(section.id);
     void fetch(`/api/pages/${pageId}/sections/${section.id}/repeats/detect`, {
@@ -1016,6 +1015,7 @@ export function VisualPageBuilder({
                   ...s,
                   content: data.block.content,
                   repeatItems: data.block.repeatItems || [],
+                  templateBlock: data.block.templateBlock || s.templateBlock,
                 }
               : s,
           ),

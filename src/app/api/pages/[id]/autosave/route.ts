@@ -60,16 +60,27 @@ export async function PUT(req: Request, ctx: Ctx) {
       for (const s of data.sections) {
         const existing = await prisma.pageBlock.findFirst({
           where: { id: s.id, pageId },
-          select: { content: true },
+          include: { templateBlock: { select: { defaultHtml: true } } },
         });
         const prev = existing
-          ? parseStoredContent(existing.content)
+          ? parseStoredContent(
+              existing.content,
+              existing.templateBlock?.defaultHtml || "",
+            )
           : { fields: {}, layoutHtml: undefined, repeatGroups: undefined };
+        const nextLayout =
+          s.layoutHtml !== undefined ? s.layoutHtml : prev.layoutHtml;
+        // Never flatten a wrap: keep <repeatable> if the client sent expanded cards.
+        const layoutHtml =
+          nextLayout && /<repeatable\b/i.test(nextLayout)
+            ? nextLayout
+            : prev.layoutHtml && /<repeatable\b/i.test(prev.layoutHtml)
+              ? prev.layoutHtml
+              : nextLayout;
         const content = s.fields
           ? serializeContent({
               fields: asStringFields(s.fields),
-              layoutHtml:
-                s.layoutHtml !== undefined ? s.layoutHtml : prev.layoutHtml,
+              layoutHtml,
               repeatGroups: prev.repeatGroups,
             })
           : s.content;
