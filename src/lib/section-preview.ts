@@ -22,6 +22,7 @@ import {
   resolveMenuSnippets,
 } from "./menu-snippets";
 import { normalizeInsertHtml } from "./insert-html";
+import { renderSectionHtml } from "./sections";
 
 const VIEWPORT_W = 1200;
 const CLIP_MAX_H = 640;
@@ -243,7 +244,7 @@ export async function generateSectionPreview(blockId: string): Promise<string | 
 
   const html = fillShell({
     coreHtml: shell,
-    sectionHtml: block.defaultHtml,
+    sectionHtml: renderSectionHtml(block.defaultHtml, ""),
     blockName: block.name,
     site,
     menuHtml,

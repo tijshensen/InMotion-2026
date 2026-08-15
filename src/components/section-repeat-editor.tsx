@@ -5,6 +5,7 @@ import type { RepeatItem } from "@/components/visual-page-builder";
 import {
   parseSectionFields,
   parseStoredContent,
+  serializeContent,
   type RepeatGroupDef,
   type SectionField,
 } from "@/lib/sections";
@@ -112,7 +113,7 @@ export function SectionRepeatEditor({
     const fields = { ...parsed.fields, ...updates };
     const next: RepeatItem = {
       ...item,
-      content: JSON.stringify({ v: 1, fields }),
+      content: serializeContent({ fields, labels: parsed.labels }),
     };
     onChangeItems(items.map((i) => (i.id === item.id ? next : i)));
     void fetch(
@@ -133,7 +134,7 @@ export function SectionRepeatEditor({
       {byGroup.map(({ group, items: list }) => {
         const visible = list.filter((i) => !i.isHidden);
         const hidden = list.filter((i) => i.isHidden);
-        const fields = parseSectionFields(group.itemHtml);
+        const wrapFields = parseSectionFields(group.itemHtml);
         return (
           <section key={group.key} className="space-y-2">
             <div className="flex items-center justify-between gap-2">
@@ -154,7 +155,12 @@ export function SectionRepeatEditor({
             </div>
             <ul className="space-y-2">
               {visible.map((item) => {
-                const values = parseStoredContent(item.content).fields;
+                const parsedItem = parseStoredContent(item.content);
+                const values = parsedItem.fields;
+                const fields = wrapFields.map((f) => ({
+                  ...f,
+                  label: parsedItem.labels?.[f.key] || f.label,
+                }));
                 const open = openId === item.id;
                 const defaultIndex = list
                   .filter((i) => i.origin === "scraped")

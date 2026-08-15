@@ -82,7 +82,10 @@ export async function POST(_req: Request, ctx: Ctx) {
           await tx.pageBlockRepeatItem.update({
             where: { id: scraped[i].id },
             data: {
-              content: serializeContent({ fields: next.fields }),
+              content: serializeContent({
+                fields: next.fields,
+                labels: next.labels,
+              }),
               isHidden: false,
             },
           });
@@ -100,7 +103,10 @@ export async function POST(_req: Request, ctx: Ctx) {
           groupKey: item.groupKey,
           sortOrder: i,
           origin: "scraped",
-          content: serializeContent({ fields: item.fields }),
+          content: serializeContent({
+            fields: item.fields,
+            labels: item.labels,
+          }),
         })),
       });
     }

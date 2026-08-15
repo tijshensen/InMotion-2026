@@ -83,7 +83,10 @@ export async function POST(req: Request, ctx: Ctx) {
                 groupKey: item.groupKey,
                 sortOrder: i,
                 origin: "scraped",
-                content: serializeContent({ fields: item.fields }),
+                content: serializeContent({
+                  fields: item.fields,
+                  labels: item.labels,
+                }),
               })),
             },
           }

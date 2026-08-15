@@ -11,6 +11,8 @@ import {
   parseStoredContent,
   repeatGroupsFromHtml,
   serializeContent,
+  slotNamesFromFields,
+  stampSlotsOnHtml,
   type RepeatGroupDef,
   type SectionField,
 } from "@/lib/sections";
@@ -148,6 +150,7 @@ export type DetectedRepeatItem = {
   groupKey: string;
   origin: "scraped";
   fields: Record<string, string>;
+  labels?: Record<string, string>;
 };
 
 export type DetectedRepeats = {
@@ -373,32 +376,34 @@ const META_SUFFIXES = [
   META.poster,
 ] as const;
 
-/** Map this card's own markers onto the wrap field keys (by position). */
+/** Map this card's markers onto wrap slot keys (slot= first, then position). */
 function zipItemFields(
   itemHtml: string,
   templateFields: SectionField[],
   sectionFields: Record<string, string> = {},
-): Record<string, string> {
+): { fields: Record<string, string>; labels: Record<string, string> } {
   const inItem = parseSectionFields(itemHtml);
-  const out: Record<string, string> = {};
+  const fields: Record<string, string> = {};
+  const labels: Record<string, string> = {};
   templateFields.forEach((tf, i) => {
-    const src = inItem[i];
+    const src = inItem.find((f) => f.key === tf.key) || inItem[i];
     if (!src) {
-      out[tf.key] = tf.defaultValue ?? "";
-      if (tf.type === "image" && tf.alt) out[tf.key + META.alt] = tf.alt;
+      fields[tf.key] = tf.defaultValue ?? "";
+      if (tf.type === "image" && tf.alt) fields[tf.key + META.alt] = tf.alt;
       return;
     }
     const stored = sectionFields[src.key] ?? sectionFields[tf.key];
-    out[tf.key] = stored ?? src.defaultValue ?? "";
+    fields[tf.key] = stored ?? src.defaultValue ?? "";
+    if (src.label) labels[tf.key] = src.label;
     for (const suf of META_SUFFIXES) {
       const v = sectionFields[src.key + suf] ?? sectionFields[tf.key + suf];
-      if (v) out[tf.key + suf] = v;
+      if (v) fields[tf.key + suf] = v;
     }
-    if (tf.type === "image" && !out[tf.key + META.alt] && src.alt) {
-      out[tf.key + META.alt] = src.alt;
+    if (tf.type === "image" && !fields[tf.key + META.alt] && src.alt) {
+      fields[tf.key + META.alt] = src.alt;
     }
   });
-  return out;
+  return { fields, labels };
 }
 
 /** Detect one similar-sibling group and extract scraped items. Idempotent if already slotted. */
@@ -415,7 +420,9 @@ export function extractRepeatGroups(
   if (!found) return null;
 
   const { run } = found;
-  const firstHtml = html.slice(run[0].start, run[0].end);
+  const rawFirst = html.slice(run[0].start, run[0].end);
+  const slots = slotNamesFromFields(parseSectionFields(rawFirst));
+  const firstHtml = stampSlotsOnHtml(rawFirst, slots);
   const templateFields = parseSectionFields(firstHtml);
   if (templateFields.length < 1) return null;
 
@@ -426,11 +433,13 @@ export function extractRepeatGroups(
   const nextHtml = html.replace(chunk, wrap);
 
   const items: DetectedRepeatItem[] = run.map((el) => {
-    const itemHtml = html.slice(el.start, el.end);
+    const itemHtml = stampSlotsOnHtml(html.slice(el.start, el.end), slots);
+    const zipped = zipItemFields(itemHtml, templateFields, sectionFields);
     return {
       groupKey: key,
       origin: "scraped" as const,
-      fields: zipItemFields(itemHtml, templateFields, sectionFields),
+      fields: zipped.fields,
+      labels: zipped.labels,
     };
   });
 
@@ -476,10 +485,21 @@ export function prepareRepeatableSection(
     };
   }
   if (/<repeatable\b/i.test(html)) {
+    let next = html;
+    for (const b of parseRepeatableBlocks(html)) {
+      const slots = slotNamesFromFields(parseSectionFields(b.itemHtml));
+      const stamped = stampSlotsOnHtml(b.itemHtml, slots);
+      if (stamped !== b.itemHtml) {
+        next = next.replace(
+          b.raw,
+          `<repeatable name="${b.name}" items="${b.items}">${stamped}</repeatable>`,
+        );
+      }
+    }
     return {
-      html,
-      groups: repeatGroupsFromHtml(html),
-      items: rowsFromWrap(html),
+      html: next,
+      groups: repeatGroupsFromHtml(next),
+      items: rowsFromWrap(next),
     };
   }
   return { html, groups: [], items: [] };

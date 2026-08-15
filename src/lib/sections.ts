@@ -39,6 +39,8 @@ export type SectionField = {
   label: string;
   defaultValue: string;
   raw: string;
+  /** Repeat bind key (slot=). Same across cards; JSON rows use this. */
+  slot?: string;
   width?: string;
   height?: string;
   alt?: string;
@@ -72,6 +74,8 @@ export type SectionFieldsPayload = {
   layoutHtml?: string;
   /** Templates for {{repeat:key}} slots inside layoutHtml. */
   repeatGroups?: RepeatGroupDef[];
+  /** Original Grok name= labels keyed by slot (repeat rows). */
+  labels?: Record<string, string>;
 };
 
 export const META = {
@@ -203,6 +207,91 @@ function makeKey(label: string, type: FieldType, used: Map<string, number>) {
   return n === 1 ? base : `${base}_${n}`;
 }
 
+function slugSlot(raw: string, type: FieldType): string {
+  return (
+    raw
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "_")
+      .replace(/^_|_$/g, "") || type
+  );
+}
+
+/** Bind key: slot= if present, otherwise slug(name=). */
+function resolveFieldKey(
+  attrs: string,
+  label: string,
+  type: FieldType,
+  used: Map<string, number>,
+): { key: string; slot?: string } {
+  const slotRaw = attr(attrs, "slot");
+  if (slotRaw) {
+    const key = slugSlot(slotRaw, type);
+    const n = (used.get(`slot:${key}`) || 0) + 1;
+    used.set(`slot:${key}`, n);
+    return { key: n === 1 ? key : `${key}_${n}`, slot: key };
+  }
+  return { key: makeKey(label, type, used) };
+}
+
+const SLOT_BASE: Record<FieldType, string> = {
+  singleline: "title",
+  multiline: "body",
+  image: "photo",
+  file: "file",
+};
+
+/** Generic slot names by marker type/position (title, body, photo, …). */
+export function slotNamesFromFields(fields: SectionField[]): string[] {
+  const n: Record<FieldType, number> = {
+    singleline: 0,
+    multiline: 0,
+    image: 0,
+    file: 0,
+  };
+  return fields.map((f) => {
+    if (f.slot) return f.slot;
+    n[f.type] += 1;
+    const base = SLOT_BASE[f.type];
+    return n[f.type] === 1 ? base : `${base}_${n[f.type]}`;
+  });
+}
+
+/** Add slot="…" to CMS markers in document order. Leaves name= intact. */
+export function stampSlotsOnHtml(html: string, slots: string[]): string {
+  if (!html || !slots.length) return html;
+  const patterns = [
+    /<singleline\b[^>]*>/i,
+    /<multiline\b[^>]*>/i,
+    /<file\b[^>]*>/i,
+    /<img\b[^>]*editable\s*=\s*["']true["'][^>]*\/?>/i,
+  ];
+  let rest = html;
+  let out = "";
+  let i = 0;
+  while (rest && i < slots.length) {
+    let best: { index: number; full: string } | null = null;
+    for (const re of patterns) {
+      const m = re.exec(rest);
+      if (m && (!best || m.index < best.index)) {
+        best = { index: m.index, full: m[0] };
+      }
+    }
+    if (!best) break;
+    out += rest.slice(0, best.index);
+    let tag = best.full;
+    if (!/\bslot\s*=/i.test(tag)) {
+      const slot = slots[i];
+      tag = /^<img\b/i.test(tag)
+        ? tag.replace(/(\s*\/?>)$/, ` slot="${slot}"$1`)
+        : tag.replace(/>$/, ` slot="${slot}">`);
+    }
+    i += 1;
+    out += tag;
+    rest = rest.slice(best.index + best.full.length);
+  }
+  return out + rest;
+}
+
 /** Fix legacy import artifacts (literal r/n for newlines) on section HTML. */
 export function normalizeSectionHtml(html: string): string {
   return normalizeInsertHtml(html || "");
@@ -274,23 +363,27 @@ export function parseSectionFields(html: string): SectionField[] {
       const attrs = next.match[1] || "";
       const inner = next.match[2] || "";
       const label = attr(attrs, "name") || "Text";
+      const { key, slot } = resolveFieldKey(attrs, label, "singleline", used);
       fields.push({
-        key: makeKey(label, "singleline", used),
+        key,
         type: "singleline",
         label,
         defaultValue: stripTags(inner),
         raw: full,
+        slot,
       });
     } else if (next.type === "multiline") {
       const attrs = next.match[1] || "";
       const inner = next.match[2] || "";
       const label = attr(attrs, "name") || "Content";
+      const { key, slot } = resolveFieldKey(attrs, label, "multiline", used);
       fields.push({
-        key: makeKey(label, "multiline", used),
+        key,
         type: "multiline",
         label,
         defaultValue: inner.trim(),
         raw: full,
+        slot,
       });
     } else if (next.type === "image") {
       const attrs = full.replace(/^<img\b/i, "").replace(/\/?>$/, "");
@@ -309,12 +402,14 @@ export function parseSectionFields(html: string): SectionField[] {
       const rawH = sizeH || attr(attrs, "height") || "";
       const width = rawW.replace(/px$/i, "").trim() || undefined;
       const height = rawH.replace(/px$/i, "").trim() || undefined;
+      const { key, slot } = resolveFieldKey(attrs, label, "image", used);
       fields.push({
-        key: makeKey(label, "image", used),
+        key,
         type: "image",
         label,
         defaultValue: attr(attrs, "src") || "",
         raw: full,
+        slot,
         width,
         height,
         alt: attr(attrs, "alt") || undefined,
@@ -324,12 +419,14 @@ export function parseSectionFields(html: string): SectionField[] {
       const attrs = next.match[1] || "";
       const inner = next.match[2] || "";
       const label = attr(attrs, "name") || "File";
+      const { key, slot } = resolveFieldKey(attrs, label, "file", used);
       fields.push({
-        key: makeKey(label, "file", used),
+        key,
         type: "file",
         label,
         defaultValue: stripTags(inner) || "",
         raw: full,
+        slot,
       });
     }
 
@@ -373,6 +470,9 @@ export function parseStoredContent(
             : {}),
           ...(Array.isArray(data.repeatGroups) && data.repeatGroups.length
             ? { repeatGroups: data.repeatGroups as RepeatGroupDef[] }
+            : {}),
+          ...(data.labels && typeof data.labels === "object"
+            ? { labels: data.labels as Record<string, string> }
             : {}),
         },
         templateHtml,
@@ -456,10 +556,14 @@ export function serializeContent(payload: {
   fields: Record<string, string>;
   layoutHtml?: string;
   repeatGroups?: RepeatGroupDef[];
+  labels?: Record<string, string>;
 }): string {
   const out: SectionFieldsPayload = { v: 1, fields: payload.fields };
   if (payload.layoutHtml?.trim()) out.layoutHtml = payload.layoutHtml;
   if (payload.repeatGroups?.length) out.repeatGroups = payload.repeatGroups;
+  if (payload.labels && Object.keys(payload.labels).length) {
+    out.labels = payload.labels;
+  }
   return JSON.stringify(out);
 }
 

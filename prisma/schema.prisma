@@ -110,8 +110,22 @@ model Site {
   settings    SiteSetting[]
   media       MediaAsset[]
   stylePresets StylePreset[]
+  grokImports GrokImport[]
 
   @@index([organizationId])
+}
+
+/// Raw xAI/Grok response from Import from URL (testing / replay).
+model GrokImport {
+  id        String   @id @default(cuid())
+  siteId    String
+  site      Site     @relation(fields: [siteId], references: [id], onDelete: Cascade)
+  sourceUrl String
+  prompt    String   @default("")
+  raw       String
+  createdAt DateTime @default(now())
+
+  @@index([siteId, createdAt])
 }
 
 /// Named Tailwind class snapshot (Layout mode “Save as preset”).

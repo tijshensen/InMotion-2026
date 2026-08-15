@@ -35,7 +35,10 @@ export async function PATCH(req: Request, ctx: Ctx) {
 
   const parsed = parseStoredContent(item.content);
   const content = body.fields
-    ? serializeContent({ fields: { ...parsed.fields, ...body.fields } })
+    ? serializeContent({
+        fields: { ...parsed.fields, ...body.fields },
+        labels: parsed.labels,
+      })
     : item.content;
 
   const updated = await prisma.pageBlockRepeatItem.update({

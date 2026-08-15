@@ -9,7 +9,6 @@ import { grokChat, extractJsonObject, xaiApiKey } from "./xai";
 import {
   emptyFieldsFromTemplate,
   serializeContent,
-  serializeFields,
 } from "./sections";
 import {
   harvestRepeatSeedsFromSource,
@@ -132,7 +131,11 @@ Rules:
 export type ImportSection = {
   name: string;
   html: string;
-  repeatSeeds?: { groupKey: string; fields: Record<string, string> }[];
+  repeatSeeds?: {
+    groupKey: string;
+    fields: Record<string, string>;
+    labels?: Record<string, string>;
+  }[];
 };
 
 export type ImportPlan = {
@@ -141,6 +144,7 @@ export type ImportPlan = {
   menuHtml: string;
   submenuHtml: string;
   sections: ImportSection[];
+  grokRaw?: string;
 };
 
 /** Collapse similar cards after Grok returns — never part of the prompt. */
@@ -170,6 +174,7 @@ export function collapseRepeatsAfterImport(
     repeatSeeds: items.map((it) => ({
       groupKey: it.groupKey,
       fields: it.fields,
+      labels: it.labels,
     })),
   };
 }
@@ -236,7 +241,25 @@ ${sourceHtml}`,
     submenuHtml:
       /<menuitem\b/i.test(submenuHtml) ? submenuHtml : DEFAULT_SUBMENU_SNIPPET,
     sections,
+    grokRaw: raw,
   };
+}
+
+export async function saveGrokImport(opts: {
+  siteId: string;
+  sourceUrl: string;
+  prompt: string;
+  raw: string;
+}) {
+  if (!opts.raw.trim()) return null;
+  return prisma.grokImport.create({
+    data: {
+      siteId: opts.siteId,
+      sourceUrl: opts.sourceUrl,
+      prompt: opts.prompt,
+      raw: opts.raw,
+    },
+  });
 }
 
 async function uniquePageSlug(
@@ -394,7 +417,10 @@ export async function applyImportPlan(opts: {
                 groupKey: seed.groupKey,
                 sortOrder: ri,
                 origin: "scraped",
-                content: serializeFields(seed.fields),
+                content: serializeContent({
+                  fields: seed.fields,
+                  labels: seed.labels,
+                }),
               }),
             ),
           },
@@ -453,6 +479,15 @@ export async function importSiteFromUrl(opts: {
     },
   });
 
+  if (plan.grokRaw) {
+    await saveGrokImport({
+      siteId: site.id,
+      sourceUrl: opts.sourceUrl,
+      prompt: opts.prompt,
+      raw: plan.grokRaw,
+    });
+  }
+
   return { site, ...applied };
 }
 
@@ -468,6 +503,14 @@ export async function importTemplateFromUrl(opts: {
     sourceUrl: opts.sourceUrl,
     prompt,
   });
+  if (plan.grokRaw) {
+    await saveGrokImport({
+      siteId: opts.siteId,
+      sourceUrl: opts.sourceUrl,
+      prompt,
+      raw: plan.grokRaw,
+    });
+  }
   return applyImportPlanAsTemplate({
     siteId: opts.siteId,
     plan,
