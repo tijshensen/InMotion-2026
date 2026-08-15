@@ -182,6 +182,144 @@ function walkFindRun(
   return null;
 }
 
+function collectSimilarRuns(nodes: Frag[]): Frag[][] {
+  const out: Frag[][] = [];
+  const kids = elementKids(nodes);
+  const run = longestSimilarRun(kids);
+  if (run) out.push(run);
+  for (const n of kids) out.push(...collectSimilarRuns(n.children));
+  return out;
+}
+
+export function unwrapRepeatableTags(html: string): string {
+  return html.replace(/<\/?repeatable\b[^>]*>/gi, "");
+}
+
+function stripText(html: string): string {
+  return html
+    .replace(/<script\b[\s\S]*?<\/script>/gi, "")
+    .replace(/<style\b[\s\S]*?<\/style>/gi, "")
+    .replace(/<[^>]+>/g, " ")
+    .replace(/&amp;/g, "&")
+    .replace(/&nbsp;/g, " ")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&quot;/g, '"')
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function fieldSignature(fields: Record<string, string>): string {
+  return Object.entries(fields)
+    .filter(([k, v]) => v && !k.endsWith(META.alt) && !/^https?:|^\//.test(v))
+    .map(([k, v]) => `${k}=${stripText(v).toLowerCase()}`)
+    .sort()
+    .join("|");
+}
+
+export function repeatSeedsAreClones(
+  items: { fields: Record<string, string> }[],
+): boolean {
+  if (items.length < 2) return false;
+  const sigs = items.map((it) => fieldSignature(it.fields));
+  return sigs.every((s) => s && s === sigs[0]);
+}
+
+export function storedRepeatRowsAreClones(
+  items: { content: string }[],
+): boolean {
+  return repeatSeedsAreClones(
+    items.map((it) => ({ fields: parseStoredContent(it.content).fields })),
+  );
+}
+
+function harvestFieldsFromPlainCard(
+  cardHtml: string,
+  templateFields: SectionField[],
+): Record<string, string> {
+  const headings = [
+    ...cardHtml.matchAll(/<h[1-6]\b[^>]*>([\s\S]*?)<\/h[1-6]>/gi),
+  ].map((m) => stripText(m[1]));
+  const paras = [...cardHtml.matchAll(/<p\b[^>]*>([\s\S]*?)<\/p>/gi)].map((m) =>
+    m[1].trim(),
+  );
+  const imgs = [...cardHtml.matchAll(/<img\b[^>]*>/gi)].map((m) => m[0]);
+  const out: Record<string, string> = {};
+  const singles = templateFields.filter((f) => f.type === "singleline");
+  const multis = templateFields.filter((f) => f.type === "multiline");
+  const images = templateFields.filter((f) => f.type === "image");
+  singles.forEach((f, i) => {
+    out[f.key] = headings[i] || f.defaultValue || "";
+  });
+  multis.forEach((f, i) => {
+    const raw = paras[i] || "";
+    out[f.key] = raw
+      ? /<[a-z]/i.test(raw)
+        ? raw
+        : `<p>${raw}</p>`
+      : f.defaultValue || "";
+  });
+  images.forEach((f, i) => {
+    const tag = imgs[i] || "";
+    const alt = tag.match(/\balt\s*=\s*["']([^"']*)["']/i)?.[1] || f.alt || "";
+    out[f.key] = "";
+    if (alt) out[f.key + META.alt] = alt;
+  });
+  for (const f of templateFields) {
+    if (out[f.key] === undefined) out[f.key] = f.defaultValue || "";
+  }
+  return out;
+}
+
+/** Pull unique dummy copy from the original page when Grok cloned the first card. */
+export function harvestRepeatSeedsFromSource(
+  sourceHtml: string,
+  catalogHtml: string,
+  countHint = 0,
+): DetectedRepeatItem[] | null {
+  if (!sourceHtml?.trim() || !catalogHtml?.trim()) return null;
+  const wrap =
+    parseRepeatableBlocks(catalogHtml)[0] ||
+    parseRepeatableBlocks(
+      extractRepeatGroups(unwrapRepeatableTags(catalogHtml))?.html || "",
+    )[0];
+  const itemHtml = wrap?.itemHtml || "";
+  const templateFields = parseSectionFields(itemHtml);
+  if (!templateFields.length) return null;
+
+  const hint = stripText(itemHtml).slice(0, 48).toLowerCase();
+  const { nodes } = parseFrags(sourceHtml);
+  const runs = collectSimilarRuns(nodes);
+  let best: { score: number; run: Frag[] } | null = null;
+  for (const run of runs) {
+    const cards = run.map((el) => sourceHtml.slice(el.start, el.end));
+    const texts = cards.map((c) => stripText(c).toLowerCase());
+    let score = 0;
+    if (countHint && run.length === countHint) score += 4;
+    if (hint && texts.some((t) => t.includes(hint.slice(0, 24)))) score += 8;
+    if (texts.some((t) => headingsOverlap(t, hint))) score += 3;
+    if (run.length >= 2) score += 1;
+    if (!best || score > best.score) best = { score, run };
+  }
+  if (!best || best.score < 5) return null;
+
+  const key = wrap?.name || "items";
+  return best.run.map((el) => ({
+    groupKey: key,
+    origin: "scraped" as const,
+    fields: harvestFieldsFromPlainCard(
+      sourceHtml.slice(el.start, el.end),
+      templateFields,
+    ),
+  }));
+}
+
+function headingsOverlap(cardText: string, hint: string): boolean {
+  if (!hint) return false;
+  const words = hint.split(" ").filter((w) => w.length > 3);
+  return words.filter((w) => cardText.includes(w)).length >= 2;
+}
+
 function groupKeyFromRun(run: Frag[], used: Set<string>): string {
   const cls = (run[0].className || "").toLowerCase();
   let base = "items";
@@ -291,7 +429,7 @@ function rowsFromWrap(html: string): DetectedRepeatItem[] {
   }));
 }
 
-/** Collapse siblings, or keep an existing wrap. Never copies the full catalog over the wrap. */
+/** Collapse siblings. If a wrap is already present, unwrap and extract first. */
 export function prepareRepeatableSection(
   html: string,
   sectionFields: Record<string, string> = {},
@@ -301,6 +439,15 @@ export function prepareRepeatableSection(
   items: DetectedRepeatItem[];
 } {
   if (!html?.trim()) return { html: html || "", groups: [], items: [] };
+  const stripped = unwrapRepeatableTags(html);
+  const extracted = extractRepeatGroups(stripped, sectionFields);
+  if (extracted) {
+    return {
+      html: extracted.html,
+      groups: extracted.groups,
+      items: extracted.items,
+    };
+  }
   if (/<repeatable\b/i.test(html)) {
     return {
       html,
@@ -308,18 +455,13 @@ export function prepareRepeatableSection(
       items: rowsFromWrap(html),
     };
   }
-  const extracted = extractRepeatGroups(html, sectionFields);
-  if (!extracted) return { html, groups: [], items: [] };
-  return {
-    html: extracted.html,
-    groups: extracted.groups,
-    items: extracted.items,
-  };
+  return { html, groups: [], items: [] };
 }
 
 export function applyExtractToContent(
   contentJson: string,
   templateHtml: string,
+  sourceHtml?: string,
 ): {
   content: string;
   items: DetectedRepeatItem[];
@@ -327,39 +469,35 @@ export function applyExtractToContent(
 } {
   const parsed = parseStoredContent(contentJson, templateHtml);
   const source = parsed.layoutHtml || templateHtml;
-  if (/<repeatable\b/i.test(source)) {
-    const items = rowsFromWrap(source);
-    if (!items.length) {
-      return { content: contentJson, items: [], detected: false };
-    }
-    return {
-      content: serializeContent({
-        fields: parsed.fields,
-        layoutHtml: source,
-        repeatGroups: repeatGroupsFromHtml(source),
-      }),
-      items,
-      detected: true,
-    };
+  const prepared = prepareRepeatableSection(source, parsed.fields);
+  let items = prepared.items;
+  if (sourceHtml && (items.length < 2 || repeatSeedsAreClones(items))) {
+    const harvested = harvestRepeatSeedsFromSource(
+      sourceHtml,
+      prepared.html,
+      items.length || parseRepeatableBlocks(prepared.html)[0]?.items || 0,
+    );
+    if (harvested?.length) items = harvested;
   }
-  const extracted = extractRepeatGroups(source, parsed.fields);
-  if (!extracted) {
+  if (!items.length) {
     return { content: contentJson, items: [], detected: false };
   }
 
-  const allFields = parseSectionFields(source);
+  const allFields = parseSectionFields(unwrapRepeatableTags(source));
   const fields = { ...parsed.fields };
   for (const f of allFields) {
-    if (!extracted.html.includes(f.raw)) delete fields[f.key];
+    if (!prepared.html.includes(f.raw)) delete fields[f.key];
   }
 
   return {
     content: serializeContent({
       fields,
-      layoutHtml: extracted.html,
-      repeatGroups: extracted.groups,
+      layoutHtml: prepared.html,
+      repeatGroups: prepared.groups.length
+        ? prepared.groups
+        : repeatGroupsFromHtml(prepared.html),
     }),
-    items: extracted.items,
+    items,
     detected: true,
   };
 }

@@ -11,7 +11,11 @@ import {
   serializeContent,
   serializeFields,
 } from "./sections";
-import { prepareRepeatableSection } from "./section-repeat";
+import {
+  harvestRepeatSeedsFromSource,
+  prepareRepeatableSection,
+  repeatSeedsAreClones,
+} from "./section-repeat";
 import { scheduleSectionPreview } from "./section-preview";
 
 export const DEFAULT_IMPORT_PROMPT =
@@ -140,15 +144,30 @@ export type ImportPlan = {
 };
 
 /** Collapse similar cards after Grok returns — never part of the prompt. */
-export function collapseRepeatsAfterImport(html: string): {
+export function collapseRepeatsAfterImport(
+  html: string,
+  sourceHtml?: string,
+): {
   html: string;
   repeatSeeds: { groupKey: string; fields: Record<string, string> }[];
 } {
   const prepared = prepareRepeatableSection(html);
-  if (!prepared.items.length) return { html: prepared.html, repeatSeeds: [] };
+  let items = prepared.items;
+  if (
+    sourceHtml &&
+    (items.length < 2 || repeatSeedsAreClones(items))
+  ) {
+    const harvested = harvestRepeatSeedsFromSource(
+      sourceHtml,
+      prepared.html,
+      items.length,
+    );
+    if (harvested?.length) items = harvested;
+  }
+  if (!items.length) return { html: prepared.html, repeatSeeds: [] };
   return {
     html: prepared.html,
-    repeatSeeds: prepared.items.map((it) => ({
+    repeatSeeds: items.map((it) => ({
       groupKey: it.groupKey,
       fields: it.fields,
     })),
@@ -187,7 +206,7 @@ ${sourceHtml}`,
     ? parsed.sections
         .map((s) => {
           const rawHtml = String(s?.html || "").trim();
-          const collapsed = collapseRepeatsAfterImport(rawHtml);
+          const collapsed = collapseRepeatsAfterImport(rawHtml, sourceHtml);
           return {
             name: String(s?.name || "Section").slice(0, 80),
             html: collapsed.html,

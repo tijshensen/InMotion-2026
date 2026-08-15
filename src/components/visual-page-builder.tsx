@@ -998,7 +998,6 @@ export function VisualPageBuilder({
     if (!selectedSectionId || editorMode !== "content") return;
     const section = ordered.find((s) => s.id === selectedSectionId);
     if (!section) return;
-    if (section.repeatItems?.length) return;
     if (detectedRepeatsRef.current.has(section.id)) return;
     detectedRepeatsRef.current.add(section.id);
     void fetch(`/api/pages/${pageId}/sections/${section.id}/repeats/detect`, {

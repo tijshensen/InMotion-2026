@@ -1,10 +1,32 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { getSessionUser } from "@/lib/auth";
-import { applyExtractToContent } from "@/lib/section-repeat";
+import {
+  applyExtractToContent,
+  storedRepeatRowsAreClones,
+} from "@/lib/section-repeat";
+import { fetchPageHtml } from "@/lib/import-from-url";
 import { serializeContent } from "@/lib/sections";
 
 type Ctx = { params: Promise<{ id: string; sectionId: string }> };
+
+async function sourceHtmlForPage(pageId: string): Promise<string> {
+  const page = await prisma.page.findFirst({
+    where: { id: pageId },
+    select: { siteId: true },
+  });
+  if (!page) return "";
+  const setting = await prisma.siteSetting.findFirst({
+    where: { siteId: page.siteId, key: "importedFromUrl" },
+    select: { value: true },
+  });
+  if (!setting?.value) return "";
+  try {
+    return await fetchPageHtml(setting.value);
+  } catch {
+    return "";
+  }
+}
 
 export async function POST(_req: Request, ctx: Ctx) {
   const user = await getSessionUser();
@@ -24,12 +46,18 @@ export async function POST(_req: Request, ctx: Ctx) {
     return NextResponse.json({ error: "Section not found" }, { status: 404 });
   }
 
-  if (block.repeatItems.length) {
+  const cloned = storedRepeatRowsAreClones(block.repeatItems);
+  if (block.repeatItems.length && !cloned) {
     return NextResponse.json({ block, detected: false });
   }
 
   const templateHtml = block.templateBlock?.defaultHtml || "";
-  const result = applyExtractToContent(block.content, templateHtml);
+  const sourceHtml = await sourceHtmlForPage(pageId);
+  const result = applyExtractToContent(
+    block.content,
+    templateHtml,
+    sourceHtml || undefined,
+  );
   if (!result.detected) {
     const refreshed = await prisma.pageBlock.findFirst({
       where: { id: block.id },
@@ -46,7 +74,17 @@ export async function POST(_req: Request, ctx: Ctx) {
       where: { id: block.id },
       data: { content: result.content },
     });
-    if (result.items.length) {
+    if (cloned) {
+      const scraped = block.repeatItems.filter((i) => i.origin === "scraped");
+      for (let i = 0; i < scraped.length; i++) {
+        const next = result.items[i];
+        if (!next) break;
+        await tx.pageBlockRepeatItem.update({
+          where: { id: scraped[i].id },
+          data: { content: serializeContent({ fields: next.fields }) },
+        });
+      }
+    } else if (result.items.length) {
       await tx.pageBlockRepeatItem.createMany({
         data: result.items.map((item, i) => ({
           pageBlockId: block.id,
@@ -66,5 +104,9 @@ export async function POST(_req: Request, ctx: Ctx) {
     });
   });
 
-  return NextResponse.json({ block: updated, detected: true });
+  return NextResponse.json({
+    block: updated,
+    detected: true,
+    reseeded: cloned,
+  });
 }
