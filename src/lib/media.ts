@@ -75,60 +75,6 @@ function guessMimeFromName(filename: string, reported: string): string {
   return reported || "application/octet-stream";
 }
 
-export async function saveBufferAsMedia(opts: {
-  siteSlug: string;
-  buffer: Buffer;
-  filename: string;
-  mimeType: string;
-}): Promise<{
-  filename: string;
-  path: string;
-  mimeType: string;
-  sizeBytes: number;
-  posterPath: string;
-}> {
-  const mimeType = guessMimeFromName(opts.filename, opts.mimeType);
-  if (!ALLOWED_MIME.has(mimeType)) {
-    throw new Error(
-      "Only JPEG, PNG, GIF, WebP, SVG images and MP4 video are allowed",
-    );
-  }
-  const video = isVideoMime(mimeType);
-  const max = video ? MAX_VIDEO_BYTES : MAX_IMAGE_BYTES;
-  if (opts.buffer.length > max) {
-    throw new Error(
-      video
-        ? "Video is too large (max 50 MB)"
-        : "File is too large (max 5 MB)",
-    );
-  }
-
-  const ext = EXT_BY_MIME[mimeType] || path.extname(opts.filename) || ".bin";
-  const id = randomBytes(8).toString("hex");
-  const original = originalBasename(opts.filename);
-  const storedName = `${id}-${original.replace(/\.[^.]+$/, "")}${ext}`;
-  const siteDir = safeSiteSlug(opts.siteSlug);
-  const dir = path.join(uploadsRoot(), siteDir);
-  await mkdir(dir, { recursive: true });
-
-  const diskPath = path.join(dir, storedName);
-  await writeFile(diskPath, opts.buffer);
-
-  const relative = `${siteDir}/${storedName}`;
-  const publicPath = publicUrlFor(relative);
-  let posterPath = "";
-  if (video) {
-    posterPath = (await tryGenerateVideoPoster(publicPath)) || "";
-  }
-  return {
-    filename: opts.filename,
-    path: publicPath,
-    mimeType: video ? "video/mp4" : mimeType,
-    sizeBytes: opts.buffer.length,
-    posterPath,
-  };
-}
-
 export async function saveUploadedMedia(opts: {
   siteSlug: string;
   file: File;
@@ -139,12 +85,47 @@ export async function saveUploadedMedia(opts: {
   sizeBytes: number;
   posterPath: string;
 }> {
-  return saveBufferAsMedia({
-    siteSlug: opts.siteSlug,
-    buffer: Buffer.from(await opts.file.arrayBuffer()),
+  const mimeType = guessMimeFromName(opts.file.name, opts.file.type);
+  if (!ALLOWED_MIME.has(mimeType)) {
+    throw new Error(
+      "Only JPEG, PNG, GIF, WebP, SVG images and MP4 video are allowed",
+    );
+  }
+  const video = isVideoMime(mimeType);
+  const max = video ? MAX_VIDEO_BYTES : MAX_IMAGE_BYTES;
+  if (opts.file.size > max) {
+    throw new Error(
+      video
+        ? "Video is too large (max 50 MB)"
+        : "File is too large (max 5 MB)",
+    );
+  }
+
+  const ext = EXT_BY_MIME[mimeType] || path.extname(opts.file.name) || ".bin";
+  const id = randomBytes(8).toString("hex");
+  const original = originalBasename(opts.file.name);
+  const storedName = `${id}-${original.replace(/\.[^.]+$/, "")}${ext}`;
+  const siteDir = safeSiteSlug(opts.siteSlug);
+  const dir = path.join(uploadsRoot(), siteDir);
+  await mkdir(dir, { recursive: true });
+
+  const buffer = Buffer.from(await opts.file.arrayBuffer());
+  const diskPath = path.join(dir, storedName);
+  await writeFile(diskPath, buffer);
+
+  const relative = `${siteDir}/${storedName}`;
+  const publicPath = publicUrlFor(relative);
+  let posterPath = "";
+  if (video) {
+    posterPath = (await tryGenerateVideoPoster(publicPath)) || "";
+  }
+  return {
     filename: opts.file.name,
-    mimeType: opts.file.type,
-  });
+    path: publicPath,
+    mimeType: video ? "video/mp4" : mimeType,
+    sizeBytes: opts.file.size,
+    posterPath,
+  };
 }
 
 /** @deprecated use saveUploadedMedia */

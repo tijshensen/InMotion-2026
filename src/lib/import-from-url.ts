@@ -16,11 +16,6 @@ import {
   repeatSeedsAreClones,
 } from "./section-repeat";
 import { scheduleSectionPreview } from "./section-preview";
-import {
-  localizeFieldImages,
-  localizeHtmlImages,
-  type ImageIngestCtx,
-} from "./import-images";
 
 export const DEFAULT_IMPORT_PROMPT =
   "Maintain the content of the homepage but rebuild it with a cleaner, modern-looking design.";
@@ -126,10 +121,10 @@ Rules:
 - In section HTML, wrap EVERY editable headline, short line, body copy, and image with CMS markers:
   <singleline name="Headline">Example headline</singleline>
   <multiline name="Body"><p>Example paragraph</p></multiline>
-  <img editable="true" name="Photo" src="https://example.com/shot.jpg" width="800" height="500" alt="Photo" />
+  <img editable="true" name="Photo" src="" width="800" height="500" alt="Photo" />
 - Use unique name= values within a section.
 - Keep real copy from the source page when the user asks to maintain content; only restyle it.
-- Images: copy the real src= URL from the source page (absolute http(s) when possible). Set sensible width/height from the layout.
+- Images: leave src="" (the editor will pick media). Set sensible width/height from the layout.
 - Do not invent CMS features. No React/Vue. Semantic HTML + Tailwind only.
 - Header/footer in coreHtml should look complete but not include page-specific hero/content.`;
 
@@ -150,7 +145,6 @@ export type ImportPlan = {
   submenuHtml: string;
   sections: ImportSection[];
   grokRaw?: string;
-  sourceUrl?: string;
 };
 
 /** Collapse similar cards after Grok returns — never part of the prompt. */
@@ -253,7 +247,6 @@ ${sourceHtml}`,
       /<menuitem\b/i.test(submenuHtml) ? submenuHtml : DEFAULT_SUBMENU_SNIPPET,
     sections,
     grokRaw: raw,
-    sourceUrl: opts.sourceUrl,
   };
 }
 
@@ -332,40 +325,6 @@ async function uniqueTemplateName(templateSetId: string, base: string) {
   return name;
 }
 
-async function localizeImportPlan(
-  plan: ImportPlan,
-  ctx: ImageIngestCtx,
-): Promise<ImportPlan> {
-  const coreHtml = await localizeHtmlImages(plan.coreHtml, ctx);
-  const menuHtml = await localizeHtmlImages(plan.menuHtml || "", ctx);
-  const sections = [];
-  for (const s of plan.sections) {
-    let html = await localizeHtmlImages(s.html, ctx);
-    const repeatSeeds = [];
-    for (const seed of s.repeatSeeds || []) {
-      repeatSeeds.push({
-        ...seed,
-        fields: await localizeFieldImages(seed.fields, ctx),
-      });
-    }
-    const firstPhoto = repeatSeeds[0]?.fields.photo;
-    if (firstPhoto) {
-      html = html.replace(/<img\b[^>]*>/i, (tag) => {
-        if (/\bsrc\s*=\s*["'](?:\/uploads\/)[^"']+["']/i.test(tag)) return tag;
-        if (/\bsrc\s*=\s*["'][^"']+["']/i.test(tag)) {
-          return tag.replace(
-            /\bsrc\s*=\s*["'][^"']*["']/i,
-            `src="${firstPhoto}"`,
-          );
-        }
-        return tag.replace(/<img/i, `<img src="${firstPhoto}"`);
-      });
-    }
-    sections.push({ ...s, html, repeatSeeds });
-  }
-  return { ...plan, coreHtml, menuHtml, sections };
-}
-
 /** Persist a Grok import plan as a page template + section layouts. */
 export async function applyImportPlanAsTemplate(opts: {
   siteId: string;
@@ -374,15 +333,9 @@ export async function applyImportPlanAsTemplate(opts: {
 }) {
   const site = await prisma.site.findUnique({
     where: { id: opts.siteId },
-    select: { id: true, name: true, slug: true },
+    select: { id: true, name: true },
   });
   if (!site) throw new Error("Site not found");
-  const plan = await localizeImportPlan(opts.plan, {
-    siteId: site.id,
-    siteSlug: site.slug,
-    sourceOrigin: opts.plan.sourceUrl,
-  });
-  opts = { ...opts, plan };
 
   let set = await prisma.templateSet.findFirst({
     where: { siteId: site.id },
