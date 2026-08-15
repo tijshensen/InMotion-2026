@@ -4,6 +4,7 @@
  */
 
 import {
+  META,
   emptyFieldsFromTemplate,
   parseRepeatableBlocks,
   parseSectionFields,
@@ -198,19 +199,39 @@ function groupKeyFromRun(run: Frag[], used: Set<string>): string {
   return key;
 }
 
+const META_SUFFIXES = [
+  META.alt,
+  META.link,
+  META.linkTarget,
+  META.linkTitle,
+  META.fileLabel,
+  META.poster,
+] as const;
+
+/** Map this card's own markers onto the wrap field keys (by position). */
 function zipItemFields(
   itemHtml: string,
   templateFields: SectionField[],
-  allFields: SectionField[],
-  sectionFields: Record<string, string>,
+  sectionFields: Record<string, string> = {},
 ): Record<string, string> {
-  const inItem = allFields.filter((f) => itemHtml.includes(f.raw));
+  const inItem = parseSectionFields(itemHtml);
   const out: Record<string, string> = {};
   templateFields.forEach((tf, i) => {
     const src = inItem[i];
-    out[tf.key] = src
-      ? (sectionFields[src.key] ?? src.defaultValue ?? "")
-      : tf.defaultValue ?? "";
+    if (!src) {
+      out[tf.key] = tf.defaultValue ?? "";
+      if (tf.type === "image" && tf.alt) out[tf.key + META.alt] = tf.alt;
+      return;
+    }
+    const stored = sectionFields[src.key] ?? sectionFields[tf.key];
+    out[tf.key] = stored ?? src.defaultValue ?? "";
+    for (const suf of META_SUFFIXES) {
+      const v = sectionFields[src.key + suf] ?? sectionFields[tf.key + suf];
+      if (v) out[tf.key + suf] = v;
+    }
+    if (tf.type === "image" && !out[tf.key + META.alt] && src.alt) {
+      out[tf.key + META.alt] = src.alt;
+    }
   });
   return out;
 }
@@ -233,7 +254,6 @@ export function extractRepeatGroups(
   const templateFields = parseSectionFields(firstHtml);
   if (templateFields.length < 1) return null;
 
-  const allFields = parseSectionFields(html);
   const used = new Set<string>();
   const key = groupKeyFromRun(run, used);
   const chunk = html.slice(run[0].start, run[run.length - 1].end);
@@ -245,18 +265,9 @@ export function extractRepeatGroups(
     return {
       groupKey: key,
       origin: "scraped" as const,
-      fields: zipItemFields(itemHtml, templateFields, allFields, sectionFields),
+      fields: zipItemFields(itemHtml, templateFields, sectionFields),
     };
   });
-
-  const consumed = new Set<string>();
-  for (const el of run) {
-    const itemHtml = html.slice(el.start, el.end);
-    for (const f of allFields) {
-      if (itemHtml.includes(f.raw)) consumed.add(f.key);
-    }
-  }
-  void consumed;
 
   return {
     html: nextHtml,
