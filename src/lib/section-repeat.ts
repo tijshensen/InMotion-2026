@@ -237,6 +237,30 @@ export function storedRepeatRowsAreClones(
   );
 }
 
+/** True when row 1's title is not this wrap's title (harvest grabbed another section). */
+export function repeatRowsMismatchCatalog(
+  items: { content: string }[],
+  catalogHtml: string,
+): boolean {
+  if (!items.length || !catalogHtml) return false;
+  const wrap = parseRepeatableBlocks(catalogHtml)[0];
+  const itemHtml = wrap?.itemHtml || catalogHtml;
+  const titleField =
+    parseSectionFields(itemHtml).find(
+      (f) => f.key === "title" || f.slot === "title" || f.type === "singleline",
+    ) || null;
+  const want = stripText(titleField?.defaultValue || "");
+  if (want.length < 4) return false;
+  const got = stripText(
+    parseStoredContent(items[0].content).fields[titleField?.key || "title"] ||
+      "",
+  );
+  if (!got) return true;
+  const a = want.toLowerCase();
+  const b = got.toLowerCase();
+  return !b.includes(a.slice(0, 10)) && !a.includes(b.slice(0, 10));
+}
+
 function harvestFieldsFromPlainCard(
   cardHtml: string,
   templateFields: SectionField[],
@@ -314,7 +338,11 @@ export function harvestRepeatSeedsFromSource(
   const templateFields = parseSectionFields(itemHtml);
   if (!templateFields.length) return null;
 
-  const hint = stripText(itemHtml).slice(0, 48).toLowerCase();
+  const titleField =
+    templateFields.find((f) => f.key === "title" || f.slot === "title") ||
+    templateFields.find((f) => f.type === "singleline");
+  const wrapTitle = stripText(titleField?.defaultValue || "").toLowerCase();
+  const hint = wrapTitle || stripText(itemHtml).slice(0, 48).toLowerCase();
   const { nodes } = parseFrags(sourceHtml);
   const runs = collectSimilarRuns(nodes);
   let best: { score: number; run: Frag[] } | null = null;
@@ -323,6 +351,10 @@ export function harvestRepeatSeedsFromSource(
     const texts = unique.map((el) =>
       stripText(sourceHtml.slice(el.start, el.end)).toLowerCase(),
     );
+    // Never attach another section's cards (e.g. reviews onto Features).
+    if (wrapTitle.length >= 4 && !texts.some((t) => t.includes(wrapTitle))) {
+      continue;
+    }
     const uniqueCount = new Set(texts).size;
     let score = uniqueCount * 6;
     if (uniqueCount <= 1) score -= 12;

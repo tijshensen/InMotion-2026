@@ -245,6 +245,30 @@ ${sourceHtml}`,
   };
 }
 
+/** Pull one named section's HTML out of a stored Grok JSON response. */
+export function sectionHtmlFromGrokRaw(
+  raw: string,
+  sectionName: string,
+): string | null {
+  if (!raw?.trim() || !sectionName) return null;
+  try {
+    const parsed = extractJsonObject(raw) as Partial<ImportPlan>;
+    const sections = Array.isArray(parsed.sections) ? parsed.sections : [];
+    const hit =
+      sections.find(
+        (s) =>
+          String(s?.name || "").toLowerCase() === sectionName.toLowerCase(),
+      ) ||
+      sections.find((s) =>
+        String(s?.html || "").includes(sectionName),
+      );
+    const html = String(hit?.html || "").trim();
+    return html || null;
+  } catch {
+    return null;
+  }
+}
+
 export async function saveGrokImport(opts: {
   siteId: string;
   sourceUrl: string;
