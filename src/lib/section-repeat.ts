@@ -301,7 +301,11 @@ function harvestFieldsFromPlainCard(
   images.forEach((f, i) => {
     const tag = imgs[i] || "";
     const alt = tag.match(/\balt\s*=\s*["']([^"']*)["']/i)?.[1] || "";
-    out[f.key] = "";
+    const src = (tag.match(/\bsrc\s*=\s*["']([^"']*)["']/i)?.[1] || "")
+      .replace(/&amp;/g, "&")
+      .trim();
+    out[f.key] =
+      src && !/^data:|^blob:/i.test(src) ? src : "";
     if (alt) out[f.key + META.alt] = alt;
   });
   for (const f of templateFields) {

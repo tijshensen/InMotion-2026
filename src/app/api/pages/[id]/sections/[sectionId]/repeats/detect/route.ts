@@ -16,6 +16,10 @@ import {
   sectionHtmlFromGrokRaw,
 } from "@/lib/import-from-url";
 import { parseStoredContent, serializeContent } from "@/lib/sections";
+import {
+  localizeFieldImages,
+  localizeHtmlImages,
+} from "@/lib/import-images";
 
 type Ctx = { params: Promise<{ id: string; sectionId: string }> };
 
@@ -161,6 +165,35 @@ export async function POST(_req: Request, ctx: Ctx) {
   ) {
     result.items = fromGrok.items;
     result.detected = true;
+  }
+  if (result.detected && page) {
+    const site = await prisma.site.findUnique({
+      where: { id: page.siteId },
+      select: { id: true, slug: true },
+    });
+    if (site) {
+      const ctx = {
+        siteId: site.id,
+        siteSlug: site.slug,
+        sourceOrigin: grok?.sourceUrl,
+      };
+      const parsed = parseStoredContent(result.content, templateHtml);
+      const layoutHtml = await localizeHtmlImages(
+        parsed.layoutHtml || templateHtml,
+        ctx,
+      );
+      result.content = serializeContent({
+        fields: parsed.fields,
+        layoutHtml,
+        repeatGroups: parsed.repeatGroups,
+      });
+      result.items = await Promise.all(
+        result.items.map(async (it) => ({
+          ...it,
+          fields: await localizeFieldImages(it.fields, ctx),
+        })),
+      );
+    }
   }
   if (!result.detected) {
     const refreshed = await prisma.pageBlock.findFirst({
