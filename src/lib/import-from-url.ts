@@ -151,11 +151,12 @@ export type ImportPlan = {
 export function collapseRepeatsAfterImport(
   html: string,
   sourceHtml?: string,
+  sectionName?: string,
 ): {
   html: string;
   repeatSeeds: { groupKey: string; fields: Record<string, string> }[];
 } {
-  const prepared = prepareRepeatableSection(html);
+  const prepared = prepareRepeatableSection(html, {}, sectionName);
   let items = prepared.items;
   if (
     sourceHtml &&
@@ -211,7 +212,11 @@ ${sourceHtml}`,
     ? parsed.sections
         .map((s) => {
           const rawHtml = String(s?.html || "").trim();
-          const collapsed = collapseRepeatsAfterImport(rawHtml, sourceHtml);
+          const collapsed = collapseRepeatsAfterImport(
+            rawHtml,
+            sourceHtml,
+            String(s?.name || "Section"),
+          );
           return {
             name: String(s?.name || "Section").slice(0, 80),
             html: collapsed.html,

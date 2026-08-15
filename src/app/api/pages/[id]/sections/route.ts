@@ -63,7 +63,7 @@ export async function POST(req: Request, ctx: Ctx) {
     -1,
   );
 
-  const prepared = prepareRepeatableSection(tb.defaultHtml);
+  const prepared = prepareRepeatableSection(tb.defaultHtml, {}, tb.name);
   const content = serializeContent({
     fields: emptyFieldsFromTemplate(prepared.html),
     ...(prepared.html.trim() ? { layoutHtml: prepared.html } : {}),

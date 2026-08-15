@@ -168,19 +168,24 @@ export function syncRepeatableInners(
   return out;
 }
 
+function humanizeRepeatName(key: string): string {
+  if (key === "cards") return "Cards";
+  if (key === "columns") return "Columns";
+  if (key === "articles") return "Articles";
+  if (/^(items)(_\d+)?$/i.test(key)) return "Items";
+  return key
+    .split("_")
+    .filter(Boolean)
+    .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+    .join(" ");
+}
+
 export function repeatGroupsFromHtml(html: string): RepeatGroupDef[] {
   return parseRepeatableBlocks(html).map((b) => ({
     key: b.name,
     itemHtml: b.itemHtml,
     defaultItems: b.items,
-    label:
-      b.name === "cards"
-        ? "Cards"
-        : b.name === "columns"
-          ? "Columns"
-          : b.name === "articles"
-            ? "Articles"
-            : "Items",
+    label: humanizeRepeatName(b.name),
   }));
 }
 

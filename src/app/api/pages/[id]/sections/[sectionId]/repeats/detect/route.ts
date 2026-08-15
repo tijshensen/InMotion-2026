@@ -3,16 +3,19 @@ import { prisma } from "@/lib/db";
 import { getSessionUser } from "@/lib/auth";
 import {
   applyExtractToContent,
+  isGenericGroupKey,
   prepareRepeatableSection,
+  remintRepeatableNames,
   repeatRowsMismatchCatalog,
   repeatSeedsAreClones,
+  sectionSlug,
   storedRepeatRowsAreClones,
 } from "@/lib/section-repeat";
 import {
   fetchPageHtml,
   sectionHtmlFromGrokRaw,
 } from "@/lib/import-from-url";
-import { serializeContent } from "@/lib/sections";
+import { parseStoredContent, serializeContent } from "@/lib/sections";
 
 type Ctx = { params: Promise<{ id: string; sectionId: string }> };
 
@@ -70,7 +73,58 @@ export async function POST(_req: Request, ctx: Ctx) {
     templateHtml,
   );
   if (block.repeatItems.length && !cloned && !mismatched) {
-    return NextResponse.json({ block, detected: false });
+    const name = block.templateBlock?.name || "";
+    const key = name ? sectionSlug(name) : "";
+    const needsRemint =
+      Boolean(key) &&
+      block.repeatItems.some(
+        (i) => isGenericGroupKey(i.groupKey) || i.groupKey !== key,
+      );
+    if (!needsRemint) {
+      return NextResponse.json({ block, detected: false });
+    }
+    const parsed = parseStoredContent(block.content, templateHtml);
+    const layoutHtml = remintRepeatableNames(
+      parsed.layoutHtml || templateHtml,
+      name,
+    );
+    const content = serializeContent({
+      fields: parsed.fields,
+      layoutHtml,
+      repeatGroups: parsed.repeatGroups,
+    });
+    await prisma.$transaction(async (tx) => {
+      await tx.pageBlock.update({
+        where: { id: block.id },
+        data: { content },
+      });
+      await tx.pageBlockRepeatItem.updateMany({
+        where: { pageBlockId: block.id },
+        data: { groupKey: key },
+      });
+      if (
+        block.templateBlock &&
+        /<repeatable\b/i.test(block.templateBlock.defaultHtml)
+      ) {
+        await tx.templateBlock.update({
+          where: { id: block.templateBlock.id },
+          data: {
+            defaultHtml: remintRepeatableNames(
+              block.templateBlock.defaultHtml,
+              name,
+            ),
+          },
+        });
+      }
+    });
+    const reminted = await prisma.pageBlock.findFirst({
+      where: { id: block.id },
+      include: {
+        templateBlock: true,
+        repeatItems: { orderBy: { sortOrder: "asc" } },
+      },
+    });
+    return NextResponse.json({ block: reminted, detected: false, reminted: true });
   }
 
   const page = await prisma.page.findFirst({
@@ -87,7 +141,11 @@ export async function POST(_req: Request, ctx: Ctx) {
     ? sectionHtmlFromGrokRaw(grok.raw, block.templateBlock?.name || "")
     : null;
   const fromGrok = grokSection
-    ? prepareRepeatableSection(grokSection)
+    ? prepareRepeatableSection(
+        grokSection,
+        {},
+        block.templateBlock?.name,
+      )
     : null;
 
   const sourceHtml = await sourceHtmlForPage(pageId);
@@ -95,6 +153,7 @@ export async function POST(_req: Request, ctx: Ctx) {
     block.content,
     templateHtml,
     sourceHtml || undefined,
+    block.templateBlock?.name,
   );
   if (
     fromGrok?.items.length &&
@@ -119,6 +178,17 @@ export async function POST(_req: Request, ctx: Ctx) {
       where: { id: block.id },
       data: { content: result.content },
     });
+    if (block.templateBlock?.name) {
+      await tx.templateBlock.update({
+        where: { id: block.templateBlock.id },
+        data: {
+          defaultHtml: remintRepeatableNames(
+            block.templateBlock.defaultHtml,
+            block.templateBlock.name,
+          ),
+        },
+      });
+    }
     if (cloned || mismatched) {
       const scraped = block.repeatItems.filter((i) => i.origin === "scraped");
       for (let i = 0; i < scraped.length; i++) {
@@ -127,6 +197,7 @@ export async function POST(_req: Request, ctx: Ctx) {
           await tx.pageBlockRepeatItem.update({
             where: { id: scraped[i].id },
             data: {
+              groupKey: next.groupKey,
               content: serializeContent({
                 fields: next.fields,
                 labels: next.labels,

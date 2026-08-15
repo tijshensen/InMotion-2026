@@ -382,6 +382,37 @@ function headingsOverlap(cardText: string, hint: string): boolean {
   return words.filter((w) => cardText.includes(w)).length >= 2;
 }
 
+/** Stable id for a section wrap + its JSON rows (more_features). */
+export function sectionSlug(name: string): string {
+  return (
+    name
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "_")
+      .replace(/^_|_$/g, "")
+      .slice(0, 48) || "items"
+  );
+}
+
+export function isGenericGroupKey(key: string): boolean {
+  return /^(items|cards|columns|articles)(_\d+)?$/i.test(key || "");
+}
+
+/** Rename generic <repeatable name="items"> to this section's slug. */
+export function remintRepeatableNames(html: string, sectionName: string): string {
+  const key = sectionSlug(sectionName);
+  if (!html?.trim() || !key) return html;
+  let out = html;
+  for (const b of parseRepeatableBlocks(html)) {
+    if (b.name === key) continue;
+    if (!isGenericGroupKey(b.name)) continue;
+    out = out.replace(
+      b.raw,
+      `<repeatable name="${key}" items="${b.items}">${b.itemHtml}</repeatable>`,
+    );
+  }
+  return out;
+}
+
 function groupKeyFromRun(run: Frag[], used: Set<string>): string {
   const cls = (run[0].className || "").toLowerCase();
   let base = "items";
@@ -442,6 +473,7 @@ function zipItemFields(
 export function extractRepeatGroups(
   html: string,
   sectionFields: Record<string, string> = {},
+  sectionName?: string,
 ): DetectedRepeats | null {
   if (!html?.trim()) return null;
   if (/<repeatable\b/i.test(html)) return null;
@@ -459,7 +491,9 @@ export function extractRepeatGroups(
   if (templateFields.length < 1) return null;
 
   const used = new Set<string>();
-  const key = groupKeyFromRun(run, used);
+  const key = sectionName?.trim()
+    ? sectionSlug(sectionName)
+    : groupKeyFromRun(run, used);
   const chunk = html.slice(run[0].start, run[run.length - 1].end);
   const wrap = `<repeatable name="${key}" items="${run.length}">${firstHtml}</repeatable>`;
   const nextHtml = html.replace(chunk, wrap);
@@ -482,7 +516,7 @@ export function extractRepeatGroups(
         key,
         itemHtml: firstHtml,
         defaultItems: run.length,
-        label: key === "cards" ? "Cards" : key === "columns" ? "Columns" : "Items",
+        label: sectionName?.trim() || humanizeGroupKey(key),
       },
     ],
     items,
@@ -498,9 +532,22 @@ function rowsFromWrap(html: string): DetectedRepeatItem[] {
 }
 
 /** Collapse siblings. If a wrap is already present, unwrap and extract first. */
+function humanizeGroupKey(key: string): string {
+  if (key === "cards") return "Cards";
+  if (key === "columns") return "Columns";
+  if (key === "articles") return "Articles";
+  if (isGenericGroupKey(key)) return "Items";
+  return key
+    .split("_")
+    .filter(Boolean)
+    .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+    .join(" ");
+}
+
 export function prepareRepeatableSection(
   html: string,
   sectionFields: Record<string, string> = {},
+  sectionName?: string,
 ): {
   html: string;
   groups: RepeatGroupDef[];
@@ -508,7 +555,7 @@ export function prepareRepeatableSection(
 } {
   if (!html?.trim()) return { html: html || "", groups: [], items: [] };
   const stripped = unwrapRepeatableTags(html);
-  const extracted = extractRepeatGroups(stripped, sectionFields);
+  const extracted = extractRepeatGroups(stripped, sectionFields, sectionName);
   if (extracted) {
     return {
       html: extracted.html,
@@ -517,8 +564,8 @@ export function prepareRepeatableSection(
     };
   }
   if (/<repeatable\b/i.test(html)) {
-    let next = html;
-    for (const b of parseRepeatableBlocks(html)) {
+    let next = sectionName ? remintRepeatableNames(html, sectionName) : html;
+    for (const b of parseRepeatableBlocks(next)) {
       const slots = slotNamesFromFields(parseSectionFields(b.itemHtml));
       const stamped = stampSlotsOnHtml(b.itemHtml, slots);
       if (stamped !== b.itemHtml) {
@@ -528,10 +575,15 @@ export function prepareRepeatableSection(
         );
       }
     }
+    const items = rowsFromWrap(next).map((row) =>
+      sectionName
+        ? { ...row, groupKey: sectionSlug(sectionName) }
+        : row,
+    );
     return {
       html: next,
       groups: repeatGroupsFromHtml(next),
-      items: rowsFromWrap(next),
+      items,
     };
   }
   return { html, groups: [], items: [] };
@@ -541,6 +593,7 @@ export function applyExtractToContent(
   contentJson: string,
   templateHtml: string,
   sourceHtml?: string,
+  sectionName?: string,
 ): {
   content: string;
   items: DetectedRepeatItem[];
@@ -548,7 +601,11 @@ export function applyExtractToContent(
 } {
   const parsed = parseStoredContent(contentJson, templateHtml);
   const source = parsed.layoutHtml || templateHtml;
-  const prepared = prepareRepeatableSection(source, parsed.fields);
+  const prepared = prepareRepeatableSection(
+    source,
+    parsed.fields,
+    sectionName,
+  );
   let items = prepared.items;
   if (sourceHtml && (items.length < 2 || repeatSeedsAreClones(items))) {
     const harvested = harvestRepeatSeedsFromSource(
