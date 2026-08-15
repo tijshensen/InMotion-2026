@@ -205,6 +205,7 @@ function stripText(html: string): string {
     .replace(/&lt;/g, "<")
     .replace(/&gt;/g, ">")
     .replace(/&quot;/g, '"')
+    .replace(/&#x27;|&apos;|&#39;/gi, "'")
     .replace(/\s+/g, " ")
     .trim();
 }
@@ -243,32 +244,55 @@ function harvestFieldsFromPlainCard(
   const paras = [...cardHtml.matchAll(/<p\b[^>]*>([\s\S]*?)<\/p>/gi)].map((m) =>
     m[1].trim(),
   );
+  const paraInfos = paras
+    .map((raw) => ({ raw, text: stripText(raw) }))
+    .filter((p) => p.text);
+  const namePool = [
+    ...headings,
+    ...paraInfos.filter((p) => p.text.length <= 40).map((p) => p.text),
+  ];
+  const usedNames = new Set<string>();
   const imgs = [...cardHtml.matchAll(/<img\b[^>]*>/gi)].map((m) => m[0]);
   const out: Record<string, string> = {};
   const singles = templateFields.filter((f) => f.type === "singleline");
   const multis = templateFields.filter((f) => f.type === "multiline");
   const images = templateFields.filter((f) => f.type === "image");
   singles.forEach((f, i) => {
-    out[f.key] = headings[i] || f.defaultValue || "";
+    const name = namePool[i] || "";
+    out[f.key] = name;
+    if (name) usedNames.add(name.toLowerCase());
   });
+  const bodies = paraInfos.filter((p) => !usedNames.has(p.text.toLowerCase()));
   multis.forEach((f, i) => {
-    const raw = paras[i] || "";
+    const raw = bodies[i]?.raw || "";
     out[f.key] = raw
       ? /<[a-z]/i.test(raw)
         ? raw
         : `<p>${raw}</p>`
-      : f.defaultValue || "";
+      : "";
   });
   images.forEach((f, i) => {
     const tag = imgs[i] || "";
-    const alt = tag.match(/\balt\s*=\s*["']([^"']*)["']/i)?.[1] || f.alt || "";
+    const alt = tag.match(/\balt\s*=\s*["']([^"']*)["']/i)?.[1] || "";
     out[f.key] = "";
     if (alt) out[f.key + META.alt] = alt;
   });
   for (const f of templateFields) {
-    if (out[f.key] === undefined) out[f.key] = f.defaultValue || "";
+    if (out[f.key] === undefined) out[f.key] = "";
   }
   return out;
+}
+
+function dedupeRun(html: string, run: Frag[]): Frag[] {
+  const seen = new Set<string>();
+  const out: Frag[] = [];
+  for (const el of run) {
+    const sig = stripText(html.slice(el.start, el.end)).toLowerCase();
+    if (!sig || seen.has(sig)) continue;
+    seen.add(sig);
+    out.push(el);
+  }
+  return out.length ? out : run;
 }
 
 /** Pull unique dummy copy from the original page when Grok cloned the first card. */
@@ -292,16 +316,19 @@ export function harvestRepeatSeedsFromSource(
   const runs = collectSimilarRuns(nodes);
   let best: { score: number; run: Frag[] } | null = null;
   for (const run of runs) {
-    const cards = run.map((el) => sourceHtml.slice(el.start, el.end));
-    const texts = cards.map((c) => stripText(c).toLowerCase());
-    let score = 0;
-    if (countHint && run.length === countHint) score += 4;
-    if (hint && texts.some((t) => t.includes(hint.slice(0, 24)))) score += 8;
+    const unique = dedupeRun(sourceHtml, run);
+    const texts = unique.map((el) =>
+      stripText(sourceHtml.slice(el.start, el.end)).toLowerCase(),
+    );
+    const uniqueCount = new Set(texts).size;
+    let score = uniqueCount * 6;
+    if (uniqueCount <= 1) score -= 12;
+    if (hint && texts.some((t) => t.includes(hint.slice(0, 18)))) score += 8;
     if (texts.some((t) => headingsOverlap(t, hint))) score += 3;
-    if (run.length >= 2) score += 1;
-    if (!best || score > best.score) best = { score, run };
+    if (countHint && unique.length === countHint) score += 2;
+    if (!best || score > best.score) best = { score, run: unique };
   }
-  if (!best || best.score < 5) return null;
+  if (!best || best.score < 5 || best.run.length < 2) return null;
 
   const key = wrap?.name || "items";
   return best.run.map((el) => ({

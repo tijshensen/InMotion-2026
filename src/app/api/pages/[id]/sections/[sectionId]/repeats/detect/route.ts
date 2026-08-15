@@ -78,11 +78,20 @@ export async function POST(_req: Request, ctx: Ctx) {
       const scraped = block.repeatItems.filter((i) => i.origin === "scraped");
       for (let i = 0; i < scraped.length; i++) {
         const next = result.items[i];
-        if (!next) break;
-        await tx.pageBlockRepeatItem.update({
-          where: { id: scraped[i].id },
-          data: { content: serializeContent({ fields: next.fields }) },
-        });
+        if (next) {
+          await tx.pageBlockRepeatItem.update({
+            where: { id: scraped[i].id },
+            data: {
+              content: serializeContent({ fields: next.fields }),
+              isHidden: false,
+            },
+          });
+        } else {
+          await tx.pageBlockRepeatItem.update({
+            where: { id: scraped[i].id },
+            data: { isHidden: true },
+          });
+        }
       }
     } else if (result.items.length) {
       await tx.pageBlockRepeatItem.createMany({
