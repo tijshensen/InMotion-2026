@@ -12,8 +12,9 @@ import {
 } from "./sections";
 import {
   harvestRepeatSeedsFromSource,
+  mergeHarvestIntoSeeds,
   prepareRepeatableSection,
-  repeatSeedsAreClones,
+  serializePreviewSeeds,
 } from "./section-repeat";
 import { scheduleSectionPreview } from "./section-preview";
 import {
@@ -164,16 +165,16 @@ export function collapseRepeatsAfterImport(
 } {
   const prepared = prepareRepeatableSection(html, {}, sectionName);
   let items = prepared.items;
-  if (
-    sourceHtml &&
-    (items.length < 2 || repeatSeedsAreClones(items))
-  ) {
+  if (sourceHtml) {
     const harvested = harvestRepeatSeedsFromSource(
       sourceHtml,
       prepared.html,
-      items.length,
+      items.length || undefined,
+      sectionName,
     );
-    if (harvested?.length) items = harvested;
+    if (harvested?.length) {
+      items = mergeHarvestIntoSeeds(items, harvested);
+    }
   }
   if (!items.length) return { html: prepared.html, repeatSeeds: [] };
   return {
@@ -348,19 +349,6 @@ async function localizeImportPlan(
         fields: await localizeFieldImages(seed.fields, ctx),
       });
     }
-    const firstPhoto = repeatSeeds[0]?.fields.photo;
-    if (firstPhoto) {
-      html = html.replace(/<img\b[^>]*>/i, (tag) => {
-        if (/\bsrc\s*=\s*["'](?:\/uploads\/)[^"']+["']/i.test(tag)) return tag;
-        if (/\bsrc\s*=\s*["'][^"']+["']/i.test(tag)) {
-          return tag.replace(
-            /\bsrc\s*=\s*["'][^"']*["']/i,
-            `src="${firstPhoto}"`,
-          );
-        }
-        return tag.replace(/<img/i, `<img src="${firstPhoto}"`);
-      });
-    }
     sections.push({ ...s, html, repeatSeeds });
   }
   return { ...plan, coreHtml, menuHtml, sections };
@@ -430,6 +418,7 @@ export async function applyImportPlanAsTemplate(opts: {
         defaultHtml: s.html,
         isRepeatable: false,
         sortOrder: i,
+        previewSeeds: serializePreviewSeeds(s.repeatSeeds || []),
       },
     });
     blocks.push(tb);

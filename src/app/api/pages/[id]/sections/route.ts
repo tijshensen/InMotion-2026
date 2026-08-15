@@ -7,7 +7,7 @@ import {
   serializeContent,
   serializeFields,
 } from "@/lib/sections";
-import { prepareRepeatableSection } from "@/lib/section-repeat";
+import { parsePreviewSeeds, prepareRepeatableSection } from "@/lib/section-repeat";
 
 type Ctx = { params: Promise<{ id: string }> };
 
@@ -64,6 +64,15 @@ export async function POST(req: Request, ctx: Ctx) {
   );
 
   const prepared = prepareRepeatableSection(tb.defaultHtml, {}, tb.name);
+  const previewSeeds = parsePreviewSeeds(tb.previewSeeds);
+  const seedRows =
+    previewSeeds.length > 0
+      ? previewSeeds
+      : prepared.items.map((item) => ({
+          groupKey: item.groupKey,
+          fields: item.fields,
+          labels: item.labels,
+        }));
   const content = serializeContent({
     fields: emptyFieldsFromTemplate(prepared.html),
     ...(prepared.html.trim() ? { layoutHtml: prepared.html } : {}),
@@ -76,10 +85,10 @@ export async function POST(req: Request, ctx: Ctx) {
       templateBlockId: tb.id,
       content,
       sortOrder: maxOrder + 1,
-      ...(prepared.items.length
+      ...(seedRows.length
         ? {
             repeatItems: {
-              create: prepared.items.map((item, i) => ({
+              create: seedRows.map((item, i) => ({
                 groupKey: item.groupKey,
                 sortOrder: i,
                 origin: "scraped",

@@ -203,6 +203,8 @@ model TemplateBlock {
   sortOrder   Int      @default(0)
   /// Public URL of cached Puppeteer thumb, e.g. /uploads/_thumbs/sections/{id}.jpg
   previewPath String   @default("")
+  /// JSON dummy rows for canvas/thumbs: [{ groupKey, fields, labels }]
+  previewSeeds String  @default("")
   pageBlocks  PageBlock[]
 }
 

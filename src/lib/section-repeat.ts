@@ -153,6 +153,91 @@ export type DetectedRepeatItem = {
   labels?: Record<string, string>;
 };
 
+export type PreviewSeed = {
+  groupKey: string;
+  fields: Record<string, string>;
+  labels?: Record<string, string>;
+};
+
+export function serializePreviewSeeds(items: PreviewSeed[]): string {
+  return JSON.stringify(
+    items.map((it) => ({
+      groupKey: it.groupKey,
+      fields: it.fields,
+      ...(it.labels && Object.keys(it.labels).length
+        ? { labels: it.labels }
+        : {}),
+    })),
+  );
+}
+
+export function parsePreviewSeeds(raw: string | null | undefined): PreviewSeed[] {
+  if (!raw?.trim()) return [];
+  try {
+    const data = JSON.parse(raw);
+    if (!Array.isArray(data)) return [];
+    return data
+      .map((row) => ({
+        groupKey: String(row?.groupKey || "items"),
+        fields:
+          row?.fields && typeof row.fields === "object"
+            ? (row.fields as Record<string, string>)
+            : {},
+        labels:
+          row?.labels && typeof row.labels === "object"
+            ? (row.labels as Record<string, string>)
+            : undefined,
+      }))
+      .filter((row) => Object.keys(row.fields).length);
+  } catch {
+    return [];
+  }
+}
+
+export function isWeakImageUrl(url: string): boolean {
+  if (!url?.trim()) return true;
+  return /twitter-meta|og-image|opengraph|og:image|default-og|placeholder|1x1|pixel\.gif|spacer\.(gif|png)/i.test(
+    url,
+  );
+}
+
+export function seedPhotosAreWeak(items: { fields: Record<string, string> }[]): boolean {
+  const photos = items
+    .map((it) => it.fields.photo || "")
+    .filter(Boolean);
+  if (!items.length) return true;
+  if (photos.length < items.length) return true;
+  if (photos.every((p) => isWeakImageUrl(p))) return true;
+  if (photos.length >= 2 && photos.every((p) => p === photos[0])) return true;
+  return false;
+}
+
+export function mergeHarvestIntoSeeds(
+  items: DetectedRepeatItem[],
+  harvested: DetectedRepeatItem[],
+): DetectedRepeatItem[] {
+  if (!harvested.length) return items;
+  if (!items.length || repeatSeedsAreClones(items)) return harvested;
+  return items.map((it, i) => {
+    const src = harvested[i];
+    if (!src) return it;
+    const next = { ...it, fields: { ...it.fields } };
+    for (const [k, v] of Object.entries(src.fields)) {
+      if (!v) continue;
+      const cur = next.fields[k] || "";
+      const imageish = /photo|image|src/i.test(k) || /^https?:\/\//i.test(v);
+      if (!cur) next.fields[k] = v;
+      else if (imageish && (isWeakImageUrl(cur) || cur === items[0]?.fields[k])) {
+        next.fields[k] = v;
+      }
+    }
+    if (src.labels) {
+      next.labels = { ...src.labels, ...next.labels };
+    }
+    return next;
+  });
+}
+
 export type DetectedRepeats = {
   html: string;
   groups: RepeatGroupDef[];
@@ -331,6 +416,7 @@ export function harvestRepeatSeedsFromSource(
   sourceHtml: string,
   catalogHtml: string,
   countHint = 0,
+  sectionName?: string,
 ): DetectedRepeatItem[] | null {
   if (!sourceHtml?.trim() || !catalogHtml?.trim()) return null;
   const wrap =
@@ -369,7 +455,8 @@ export function harvestRepeatSeedsFromSource(
   }
   if (!best || best.score < 5 || best.run.length < 2) return null;
 
-  const key = wrap?.name || "items";
+  const key =
+    (sectionName ? sectionSlug(sectionName) : "") || wrap?.name || "items";
   return best.run.map((el) => ({
     groupKey: key,
     origin: "scraped" as const,
@@ -611,13 +698,14 @@ export function applyExtractToContent(
     sectionName,
   );
   let items = prepared.items;
-  if (sourceHtml && (items.length < 2 || repeatSeedsAreClones(items))) {
+  if (sourceHtml) {
     const harvested = harvestRepeatSeedsFromSource(
       sourceHtml,
       prepared.html,
       items.length || parseRepeatableBlocks(prepared.html)[0]?.items || 0,
+      sectionName,
     );
-    if (harvested?.length) items = harvested;
+    if (harvested?.length) items = mergeHarvestIntoSeeds(items, harvested);
   }
   if (!items.length) {
     return { content: contentJson, items: [], detected: false };

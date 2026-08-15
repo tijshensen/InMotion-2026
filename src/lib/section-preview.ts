@@ -22,7 +22,8 @@ import {
   resolveMenuSnippets,
 } from "./menu-snippets";
 import { normalizeInsertHtml } from "./insert-html";
-import { renderSectionHtml } from "./sections";
+import { renderSectionHtml, serializeContent } from "./sections";
+import { parsePreviewSeeds } from "./section-repeat";
 
 const VIEWPORT_W = 1200;
 const CLIP_MAX_H = 640;
@@ -242,9 +243,19 @@ export async function generateSectionPreview(blockId: string): Promise<string | 
       ? renderBootstrapMenuHtml(site.slug, menuPages)
       : renderMenuHtml(site.slug, menuPages));
 
+  const previewSeeds = parsePreviewSeeds(block.previewSeeds);
+  const sectionHtml = renderSectionHtml(block.defaultHtml, "", undefined, {
+    repeatItems: previewSeeds.map((seed) => ({
+      groupKey: seed.groupKey,
+      content: serializeContent({
+        fields: seed.fields,
+        labels: seed.labels,
+      }),
+    })),
+  });
   const html = fillShell({
     coreHtml: shell,
-    sectionHtml: renderSectionHtml(block.defaultHtml, ""),
+    sectionHtml,
     blockName: block.name,
     site,
     menuHtml,
@@ -278,7 +289,7 @@ export async function generateSectionPreview(blockId: string): Promise<string | 
         ),
       );
     });
-    await new Promise((r) => setTimeout(r, 150));
+    await new Promise((r) => setTimeout(r, 400));
     const el = await page.$("#cms-preview-section");
     const box = el ? await el.boundingBox() : null;
     if (el && box && box.height >= 8) {
