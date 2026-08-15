@@ -341,7 +341,7 @@ async function localizeImportPlan(
   const menuHtml = await localizeHtmlImages(plan.menuHtml || "", ctx);
   const sections = [];
   for (const s of plan.sections) {
-    const html = await localizeHtmlImages(s.html, ctx);
+    let html = await localizeHtmlImages(s.html, ctx);
     const repeatSeeds = [];
     for (const seed of s.repeatSeeds || []) {
       repeatSeeds.push({
