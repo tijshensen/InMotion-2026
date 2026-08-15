@@ -4,6 +4,7 @@ import bcrypt from "bcryptjs";
 import { SignJWT, jwtVerify } from "jose";
 import { prisma } from "./db";
 import type { Role, User } from "@prisma/client";
+import { authCookieDomain } from "./hosts";
 
 const COOKIE = "cms_session";
 
@@ -34,12 +35,14 @@ export async function createSession(userId: string) {
   });
 
   const jar = await cookies();
+  const domain = authCookieDomain();
   jar.set(COOKIE, token, {
     httpOnly: true,
     sameSite: "lax",
-    secure: process.env.NODE_ENV === "production",
+    secure: process.env.NODE_ENV === "production" || Boolean(domain),
     path: "/",
     expires: expiresAt,
+    ...(domain ? { domain } : {}),
   });
 }
 
@@ -48,7 +51,13 @@ export async function destroySession() {
   const token = jar.get(COOKIE)?.value;
   if (token) {
     await prisma.session.deleteMany({ where: { token } });
-    jar.delete(COOKIE);
+    const domain = authCookieDomain();
+    jar.set(COOKIE, "", {
+      httpOnly: true,
+      path: "/",
+      expires: new Date(0),
+      ...(domain ? { domain } : {}),
+    });
   }
 }
 
