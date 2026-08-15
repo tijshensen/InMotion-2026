@@ -203,6 +203,8 @@ model TemplateBlock {
   sortOrder   Int      @default(0)
   /// Public URL of cached Puppeteer thumb, e.g. /uploads/_thumbs/sections/{id}.jpg
   previewPath String   @default("")
+  /// Unused leftover column (must stay — Railway `db push` refuses to drop it).
+  previewSeeds String  @default("")
   pageBlocks  PageBlock[]
 }
 
