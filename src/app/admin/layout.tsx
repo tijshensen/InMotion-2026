@@ -28,13 +28,15 @@ function navFor(user: { replayOnboarding: boolean }) {
   ];
 }
 
+export const dynamic = "force-dynamic";
+
 export default async function AdminLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
-  await seedOnboardingReplayOnce();
   const user = await requireUser();
+  await seedOnboardingReplayOnce();
   const active = await getActiveSite();
 
   const pages = active

@@ -61,17 +61,21 @@ export async function upsertGoogleUser(opts: {
 }
 
 export async function seedOnboardingReplayOnce() {
-  const done = await prisma.appSetting.findUnique({
-    where: { key: REPLAY_SEEDED_KEY },
-  });
-  if (done) return;
-  await prisma.user.updateMany({
-    where: { email: { in: DEFAULT_ONBOARDING_REPLAY_EMAILS } },
-    data: { replayOnboarding: true },
-  });
-  await prisma.appSetting.create({
-    data: { key: REPLAY_SEEDED_KEY, value: "1" },
-  });
+  try {
+    const done = await prisma.appSetting.findUnique({
+      where: { key: REPLAY_SEEDED_KEY },
+    });
+    if (done) return;
+    await prisma.user.updateMany({
+      where: { email: { in: DEFAULT_ONBOARDING_REPLAY_EMAILS } },
+      data: { replayOnboarding: true },
+    });
+    await prisma.appSetting.create({
+      data: { key: REPLAY_SEEDED_KEY, value: "1" },
+    });
+  } catch {
+    // No DB during `next build` prerender — ignore.
+  }
 }
 
 export async function userHasAnySite(userId: string) {
