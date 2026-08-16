@@ -15,7 +15,7 @@ export function htmlHasTailwindPlayScript(html: string) {
  */
 export function ensureTailwindPlayCdn(html: string): string {
   if (!html) return html;
-  let next = html.replace(
+  const next = html.replace(
     /<link[^>]+href=["']https?:\/\/cdn\.tailwindcss\.com[^"']*["'][^>]*>\s*/gi,
     "",
   );
