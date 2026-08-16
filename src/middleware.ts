@@ -1,12 +1,24 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
-import { isOnboardingHost } from "@/lib/hosts";
+import { isOnboardingHost, onboardingOrigin } from "@/lib/hosts";
 
 export function middleware(req: NextRequest) {
   const host = req.headers.get("host") || "";
+  const { pathname } = req.nextUrl;
+
+  // CMS host (i.): onboarding lives on mymother, not here.
+  if (
+    !isOnboardingHost(host) &&
+    (pathname === "/onboarding" || pathname.startsWith("/onboarding/"))
+  ) {
+    const origin = onboardingOrigin();
+    if (origin) {
+      return NextResponse.redirect(`${origin}${pathname}${req.nextUrl.search}`);
+    }
+  }
+
   if (!isOnboardingHost(host)) return NextResponse.next();
 
-  const { pathname } = req.nextUrl;
   if (pathname === "/" || pathname === "") {
     const url = req.nextUrl.clone();
     url.pathname = "/start";
@@ -16,5 +28,5 @@ export function middleware(req: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/"],
+  matcher: ["/", "/onboarding", "/onboarding/:path*"],
 };

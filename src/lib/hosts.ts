@@ -23,7 +23,14 @@ export function isOnboardingHost(hostHeader: string) {
   return hostnameOf(hostHeader) === want;
 }
 
+export function onboardingOrigin() {
+  const host = onboardingHost();
+  return host ? `https://${host}` : "";
+}
+
 export function cmsOnboardingUrl() {
+  const origin = onboardingOrigin();
+  if (origin) return `${origin}/onboarding`;
   const base = cmsPublicUrl();
   return base ? `${base}/onboarding` : "/onboarding";
 }
