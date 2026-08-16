@@ -5,19 +5,17 @@ import bcrypt from "bcryptjs";
 import { SignJWT, jwtVerify } from "jose";
 import { prisma } from "./db";
 import type { Role, User } from "@prisma/client";
-import { authCookieDomain } from "./hosts";
 
 const COOKIE = "cms_session";
 
+/** Host-only on the Railway app (i.). Landing Pages domains never see this. */
 function sessionCookieOptions(expiresAt: Date) {
-  const domain = authCookieDomain();
   return {
     httpOnly: true,
     sameSite: "lax" as const,
-    secure: process.env.NODE_ENV === "production" || Boolean(domain),
+    secure: process.env.NODE_ENV === "production",
     path: "/",
     expires: expiresAt,
-    ...(domain ? { domain } : {}),
   };
 }
 
@@ -62,12 +60,10 @@ export async function destroySession() {
   const token = jar.get(COOKIE)?.value;
   if (token) {
     await prisma.session.deleteMany({ where: { token } });
-    const domain = authCookieDomain();
     jar.set(COOKIE, "", {
       httpOnly: true,
       path: "/",
       expires: new Date(0),
-      ...(domain ? { domain } : {}),
     });
   }
 }

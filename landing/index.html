@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>made a website</title>
+    <style>
+      :root {
+        color-scheme: light;
+        font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, sans-serif;
+      }
+      body {
+        margin: 0;
+        min-height: 100vh;
+        display: grid;
+        place-items: center;
+        background: #f8fafc;
+        color: #0f172a;
+      }
+      main {
+        width: min(28rem, calc(100vw - 2rem));
+        text-align: center;
+      }
+      .kicker {
+        font-size: 0.7rem;
+        font-weight: 600;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+        color: #2563eb;
+      }
+      h1 {
+        margin: 0.75rem 0 0.5rem;
+        font-size: 1.85rem;
+        letter-spacing: -0.03em;
+      }
+      p {
+        margin: 0 0 1.5rem;
+        line-height: 1.55;
+        color: #475569;
+      }
+      a.google {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 0.6rem;
+        width: 100%;
+        box-sizing: border-box;
+        padding: 0.75rem 1rem;
+        border: 1px solid #e2e8f0;
+        border-radius: 0.6rem;
+        background: #fff;
+        color: #1e293b;
+        font-weight: 600;
+        font-size: 0.9rem;
+        text-decoration: none;
+      }
+      a.google:hover {
+        background: #f8fafc;
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <p class="kicker">made a website</p>
+      <h1>Your site, from a URL you like</h1>
+      <p>
+        Sign in with Google. We’ll ask which website you want to look like,
+        then build your first draft.
+      </p>
+      <!-- Static landing: OAuth runs only on the Railway app. -->
+      <a class="google" href="https://i.madeawebsite.com/auth/google">
+        Continue with Google
+      </a>
+    </main>
+  </body>
+</html>

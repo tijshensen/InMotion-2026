@@ -1,16 +1,11 @@
-import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { getSessionUser } from "@/lib/auth";
-import { isOnboardingHost } from "@/lib/hosts";
 import { getImportPrompt } from "@/lib/import-from-url";
 import { OnboardingWizard } from "./onboarding-wizard";
 
 export default async function OnboardingPage() {
   const user = await getSessionUser();
-  if (!user) {
-    const host = (await headers()).get("host") || "";
-    redirect(isOnboardingHost(host) ? "/" : "/login");
-  }
+  if (!user) redirect("/start");
 
   const defaultBrief = await getImportPrompt();
 

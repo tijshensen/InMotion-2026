@@ -2,7 +2,6 @@ import { handleGoogleCallback } from "@/lib/google-oauth";
 
 export const dynamic = "force-dynamic";
 
-/** Alias for the canonical /auth/google/callback. */
 export async function GET(req: Request) {
   return handleGoogleCallback(req);
 }

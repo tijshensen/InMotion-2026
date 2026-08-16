@@ -43,6 +43,13 @@ export default function LoginPage() {
             Sign in to admin
           </h1>
         </div>
+        <a
+          href="/auth/google"
+          className="mb-6 flex w-full items-center justify-center gap-2 rounded-lg border border-slate-200 bg-white px-4 py-2.5 text-sm font-medium text-slate-800 hover:bg-slate-50"
+        >
+          Continue with Google
+        </a>
+        <p className="mb-4 text-center text-xs text-slate-400">or</p>
         <form onSubmit={onSubmit} className="space-y-4">
           <label className="block space-y-1.5">
             <span className="text-sm font-medium text-slate-700">Email</span>

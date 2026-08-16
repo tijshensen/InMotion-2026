@@ -1,36 +1,21 @@
-/** Public hosts for the CMS (i.) and onboarding (mymother.). */
+/**
+ * Hosts:
+ *   i.madeawebsite.com          → Railway (this app, Google OAuth, session)
+ *   madeawebsite.com + *        → Cloudflare Pages (static landings only)
+ *
+ * Landing domains must never be attached to Railway.
+ */
 
-export function cmsPublicUrl() {
+/** Railway app public origin, e.g. https://i.madeawebsite.com */
+export function appPublicUrl() {
   return (process.env.CMS_PUBLIC_URL || "").replace(/\/$/, "");
 }
 
-export function onboardingHost() {
-  return (process.env.ONBOARDING_HOST || "").toLowerCase().split(":")[0];
-}
-
-export function authCookieDomain() {
-  const d = process.env.AUTH_COOKIE_DOMAIN?.trim();
-  return d || undefined;
+/** @deprecated use appPublicUrl */
+export function cmsPublicUrl() {
+  return appPublicUrl();
 }
 
 export function hostnameOf(hostHeader: string) {
   return hostHeader.toLowerCase().split(":")[0];
-}
-
-export function isOnboardingHost(hostHeader: string) {
-  const want = onboardingHost();
-  if (!want) return false;
-  return hostnameOf(hostHeader) === want;
-}
-
-export function onboardingOrigin() {
-  const host = onboardingHost();
-  return host ? `https://${host}` : "";
-}
-
-export function cmsOnboardingUrl() {
-  const origin = onboardingOrigin();
-  if (origin) return `${origin}/onboarding`;
-  const base = cmsPublicUrl();
-  return base ? `${base}/onboarding` : "/onboarding";
 }

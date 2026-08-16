@@ -32,7 +32,7 @@ export function StartLogin({
 
   return (
     <a
-      href="/api/auth/google"
+      href="/auth/google"
       className="inline-flex w-full items-center justify-center gap-2 rounded-lg border border-slate-200 bg-white px-5 py-3 text-sm font-medium text-slate-800 shadow-sm hover:bg-slate-50"
     >
       <svg viewBox="0 0 24 24" className="h-5 w-5" aria-hidden>

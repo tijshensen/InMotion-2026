@@ -40,6 +40,36 @@ Open:
 
 Change these before any real deployment.
 
+## Hosts
+
+| Host | Where | Role |
+|------|--------|------|
+| `i.madeawebsite.com` | **Railway** (this app) | CMS, Google OAuth, session, wizard |
+| `madeawebsite.com` and `*.madeawebsite.com` landings | **Cloudflare Pages** | Static HTML only |
+
+Do **not** attach landing domains to Railway. Do **not** attach `i.madeawebsite.com` to a Pages project.
+
+**Google login on a landing page** is only a link:
+
+```html
+<a href="https://i.madeawebsite.com/auth/google">Login with Google</a>
+```
+
+A ready-made page is in `landing/index.html` — deploy that folder to Cloudflare Pages.
+
+OAuth (client id, secret, callback) runs only on Railway:
+
+1. `GET https://i.madeawebsite.com/auth/google`
+2. Google → `https://i.madeawebsite.com/auth/google/callback`
+3. User stays on `i.madeawebsite.com` with a `cms_session` cookie (host-only)
+
+Google Cloud OAuth client:
+
+- Authorized JavaScript origin: `https://i.madeawebsite.com`
+- Authorized redirect URI: `https://i.madeawebsite.com/auth/google/callback`
+
+Railway variables: `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `CMS_PUBLIC_URL=https://i.madeawebsite.com`. Unset `AUTH_COOKIE_DOMAIN` and `ONBOARDING_HOST`. Railway custom domain: **only** `i.madeawebsite.com`.
+
 ## Architecture
 
 ```
@@ -47,6 +77,7 @@ src/
   app/
     admin/          # CMS backend UI
     api/            # REST-ish handlers (auth, pages)
+    auth/google     # Google OAuth start + callback (Railway only)
     login/
     s/[siteSlug]/  # Public site renderer
   lib/
@@ -143,6 +174,9 @@ In the service → **Variables**:
 | Name | Value |
 |------|--------|
 | `AUTH_SECRET` | `openssl rand -base64 32` (required) |
+| `CMS_PUBLIC_URL` | `https://i.madeawebsite.com` (Railway app origin) |
+| `GOOGLE_CLIENT_ID` | Google OAuth Web client |
+| `GOOGLE_CLIENT_SECRET` | Google OAuth Web client |
 | `DATA_DIR` | `/data` (optional if the volume is mounted at `/data`) |
 | `DATABASE_URL` | `file:/data/prisma/prod.db` (set automatically when `DATA_DIR` is set) |
 | `XAI_API_KEY` | from [console.x.ai](https://console.x.ai) (Import from URL) |

@@ -21,16 +21,16 @@ export default async function Home() {
         </p>
         <div className="flex gap-3 justify-center">
           <Link
-            href="/login"
+            href="/auth/google"
             className="rounded-lg bg-blue-600 px-5 py-2.5 text-white font-medium hover:bg-blue-700"
           >
-            Sign in
+            Continue with Google
           </Link>
           <Link
-            href="/s/demo"
+            href="/login"
             className="rounded-lg border border-slate-200 bg-white px-5 py-2.5 font-medium text-slate-700 hover:bg-slate-50"
           >
-            View demo site
+            Email sign in
           </Link>
         </div>
       </div>
