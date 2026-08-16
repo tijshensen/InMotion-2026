@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { prisma } from "@/lib/db";
 import { requireUser } from "@/lib/auth";
+import { OnboardingReplaySetting } from "./onboarding-replay-setting";
 
 export default async function AdminDashboard() {
   const user = await requireUser();
@@ -44,6 +45,11 @@ export default async function AdminDashboard() {
           </Link>
         ))}
       </div>
+
+      <OnboardingReplaySetting
+        userId={user.id}
+        enabled={user.replayOnboarding}
+      />
 
       <section className="rounded-xl border border-slate-200 bg-white shadow-sm">
         <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100">

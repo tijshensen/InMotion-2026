@@ -1,5 +1,6 @@
 import { requireUser } from "@/lib/auth";
 import { prisma } from "@/lib/db";
+import { seedOnboardingReplayOnce } from "@/lib/onboarding";
 import { getActiveSite } from "@/lib/site-context";
 import { siteHasUnpublishedChanges } from "@/lib/publish-status";
 import { cloudflareConfigured } from "@/lib/cloudflare-pages";
@@ -18,11 +19,21 @@ const nav = [
   { href: "/admin/users", label: "Users" },
 ];
 
+function navFor(user: { replayOnboarding: boolean }) {
+  if (!user.replayOnboarding) return nav;
+  return [
+    ...nav.slice(0, 1),
+    { href: "/onboarding", label: "Onboarding" },
+    ...nav.slice(1),
+  ];
+}
+
 export default async function AdminLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
+  await seedOnboardingReplayOnce();
   const user = await requireUser();
   const active = await getActiveSite();
 
@@ -71,7 +82,7 @@ export default async function AdminLayout({
         pages={pages}
         hasUnpublishedChanges={publish.hasChanges}
         hasCloudflare={cloudflareConfigured()}
-        nav={nav}
+        nav={navFor(user)}
       >
         {children}
       </AdminShell>

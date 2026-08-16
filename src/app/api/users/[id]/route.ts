@@ -47,6 +47,7 @@ export async function PATCH(req: Request, ctx: Ctx) {
         password: z.string().min(8).max(100).optional(),
         role: z.enum(["SUPERADMIN", "ADMIN", "EDITOR", "VIEWER"]).optional(),
         isActive: z.boolean().optional(),
+        replayOnboarding: z.boolean().optional(),
         orgRole: z.enum(["OWNER", "MEMBER"]).optional(),
         organizationId: z.string().optional(),
       })
@@ -62,6 +63,7 @@ export async function PATCH(req: Request, ctx: Ctx) {
       passwordHash?: string;
       role?: "SUPERADMIN" | "ADMIN" | "EDITOR" | "VIEWER";
       isActive?: boolean;
+      replayOnboarding?: boolean;
     } = {};
 
     if (body.firstName) data.firstName = body.firstName.trim();
@@ -80,6 +82,13 @@ export async function PATCH(req: Request, ctx: Ctx) {
         );
       }
       data.role = body.role;
+    }
+
+    if (body.replayOnboarding !== undefined) {
+      if (!isSuper && !isSelf) {
+        return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+      }
+      data.replayOnboarding = body.replayOnboarding;
     }
 
     if (body.isActive !== undefined) {
@@ -111,6 +120,7 @@ export async function PATCH(req: Request, ctx: Ctx) {
         lastName: true,
         role: true,
         isActive: true,
+        replayOnboarding: true,
       },
     });
 

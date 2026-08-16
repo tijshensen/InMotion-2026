@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { prisma } from "@/lib/db";
 import { createSession, verifyPassword } from "@/lib/auth";
+import { postLoginPath, seedOnboardingReplayOnce } from "@/lib/onboarding";
 
 const bodySchema = z.object({
   email: z.string().email(),
@@ -22,7 +23,15 @@ export async function POST(req: Request) {
     }
 
     await createSession(user.id);
-    return NextResponse.json({ ok: true });
+    await seedOnboardingReplayOnce();
+    const fresh = await prisma.user.findUnique({
+      where: { id: user.id },
+      select: { id: true, replayOnboarding: true },
+    });
+    const next = await postLoginPath(
+      fresh ?? { id: user.id, replayOnboarding: user.replayOnboarding },
+    );
+    return NextResponse.json({ ok: true, next });
   } catch (e) {
     if (e instanceof z.ZodError) {
       return NextResponse.json({ error: "Invalid input" }, { status: 400 });

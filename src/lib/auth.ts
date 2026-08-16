@@ -70,7 +70,13 @@ export async function destroySession() {
 
 export type SessionUser = Pick<
   User,
-  "id" | "email" | "firstName" | "lastName" | "role" | "isActive"
+  | "id"
+  | "email"
+  | "firstName"
+  | "lastName"
+  | "role"
+  | "isActive"
+  | "replayOnboarding"
 >;
 
 export async function getSessionUser(): Promise<SessionUser | null> {
@@ -94,6 +100,7 @@ export async function getSessionUser(): Promise<SessionUser | null> {
             lastName: true,
             role: true,
             isActive: true,
+            replayOnboarding: true,
           },
         },
       },

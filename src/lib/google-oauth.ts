@@ -1,8 +1,14 @@
 import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
 import { createSession } from "@/lib/auth";
+import { prisma } from "@/lib/db";
 import { appPublicUrl } from "@/lib/hosts";
-import { ensurePersonalOrg, upsertGoogleUser, userHasAnySite } from "@/lib/onboarding";
+import {
+  ensurePersonalOrg,
+  postLoginPath,
+  seedOnboardingReplayOnce,
+  upsertGoogleUser,
+} from "@/lib/onboarding";
 
 const STATE_COOKIE = "cms_oauth_state";
 
@@ -124,7 +130,14 @@ export async function handleGoogleCallback(req: Request) {
       lastName: profile.family_name || names.slice(1).join(" "),
     });
     await ensurePersonalOrg(user.id, user.email);
-    const nextPath = (await userHasAnySite(user.id)) ? "/admin" : "/onboarding";
+    await seedOnboardingReplayOnce();
+    const fresh = await prisma.user.findUnique({
+      where: { id: user.id },
+      select: { id: true, replayOnboarding: true },
+    });
+    const nextPath = await postLoginPath(
+      fresh ?? { id: user.id, replayOnboarding: user.replayOnboarding },
+    );
     const next = NextResponse.redirect(new URL(nextPath, origin));
     next.cookies.set(STATE_COOKIE, "", { ...stateCookieOptions(), maxAge: 0 });
     await createSession(user.id, next);

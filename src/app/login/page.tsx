@@ -28,7 +28,8 @@ export default function LoginPage() {
       setError(data.error || "Login failed");
       return;
     }
-    router.push("/admin");
+    const data = await res.json().catch(() => ({}));
+    router.push(typeof data.next === "string" ? data.next : "/admin");
     router.refresh();
   }
 

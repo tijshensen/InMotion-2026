@@ -20,6 +20,7 @@ type UserRow = {
   lastName: string;
   role: string;
   isActive: boolean;
+  replayOnboarding: boolean;
   createdAt: string;
   orgs: { id: string; name: string; role: string }[];
   sites: { id: string; name: string; slug: string; role: string }[];
@@ -128,6 +129,7 @@ export function UsersAdminClient({
           lastName: data.lastName,
           role: data.role,
           isActive: data.isActive,
+          replayOnboarding: Boolean(data.replayOnboarding),
           createdAt: new Date().toISOString(),
           orgs: [
             {
@@ -145,6 +147,33 @@ export function UsersAdminClient({
       ]);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Create failed");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function toggleReplay(u: UserRow) {
+    if (!isSuperadmin && u.id !== currentUserId) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const res = await fetch(`/api/users/${u.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ replayOnboarding: !u.replayOnboarding }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || "Update failed");
+      setUsers((prev) =>
+        prev.map((x) =>
+          x.id === u.id
+            ? { ...x, replayOnboarding: !u.replayOnboarding }
+            : x,
+        ),
+      );
+      router.refresh();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Update failed");
     } finally {
       setBusy(false);
     }
@@ -370,6 +399,7 @@ export function UsersAdminClient({
               <th className="px-4 py-3">Organizations</th>
               <th className="px-4 py-3">Sites</th>
               <th className="px-4 py-3">Status</th>
+              <th className="px-4 py-3">Onboarding</th>
               <th className="px-4 py-3" />
             </tr>
           </thead>
@@ -406,6 +436,19 @@ export function UsersAdminClient({
                   ) : (
                     <span className="text-red-500 text-xs">Disabled</span>
                   )}
+                </td>
+                <td className="px-4 py-3">
+                  <label className="inline-flex items-center gap-2 text-xs text-slate-600">
+                    <input
+                      type="checkbox"
+                      checked={u.replayOnboarding}
+                      disabled={
+                        busy || (!isSuperadmin && u.id !== currentUserId)
+                      }
+                      onChange={() => void toggleReplay(u)}
+                    />
+                    After login
+                  </label>
                 </td>
                 <td className="px-4 py-3 text-right">
                   {u.id !== currentUserId && (

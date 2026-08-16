@@ -61,6 +61,7 @@ export default async function UsersAdminPage() {
           lastName: true,
           role: true,
           isActive: true,
+          replayOnboarding: true,
           createdAt: true,
           orgMemberships: {
             include: {
@@ -86,6 +87,7 @@ export default async function UsersAdminPage() {
                 lastName: true,
                 role: true,
                 isActive: true,
+                replayOnboarding: true,
                 createdAt: true,
                 orgMemberships: {
                   where: { organizationId: { in: ownedOrgIds } },
@@ -165,6 +167,7 @@ export default async function UsersAdminPage() {
         lastName: u.lastName,
         role: u.role,
         isActive: u.isActive,
+        replayOnboarding: u.replayOnboarding,
         createdAt: u.createdAt.toISOString(),
         orgs: u.orgMemberships.map((m) => ({
           id: m.organization.id,

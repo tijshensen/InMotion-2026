@@ -26,6 +26,7 @@ export async function GET(req: Request) {
         lastName: true,
         role: true,
         isActive: true,
+        replayOnboarding: true,
         createdAt: true,
         orgMemberships: {
           include: {
@@ -72,6 +73,7 @@ export async function GET(req: Request) {
           lastName: true,
           role: true,
           isActive: true,
+          replayOnboarding: true,
           createdAt: true,
           memberships: {
             where: { site: { organizationId } },
@@ -177,6 +179,7 @@ export async function POST(req: Request) {
         lastName: true,
         role: true,
         isActive: true,
+        replayOnboarding: true,
       },
     });
 
