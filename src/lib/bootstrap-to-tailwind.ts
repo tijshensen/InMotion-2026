@@ -360,7 +360,7 @@ export const TAILWIND_SHELL = `<!DOCTYPE html>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>{{page.title}} — {{site.title}}</title>
   <meta name="description" content="{{page.metaDescription}}" />
-  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.tailwindcss.com/3.4.17"></script>
   <script>
     tailwind.config = {
       theme: {

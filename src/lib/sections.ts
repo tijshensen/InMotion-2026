@@ -19,6 +19,7 @@
 
 import { TAILWIND_SHELL } from "./bootstrap-to-tailwind";
 import { ensureTailwindPlayCdn } from "./tailwind-cdn";
+import { injectArbitraryCssIntoHtml } from "./tailwind-arbitrary";
 import { normalizeInsertHtml } from "./insert-html";
 import { stampLayoutNids } from "./layout-html";
 import {
@@ -905,12 +906,13 @@ export function buildEditorPreviewHtml(opts: {
   if (!fullTheme && !shell.includes("{{sections}}") && shell.length < 500) {
     shell = TAILWIND_SHELL;
   }
-  // Play CDN is a <script> (JIT). Always attach it for Tailwind sites so
-  // arbitrary classes like max-w-[130px] work in the canvas.
-  const wantPlay =
+  // Always attach Play CDN in the canvas (script, not a stylesheet).
+  // Arbitrary values are also compiled into a local <style> below — the CDN
+  // often never runs inside srcDoc + <base href>.
+  if (
     (opts.cssFramework || "").toLowerCase() === "tailwind" ||
-    (!fullTheme && !shell.includes("kiekeboe.css"));
-  if (wantPlay) {
+    !fullTheme
+  ) {
     shell = ensureTailwindPlayCdn(shell);
   }
 
@@ -1245,7 +1247,7 @@ export function buildEditorPreviewHtml(opts: {
     html += bridge;
   }
 
-  return html;
+  return injectArbitraryCssIntoHtml(html);
 }
 
 function defaultEditorShell() {
@@ -1253,7 +1255,7 @@ function defaultEditorShell() {
   return `<!DOCTYPE html>
 <html lang="nl"><head><meta charset="utf-8"/><title>{{page.title}}</title>
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<script src="https://cdn.tailwindcss.com"><\/script>
+<script src="https://cdn.tailwindcss.com/3.4.17"><\/script>
 <style>
   body { font-family: system-ui, sans-serif; }
   .cms-sections img, .cms-edit-body img { max-width: 100%; height: auto; }

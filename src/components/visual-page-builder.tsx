@@ -37,6 +37,7 @@ import { SectionRepeatEditor } from "@/components/section-repeat-editor";
 import { getClassAtNid, setClassAtNid, stampLayoutNids } from "@/lib/layout-html";
 import { pickComputed, type ComputedBox } from "@/lib/tailwind-layout";
 import { refreshTailwindInWindow } from "@/lib/tailwind-cdn";
+import { injectArbitraryCssIntoDocument } from "@/lib/tailwind-arbitrary";
 import { detectVideoSource } from "@/lib/video-media";
 
 type TemplateBlock = {
@@ -927,6 +928,7 @@ export function VisualPageBuilder({
         ) as HTMLElement | null;
         el?.classList.add("is-layout-selected");
       }
+      injectArbitraryCssIntoDocument(doc);
       refreshTailwindInWindow(doc.defaultView);
       return true;
     },
@@ -977,6 +979,9 @@ export function VisualPageBuilder({
       "data-cms-mode",
       editorMode,
     );
+    if (iframeRef.current?.contentDocument) {
+      injectArbitraryCssIntoDocument(iframeRef.current.contentDocument);
+    }
     refreshTailwindInWindow(win);
   }, [
     ordered,
@@ -1162,6 +1167,8 @@ export function VisualPageBuilder({
     const el = doc?.querySelector(`[data-cms-nid="${nid}"]`) as HTMLElement | null;
     if (el) {
       el.className = `${cleaned}${cleaned ? " " : ""}is-layout-selected`;
+      if (doc) injectArbitraryCssIntoDocument(doc);
+      refreshTailwindInWindow(doc?.defaultView);
       const view = el.ownerDocument.defaultView;
       const parentEl = layoutHit.parentNid
         ? (doc?.querySelector(

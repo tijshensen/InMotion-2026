@@ -1,5 +1,5 @@
-/** Tailwind Play CDN — JIT so arbitrary classes (max-w-[130px]) work. */
-export const TAILWIND_PLAY_CDN = "https://cdn.tailwindcss.com";
+/** Pinned Play CDN (unversioned URL 302s to /3.4.17 and can break under <base>). */
+export const TAILWIND_PLAY_CDN = "https://cdn.tailwindcss.com/3.4.17";
 
 export function isTailwindFramework(cssFramework?: string | null) {
   return (cssFramework || "").toLowerCase() === "tailwind";
@@ -15,10 +15,15 @@ export function htmlHasTailwindPlayScript(html: string) {
  */
 export function ensureTailwindPlayCdn(html: string): string {
   if (!html) return html;
-  const next = html.replace(
-    /<link[^>]+href=["']https?:\/\/cdn\.tailwindcss\.com[^"']*["'][^>]*>\s*/gi,
-    "",
-  );
+  const next = html
+    .replace(
+      /<link[^>]+href=["']https?:\/\/cdn\.tailwindcss\.com[^"']*["'][^>]*>\s*/gi,
+      "",
+    )
+    .replace(
+      /src=["']https?:\/\/cdn\.tailwindcss\.com["']/gi,
+      `src="${TAILWIND_PLAY_CDN}"`,
+    );
   if (htmlHasTailwindPlayScript(next)) return next;
   const tag = `<script src="${TAILWIND_PLAY_CDN}"></script>\n`;
   if (/<\/head>/i.test(next)) return next.replace(/<\/head>/i, `${tag}</head>`);

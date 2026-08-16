@@ -9,6 +9,7 @@ import { getSessionUser } from "./auth";
 import { listAccessibleSites } from "./access";
 import { generatedSiteAbsDir } from "./paths";
 import { ensureTailwindPlayCdn, isTailwindFramework } from "./tailwind-cdn";
+import { injectArbitraryCssIntoHtml } from "./tailwind-arbitrary";
 
 export const ACTIVE_SITE_COOKIE = "cms_active_site";
 
@@ -172,6 +173,7 @@ export function ensureSiteStylesheets(
   }
   if (isTailwindFramework(site.cssFramework)) {
     next = ensureTailwindPlayCdn(next);
+    next = injectArbitraryCssIntoHtml(next);
   }
   return next;
 }
