@@ -36,6 +36,7 @@ import { TailwindStylePanel } from "@/components/tailwind-style-panel";
 import { SectionRepeatEditor } from "@/components/section-repeat-editor";
 import { getClassAtNid, setClassAtNid, stampLayoutNids } from "@/lib/layout-html";
 import { pickComputed, type ComputedBox } from "@/lib/tailwind-layout";
+import { refreshTailwindInWindow } from "@/lib/tailwind-cdn";
 import { detectVideoSource } from "@/lib/video-media";
 
 type TemplateBlock = {
@@ -102,6 +103,7 @@ type Props = {
   showAdd?: boolean;
   onShowAddChange?: (open: boolean) => void;
   editorMode?: "content" | "layout" | "view";
+  cssFramework?: string;
 };
 
 function ImageVideoField({
@@ -645,6 +647,7 @@ export function VisualPageBuilder({
   showAdd: showAddProp,
   onShowAddChange,
   editorMode = "content",
+  cssFramework = "",
 }: Props) {
   const router = useRouter();
   const [selectedSectionId, setSelectedSectionId] = useState<string | null>(
@@ -712,6 +715,7 @@ export function VisualPageBuilder({
         siteTitle,
         metaDescription,
         menuHtml,
+        cssFramework,
         siteSlug,
         inserts.map((i) => `${i.tag}:${i.content}`).join("||"),
         ordered
@@ -727,6 +731,7 @@ export function VisualPageBuilder({
       siteTitle,
       metaDescription,
       menuHtml,
+      cssFramework,
       siteSlug,
       inserts,
       ordered,
@@ -749,6 +754,7 @@ export function VisualPageBuilder({
         siteSlug,
         linkPages,
         origin: editorOrigin,
+        cssFramework,
         sections: ordered.map((s) => ({
           id: s.id,
           templateHtml: s.templateBlock?.defaultHtml || "",
@@ -921,6 +927,7 @@ export function VisualPageBuilder({
         ) as HTMLElement | null;
         el?.classList.add("is-layout-selected");
       }
+      refreshTailwindInWindow(doc.defaultView);
       return true;
     },
     [sectionSelector, siteSlug, linkPages],
@@ -970,6 +977,7 @@ export function VisualPageBuilder({
       "data-cms-mode",
       editorMode,
     );
+    refreshTailwindInWindow(win);
   }, [
     ordered,
     restoreIframeScroll,

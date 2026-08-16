@@ -18,6 +18,7 @@
  */
 
 import { TAILWIND_SHELL } from "./bootstrap-to-tailwind";
+import { ensureTailwindPlayCdn } from "./tailwind-cdn";
 import { normalizeInsertHtml } from "./insert-html";
 import { stampLayoutNids } from "./layout-html";
 import {
@@ -871,6 +872,7 @@ export function buildEditorPreviewHtml(opts: {
   linkPages?: LinkablePage[];
   /** window.location.origin — required so /uploads images load in srcDoc */
   origin?: string;
+  cssFramework?: string;
 }): string {
   const origin = opts.origin || "";
   const sectionsHtml = opts.sections
@@ -903,16 +905,13 @@ export function buildEditorPreviewHtml(opts: {
   if (!fullTheme && !shell.includes("{{sections}}") && shell.length < 500) {
     shell = TAILWIND_SHELL;
   }
-  // Only inject Tailwind CDN for Tailwind/minimal shells — never for full Bootstrap themes
-  if (
-    !fullTheme &&
-    !shell.includes("cdn.tailwindcss.com") &&
-    !shell.includes("kiekeboe.css")
-  ) {
-    shell = shell.replace(
-      /<\/head>/i,
-      `<script src="https://cdn.tailwindcss.com"><\/script></head>`,
-    );
+  // Play CDN is a <script> (JIT). Always attach it for Tailwind sites so
+  // arbitrary classes like max-w-[130px] work in the canvas.
+  const wantPlay =
+    (opts.cssFramework || "").toLowerCase() === "tailwind" ||
+    (!fullTheme && !shell.includes("kiekeboe.css"));
+  if (wantPlay) {
+    shell = ensureTailwindPlayCdn(shell);
   }
 
   shell = rewriteThemeAssetUrls(shell, opts.siteSlug || "kiekeboe");

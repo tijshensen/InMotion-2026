@@ -366,6 +366,7 @@ export function PageEditor({
           chromeMode
           showAdd={showAdd}
           onShowAddChange={setShowAdd}
+          cssFramework={cssFramework}
           editorMode={
             !layoutModeAvailable && editorMode === "layout"
               ? "content"

@@ -8,6 +8,7 @@ import { cookies } from "next/headers";
 import { getSessionUser } from "./auth";
 import { listAccessibleSites } from "./access";
 import { generatedSiteAbsDir } from "./paths";
+import { ensureTailwindPlayCdn, isTailwindFramework } from "./tailwind-cdn";
 
 export const ACTIVE_SITE_COOKIE = "cms_active_site";
 
@@ -124,6 +125,7 @@ export async function listSitesForSwitcher() {
 /**
  * Stylesheet hrefs for public/editor preview based on site framework + theme.
  * Framework is per-site: bootstrap, tailwind, none, or custom.
+ * Tailwind Play CDN is a script — see ensureTailwindPlayCdn.
  */
 export function siteStylesheetHrefs(site: {
   slug: string;
@@ -137,8 +139,6 @@ export function siteStylesheetHrefs(site: {
   if (fw === "bootstrap") {
     hrefs.push(`${theme}/css/bootstrap.min.css`);
     hrefs.push(`${theme}/css/font-awesome.min.css`);
-  } else if (fw === "tailwind") {
-    hrefs.push("https://cdn.tailwindcss.com");
   }
 
   hrefs.push(`${theme}/css/kiekeboe.css`);
@@ -163,8 +163,15 @@ export function ensureSiteStylesheets(
     if (file && html.includes(file)) continue;
     tags.push(`<link rel="stylesheet" href="${href}">`);
   }
-  if (!tags.length) return html;
-  const block = `${tags.join("\n")}\n`;
-  if (/<\/head>/i.test(html)) return html.replace(/<\/head>/i, `${block}</head>`);
-  return block + html;
+  let next = html;
+  if (tags.length) {
+    const block = `${tags.join("\n")}\n`;
+    next = /<\/head>/i.test(next)
+      ? next.replace(/<\/head>/i, `${block}</head>`)
+      : block + next;
+  }
+  if (isTailwindFramework(site.cssFramework)) {
+    next = ensureTailwindPlayCdn(next);
+  }
+  return next;
 }
