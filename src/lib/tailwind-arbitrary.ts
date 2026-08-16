@@ -101,8 +101,10 @@ const BOX: Record<string, string | string[]> = {
 
 const STYLE_ID = "cms-tw-jit";
 
-function escapeSelector(cls: string) {
-  return cls.replace(/([^a-zA-Z0-9_-])/g, "\\$1");
+/** Avoid `.max-w-\[130px\]` — backslashes in srcdoc look broken and can be stripped. */
+function classTokenSelector(cls: string, pseudo: string) {
+  const token = cls.replace(/\\/g, "\\\\").replace(/'/g, "\\'");
+  return `[class~='${token}']${pseudo}`;
 }
 
 function decodeArbitrary(raw: string) {
@@ -137,6 +139,15 @@ function declsFor(util: string, value: string): string[] {
   }
   if (util === "shadow") return [`box-shadow: ${value}`];
   if (util === "flex") return [`flex: ${value}`];
+  if (util === "rotate") {
+    return [`--tw-rotate: ${value}`, `transform: rotate(${value})`];
+  }
+  if (util === "translate-x") {
+    return [`--tw-translate-x: ${value}`, `transform: translateX(${value})`];
+  }
+  if (util === "translate-y") {
+    return [`--tw-translate-y: ${value}`, `transform: translateY(${value})`];
+  }
   if (util === "grid-cols") {
     return [`grid-template-columns: ${value}`];
   }
@@ -217,7 +228,7 @@ function cssForClass(cls: string): { media: string | null; rule: string } | null
   const body = decls
     .map((d) => (parsed.important ? `${d} !important` : d))
     .join("; ");
-  const sel = `.${escapeSelector(cls)}${parsed.pseudo}`;
+  const sel = classTokenSelector(cls, parsed.pseudo);
   return { media: parsed.media, rule: `${sel} { ${body}; }` };
 }
 
