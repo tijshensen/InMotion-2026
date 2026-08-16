@@ -14,6 +14,7 @@ const patchSchema = z.object({
   siteTitle: z.string().max(200).optional(),
   logoPath: z.string().max(500).optional(),
   multiLanguage: z.boolean().optional(),
+  purpose: z.string().max(80).optional(),
 });
 
 export async function PATCH(req: Request, ctx: Ctx) {
@@ -68,6 +69,15 @@ export async function PATCH(req: Request, ctx: Ctx) {
       await prisma.language.updateMany({
         where: { siteId: id, isDefault: true },
         data: { siteTitle: data.siteTitle || "" },
+      });
+    }
+
+    if (body.purpose !== undefined) {
+      const purpose = body.purpose.trim();
+      await prisma.siteSetting.upsert({
+        where: { siteId_key: { siteId: id, key: "onboardingPurpose" } },
+        create: { siteId: id, key: "onboardingPurpose", value: purpose },
+        update: { value: purpose },
       });
     }
 

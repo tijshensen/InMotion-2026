@@ -1,15 +1,32 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+
+const PURPOSES = [
+  { id: "product-launch", label: "Product launch" },
+  { id: "event", label: "Event" },
+  { id: "local-business", label: "Local business" },
+  { id: "portfolio", label: "Portfolio" },
+  { id: "restaurant", label: "Restaurant or café" },
+  { id: "campaign", label: "Campaign" },
+] as const;
+
+type BuildResult = { siteId: string; pageId: string };
 
 export function OnboardingWizard({ defaultBrief }: { defaultBrief: string }) {
   const router = useRouter();
   const [step, setStep] = useState<1 | 2 | 3>(1);
   const [sourceUrl, setSourceUrl] = useState("");
   const [brief, setBrief] = useState(defaultBrief);
+  const [siteName, setSiteName] = useState("");
+  const [purpose, setPurpose] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [build, setBuild] = useState<BuildResult | null>(null);
+  const finishing = useRef(false);
+
+  const detailsReady = siteName.trim().length > 0 && Boolean(purpose);
 
   function goNext() {
     setError(null);
@@ -26,6 +43,7 @@ export function OnboardingWizard({ defaultBrief }: { defaultBrief: string }) {
   async function startBuild() {
     setError(null);
     setBusy(true);
+    setBuild(null);
     setStep(3);
     try {
       const res = await fetch("/api/onboarding/import", {
@@ -43,14 +61,38 @@ export function OnboardingWizard({ defaultBrief }: { defaultBrief: string }) {
           typeof data.error === "string" ? data.error : "Could not build the site",
         );
       }
-      router.push(`/admin/pages/${data.pageId}`);
-      router.refresh();
+      setBuild({ siteId: data.siteId, pageId: data.pageId });
     } catch (e) {
       setBusy(false);
       setStep(2);
       setError(e instanceof Error ? e.message : "Could not build the site");
     }
   }
+
+  useEffect(() => {
+    if (!build || !detailsReady || finishing.current) return;
+    finishing.current = true;
+    const name = siteName.trim();
+    const why = purpose || "";
+    void (async () => {
+      try {
+        await fetch(`/api/sites/${build.siteId}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          credentials: "same-origin",
+          body: JSON.stringify({
+            name,
+            siteTitle: name,
+            purpose: why,
+          }),
+        });
+      } catch {
+        // Draft is still usable if the name save fails.
+      }
+      router.push(`/admin/pages/${build.pageId}`);
+      router.refresh();
+    })();
+  }, [build, detailsReady, purpose, router, siteName]);
 
   return (
     <div className="mt-8 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm space-y-5">
@@ -126,14 +168,65 @@ export function OnboardingWizard({ defaultBrief }: { defaultBrief: string }) {
       ) : null}
 
       {step === 3 ? (
-        <div className="py-6 text-center space-y-2">
-          <p className="text-lg font-medium text-slate-900">
-            Building your first draft…
-          </p>
-          <p className="text-sm text-slate-600">
-            This can take a minute. We&apos;re fetching the page and turning it
-            into templates in the background.
-          </p>
+        <div className="space-y-5">
+          <div>
+            <p className="text-lg font-medium text-slate-900">
+              {build
+                ? "Draft is ready"
+                : "Building your first draft…"}
+            </p>
+            <p className="mt-1 text-sm text-slate-600">
+              {build
+                ? "Last bits — then we open the editor."
+                : "This can take a minute. Meanwhile, tell us about your site."}
+            </p>
+          </div>
+
+          <label className="block space-y-1.5">
+            <span className="text-sm font-medium text-slate-800">
+              What is the website called?
+            </span>
+            <input
+              type="text"
+              value={siteName}
+              onChange={(e) => setSiteName(e.target.value)}
+              placeholder="Acme Studio"
+              maxLength={120}
+              className="w-full rounded-lg border border-slate-200 px-3 py-2.5 text-sm"
+              autoFocus
+            />
+          </label>
+
+          <div className="space-y-2">
+            <p className="text-sm font-medium text-slate-800">
+              What is it for?
+            </p>
+            <div className="grid grid-cols-2 gap-2">
+              {PURPOSES.map((opt) => {
+                const selected = purpose === opt.id;
+                return (
+                  <button
+                    key={opt.id}
+                    type="button"
+                    onClick={() => setPurpose(opt.id)}
+                    className={`rounded-lg border px-3 py-2.5 text-sm font-medium transition ${
+                      selected
+                        ? "border-blue-600 bg-blue-50 text-blue-700"
+                        : "border-slate-200 bg-white text-slate-800 hover:border-slate-300 hover:bg-slate-50"
+                    }`}
+                  >
+                    {opt.label}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          {detailsReady && !build ? (
+            <p className="text-sm text-slate-500">
+              Thanks — finishing your draft in the background.
+            </p>
+          ) : null}
         </div>
       ) : null}
     </div>
