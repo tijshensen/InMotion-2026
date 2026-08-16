@@ -1,5 +1,6 @@
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
+import type { NextResponse } from "next/server";
 import bcrypt from "bcryptjs";
 import { SignJWT, jwtVerify } from "jose";
 import { prisma } from "./db";
@@ -7,6 +8,18 @@ import type { Role, User } from "@prisma/client";
 import { authCookieDomain } from "./hosts";
 
 const COOKIE = "cms_session";
+
+function sessionCookieOptions(expiresAt: Date) {
+  const domain = authCookieDomain();
+  return {
+    httpOnly: true,
+    sameSite: "lax" as const,
+    secure: process.env.NODE_ENV === "production" || Boolean(domain),
+    path: "/",
+    expires: expiresAt,
+    ...(domain ? { domain } : {}),
+  };
+}
 
 function secretKey() {
   const secret = process.env.AUTH_SECRET;
@@ -22,7 +35,7 @@ export async function verifyPassword(password: string, hash: string) {
   return bcrypt.compare(password, hash);
 }
 
-export async function createSession(userId: string) {
+export async function createSession(userId: string, res?: NextResponse) {
   const expiresAt = new Date(Date.now() + 1000 * 60 * 60 * 24 * 14); // 14 days
   const token = await new SignJWT({ sub: userId })
     .setProtectedHeader({ alg: "HS256" })
@@ -34,16 +47,14 @@ export async function createSession(userId: string) {
     data: { token, userId, expiresAt },
   });
 
+  const opts = sessionCookieOptions(expiresAt);
+  if (res) {
+    res.cookies.set(COOKIE, token, opts);
+    return;
+  }
+
   const jar = await cookies();
-  const domain = authCookieDomain();
-  jar.set(COOKIE, token, {
-    httpOnly: true,
-    sameSite: "lax",
-    secure: process.env.NODE_ENV === "production" || Boolean(domain),
-    path: "/",
-    expires: expiresAt,
-    ...(domain ? { domain } : {}),
-  });
+  jar.set(COOKIE, token, opts);
 }
 
 export async function destroySession() {

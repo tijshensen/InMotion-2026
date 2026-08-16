@@ -1,7 +1,6 @@
 import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { createSession } from "@/lib/auth";
-import { cmsPublicUrl } from "@/lib/hosts";
 import { ensurePersonalOrg, upsertGoogleUser } from "@/lib/onboarding";
 
 type GoogleToken = { access_token?: string; error?: string };
@@ -69,14 +68,14 @@ export async function GET(req: Request) {
       lastName: profile.family_name || names.slice(1).join(" "),
     });
     await ensurePersonalOrg(user.id, user.email);
-    await createSession(user.id);
+    // Stay on this host (mymother). Jumping to i. after Google is a
+    // cross-site 302 that Cloudflare/Chrome often serve as HTTP 403.
+    const next = NextResponse.redirect(new URL("/onboarding", url.origin));
+    next.headers.set("Referrer-Policy", "no-referrer");
+    await createSession(user.id, next);
+    return next;
   } catch (e) {
     const msg = e instanceof Error ? e.message : "Could not create account";
     return fail(msg);
   }
-
-  const next = cmsPublicUrl()
-    ? `${cmsPublicUrl()}/onboarding`
-    : new URL("/onboarding", url.origin).toString();
-  return NextResponse.redirect(next);
 }

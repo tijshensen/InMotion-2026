@@ -1,5 +1,4 @@
 import { getSessionUser } from "@/lib/auth";
-import { cmsOnboardingUrl } from "@/lib/hosts";
 import { StartLogin } from "./start-login";
 
 export default async function StartPage({
@@ -10,7 +9,7 @@ export default async function StartPage({
   const user = await getSessionUser();
   const { error } = await searchParams;
   const googleReady = Boolean(process.env.GOOGLE_CLIENT_ID);
-  const next = cmsOnboardingUrl() || "/onboarding";
+  const next = "/onboarding";
 
   return (
     <main className="min-h-screen bg-slate-50 flex items-center justify-center px-6">
