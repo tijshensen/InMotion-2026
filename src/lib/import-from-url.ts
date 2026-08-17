@@ -49,16 +49,31 @@ function stripNoise(html: string) {
 }
 
 export async function fetchPageHtml(url: string): Promise<string> {
-  const res = await fetch(url, {
-    redirect: "follow",
-    headers: {
-      "User-Agent":
-        "Mozilla/5.0 (compatible; CMSinMotionBot/1.0; +https://cmsinmotion.local)",
-      Accept: "text/html,application/xhtml+xml",
-    },
-  });
+  let res: Response;
+  try {
+    res = await fetch(url, {
+      redirect: "follow",
+      headers: {
+        "User-Agent":
+          "Mozilla/5.0 (compatible; CMSinMotionBot/1.0; +https://cmsinmotion.local)",
+        Accept: "text/html,application/xhtml+xml",
+      },
+    });
+  } catch {
+    throw new Error(
+      "Could not reach that URL. Check it is public (not behind a login).",
+    );
+  }
+  if (res.status === 404) {
+    throw new Error("That URL was not found (404).");
+  }
+  if (res.status === 401 || res.status === 403) {
+    throw new Error(
+      `That website blocked the fetch (HTTP ${res.status}). Try another URL.`,
+    );
+  }
   if (!res.ok) {
-    throw new Error(`Could not fetch URL (${res.status})`);
+    throw new Error(`Could not fetch that URL (HTTP ${res.status}).`);
   }
   const html = await res.text();
   const cleaned = stripNoise(html);
@@ -201,7 +216,7 @@ ${opts.prompt.trim()}
 --- SOURCE HTML (scripts/styles stripped) ---
 ${sourceHtml}`,
     temperature: 0.35,
-    timeoutMs: 180_000,
+    timeoutMs: 150_000,
     json: true,
   });
 

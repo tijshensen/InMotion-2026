@@ -4,6 +4,7 @@ import { getSessionUser } from "@/lib/auth";
 import { getImportPrompt, importSiteFromUrl } from "@/lib/import-from-url";
 import { setActiveSiteId } from "@/lib/site-context";
 import { ensurePersonalOrg } from "@/lib/onboarding";
+import { formatServerImportError } from "@/lib/import-error";
 
 export const maxDuration = 180;
 
@@ -48,7 +49,7 @@ export async function POST(req: Request) {
         { status: 400 },
       );
     }
-    const message = e instanceof Error ? e.message : "Import failed";
+    const message = formatServerImportError(e);
     console.error("[onboarding/import]", e);
     return NextResponse.json({ error: message }, { status: 400 });
   }

@@ -8,6 +8,7 @@ import {
   renderMenuFromSnippets,
   renderSubmenuFromSnippets,
 } from "@/lib/menu-snippets";
+import { errorFromResponse, formatCaughtError } from "@/lib/import-error";
 
 type TemplateRow = {
   id: string;
@@ -163,8 +164,13 @@ export function TemplatesAdminClient({
           savePromptAsDefault: savePrompt,
         }),
       });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(data.error || "Import failed");
+      if (!res.ok) {
+        throw new Error(await errorFromResponse(res, "Could not import template"));
+      }
+      const data = (await res.json()) as {
+        templateId?: string;
+        sectionCount?: number;
+      };
       setShowImport(false);
       setSourceUrl("");
       setImportName("");
@@ -179,7 +185,7 @@ export function TemplatesAdminClient({
         `Imported template with ${data.sectionCount ?? 0} section layout(s)`,
       );
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Import failed");
+      setError(formatCaughtError(err, "Could not import template"));
     } finally {
       setImporting(false);
     }

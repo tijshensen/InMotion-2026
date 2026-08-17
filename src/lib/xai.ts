@@ -68,6 +68,13 @@ export async function grokChat(opts: {
     const text = data.choices?.[0]?.message?.content?.trim() || "";
     if (!text) throw new Error("Grok returned an empty response");
     return text;
+  } catch (e) {
+    if (e && typeof e === "object" && "name" in e && e.name === "AbortError") {
+      throw new Error(
+        "Grok timed out after 3 minutes. Try a smaller page or try again.",
+      );
+    }
+    throw e;
   } finally {
     clearTimeout(t);
   }

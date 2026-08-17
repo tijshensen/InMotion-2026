@@ -8,6 +8,7 @@ import {
   pagesDevUrl,
   pagesProjectError,
 } from "@/lib/pages-project-name";
+import { errorFromResponse, formatCaughtError } from "@/lib/import-error";
 
 type Org = { id: string; name: string; slug: string };
 
@@ -153,15 +154,17 @@ export function SitesAdminClient({
           savePromptAsDefault: savePrompt,
         }),
       });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(data.error || "Import failed");
+      if (!res.ok) {
+        throw new Error(await errorFromResponse(res, "Could not import site"));
+      }
+      const data = (await res.json()) as { pageId?: string };
       if (data.pageId) {
         router.push(`/admin/pages/${data.pageId}`);
       } else {
         router.refresh();
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Import failed");
+      setError(formatCaughtError(err, "Could not import site"));
     } finally {
       setImporting(false);
     }

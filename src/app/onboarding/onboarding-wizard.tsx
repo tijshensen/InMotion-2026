@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import { errorFromResponse, formatCaughtError } from "@/lib/import-error";
 
 const PURPOSES = [
   { id: "product-launch", label: "Product launch" },
@@ -55,17 +56,18 @@ export function OnboardingWizard({ defaultBrief }: { defaultBrief: string }) {
           brief: brief.trim(),
         }),
       });
-      const data = await res.json().catch(() => ({}));
       if (!res.ok) {
-        throw new Error(
-          typeof data.error === "string" ? data.error : "Could not build the site",
-        );
+        throw new Error(await errorFromResponse(res, "Could not build the site"));
+      }
+      const data = (await res.json()) as { siteId?: string; pageId?: string };
+      if (!data.siteId || !data.pageId) {
+        throw new Error("Build finished but no page was returned.");
       }
       setBuild({ siteId: data.siteId, pageId: data.pageId });
     } catch (e) {
       setBusy(false);
       setStep(2);
-      setError(e instanceof Error ? e.message : "Could not build the site");
+      setError(formatCaughtError(e, "Could not build the site"));
     }
   }
 
