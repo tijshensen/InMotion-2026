@@ -29,7 +29,7 @@ export async function grokChat(opts: {
   }
 
   const controller = new AbortController();
-  const t = setTimeout(() => controller.abort(), opts.timeoutMs ?? 180_000);
+  const t = setTimeout(() => controller.abort(), opts.timeoutMs ?? 300_000);
 
   try {
     const res = await fetch(`${XAI_BASE}/chat/completions`, {
@@ -71,7 +71,7 @@ export async function grokChat(opts: {
   } catch (e) {
     if (e && typeof e === "object" && "name" in e && e.name === "AbortError") {
       throw new Error(
-        "Grok timed out after 3 minutes. Try a smaller page or try again.",
+        "Grok timed out after 5 minutes. Try a smaller page or try again.",
       );
     }
     throw e;

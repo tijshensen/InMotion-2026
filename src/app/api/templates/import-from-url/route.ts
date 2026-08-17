@@ -8,8 +8,9 @@ import {
   saveImportPrompt,
 } from "@/lib/import-from-url";
 import { formatServerImportError } from "@/lib/import-error";
+import { getImportJob, startImportJob } from "@/lib/import-job";
 
-export const maxDuration = 180;
+export const maxDuration = 300;
 
 const bodySchema = z.object({
   siteId: z.string().min(1),
@@ -18,6 +19,26 @@ const bodySchema = z.object({
   prompt: z.string().min(1).max(4000).optional(),
   savePromptAsDefault: z.boolean().optional(),
 });
+
+export async function GET(req: Request) {
+  const user = await getSessionUser();
+  if (!user) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+  const jobId = new URL(req.url).searchParams.get("jobId") || "";
+  const job = jobId ? getImportJob(jobId, user.id) : null;
+  if (!job) {
+    return NextResponse.json(
+      { error: "Import job not found. It may have expired — try again." },
+      { status: 404 },
+    );
+  }
+  return NextResponse.json({
+    status: job.status,
+    error: job.error,
+    result: job.result,
+  });
+}
 
 export async function POST(req: Request) {
   const user = await getSessionUser();
@@ -35,14 +56,16 @@ export async function POST(req: Request) {
       await saveImportPrompt(prompt);
     }
 
-    const result = await importTemplateFromUrl({
-      siteId: body.siteId,
-      sourceUrl: body.sourceUrl,
-      prompt,
-      name: body.name,
-    });
+    const jobId = startImportJob(user.id, () =>
+      importTemplateFromUrl({
+        siteId: body.siteId,
+        sourceUrl: body.sourceUrl,
+        prompt,
+        name: body.name,
+      }),
+    );
 
-    return NextResponse.json(result, { status: 201 });
+    return NextResponse.json({ jobId }, { status: 202 });
   } catch (e) {
     if (e instanceof z.ZodError) {
       return NextResponse.json(

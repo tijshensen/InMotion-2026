@@ -41,7 +41,7 @@ export async function errorFromResponse(
   }
 
   if (res.status === 504 || res.status === 524 || res.status === 408) {
-    return "Timed out waiting for Grok (over 3 minutes). Try a smaller page or try again.";
+    return "The connection closed while Grok was still working. Try again — imports now run in the background.";
   }
   if (res.status === 413) {
     return "The source page is too large to import.";
@@ -63,7 +63,7 @@ export function formatServerImportError(err: unknown): string {
   if (err && typeof err === "object" && "name" in err) {
     const name = String((err as { name?: string }).name || "");
     if (name === "AbortError") {
-      return "Grok timed out after 3 minutes. Try again.";
+      return "Grok timed out after 5 minutes. Try a smaller page or try again.";
     }
   }
   if (err instanceof Error && err.message.trim()) {
@@ -77,4 +77,37 @@ export function formatServerImportError(err: unknown): string {
     return m;
   }
   return "Import failed for an unknown reason.";
+}
+
+/** POST starts a background job; poll GET ?jobId= until it finishes. */
+export async function waitForImportJob<T>(
+  url: string,
+  init: RequestInit,
+): Promise<T> {
+  const start = await fetch(url, init);
+  if (!start.ok) {
+    throw new Error(await errorFromResponse(start, "Could not start import"));
+  }
+  const first = (await start.json()) as { jobId?: string } & T;
+  if (!first.jobId) return first as T;
+
+  const sep = url.includes("?") ? "&" : "?";
+  const deadline = Date.now() + 6 * 60 * 1000;
+  while (Date.now() < deadline) {
+    await new Promise((r) => setTimeout(r, 2000));
+    const res = await fetch(`${url}${sep}jobId=${encodeURIComponent(first.jobId)}`);
+    if (!res.ok) {
+      throw new Error(await errorFromResponse(res, "Could not check import"));
+    }
+    const data = (await res.json()) as {
+      status?: string;
+      error?: string;
+      result?: T;
+    };
+    if (data.status === "ok") return data.result as T;
+    if (data.status === "error") {
+      throw new Error(data.error || "Import failed");
+    }
+  }
+  throw new Error("Grok is still working after 6 minutes. Try again.");
 }

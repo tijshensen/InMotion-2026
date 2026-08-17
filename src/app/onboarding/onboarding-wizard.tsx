@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { errorFromResponse, formatCaughtError } from "@/lib/import-error";
+import { formatCaughtError, waitForImportJob } from "@/lib/import-error";
 
 const PURPOSES = [
   { id: "product-launch", label: "Product launch" },
@@ -47,7 +47,10 @@ export function OnboardingWizard({ defaultBrief }: { defaultBrief: string }) {
     setBuild(null);
     setStep(3);
     try {
-      const res = await fetch("/api/onboarding/import", {
+      const data = await waitForImportJob<{
+        siteId?: string;
+        pageId?: string;
+      }>("/api/onboarding/import", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "same-origin",
@@ -56,10 +59,6 @@ export function OnboardingWizard({ defaultBrief }: { defaultBrief: string }) {
           brief: brief.trim(),
         }),
       });
-      if (!res.ok) {
-        throw new Error(await errorFromResponse(res, "Could not build the site"));
-      }
-      const data = (await res.json()) as { siteId?: string; pageId?: string };
       if (!data.siteId || !data.pageId) {
         throw new Error("Build finished but no page was returned.");
       }

@@ -8,7 +8,7 @@ import {
   renderMenuFromSnippets,
   renderSubmenuFromSnippets,
 } from "@/lib/menu-snippets";
-import { errorFromResponse, formatCaughtError } from "@/lib/import-error";
+import { formatCaughtError, waitForImportJob } from "@/lib/import-error";
 
 type TemplateRow = {
   id: string;
@@ -153,7 +153,10 @@ export function TemplatesAdminClient({
     setError(null);
     setStatus(null);
     try {
-      const res = await fetch("/api/templates/import-from-url", {
+      const data = await waitForImportJob<{
+        templateId?: string;
+        sectionCount?: number;
+      }>("/api/templates/import-from-url", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -164,13 +167,6 @@ export function TemplatesAdminClient({
           savePromptAsDefault: savePrompt,
         }),
       });
-      if (!res.ok) {
-        throw new Error(await errorFromResponse(res, "Could not import template"));
-      }
-      const data = (await res.json()) as {
-        templateId?: string;
-        sectionCount?: number;
-      };
       setShowImport(false);
       setSourceUrl("");
       setImportName("");

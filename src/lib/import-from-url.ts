@@ -16,6 +16,7 @@ import {
   repeatSeedsAreClones,
 } from "./section-repeat";
 import { scheduleSectionPreview } from "./section-preview";
+import { GROK_IMPORT_TIMEOUT_MS } from "./import-job";
 
 export const DEFAULT_IMPORT_PROMPT =
   "Maintain the content of the homepage but rebuild it with a cleaner, modern-looking design.";
@@ -216,7 +217,7 @@ ${opts.prompt.trim()}
 --- SOURCE HTML (scripts/styles stripped) ---
 ${sourceHtml}`,
     temperature: 0.35,
-    timeoutMs: 150_000,
+    timeoutMs: GROK_IMPORT_TIMEOUT_MS,
     json: true,
   });
 

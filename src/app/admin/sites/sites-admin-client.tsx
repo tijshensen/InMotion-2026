@@ -8,7 +8,7 @@ import {
   pagesDevUrl,
   pagesProjectError,
 } from "@/lib/pages-project-name";
-import { errorFromResponse, formatCaughtError } from "@/lib/import-error";
+import { formatCaughtError, waitForImportJob } from "@/lib/import-error";
 
 type Org = { id: string; name: string; slug: string };
 
@@ -143,21 +143,20 @@ export function SitesAdminClient({
     setImporting(true);
     setError(null);
     try {
-      const res = await fetch("/api/sites/import-from-url", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          organizationId,
-          sourceUrl,
-          name: name || undefined,
-          prompt,
-          savePromptAsDefault: savePrompt,
-        }),
-      });
-      if (!res.ok) {
-        throw new Error(await errorFromResponse(res, "Could not import site"));
-      }
-      const data = (await res.json()) as { pageId?: string };
+      const data = await waitForImportJob<{ pageId?: string }>(
+        "/api/sites/import-from-url",
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            organizationId,
+            sourceUrl,
+            name: name || undefined,
+            prompt,
+            savePromptAsDefault: savePrompt,
+          }),
+        },
+      );
       if (data.pageId) {
         router.push(`/admin/pages/${data.pageId}`);
       } else {
