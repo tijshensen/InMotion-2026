@@ -1079,12 +1079,15 @@ export function buildEditorPreviewHtml(opts: {
     outline-offset: 2px;
   }
   .cms-edit-body img {
-    max-width: 100%;
     height: auto;
     /* Bootstrap visible-xs / hidden-* hide images on desktop; show them in the editor */
     display: inline-block !important;
     visibility: visible !important;
     opacity: 1 !important;
+  }
+  /* Don't fight Tailwind max-w-* / max-w-[130px] (this used to win on specificity). */
+  .cms-edit-body img:not([class*="max-w-"]) {
+    max-width: 100%;
   }
   .cms-edit-body video.cms-video,
   .cms-sections video.cms-video {
@@ -1258,7 +1261,8 @@ function defaultEditorShell() {
 <script src="https://cdn.tailwindcss.com/3.4.17"><\/script>
 <style>
   body { font-family: system-ui, sans-serif; }
-  .cms-sections img, .cms-edit-body img { max-width: 100%; height: auto; }
+  .cms-sections img, .cms-edit-body img { height: auto; }
+  .cms-sections img:not([class*="max-w-"]), .cms-edit-body img:not([class*="max-w-"]) { max-width: 100%; }
   .cms-sections video.cms-video, .cms-edit-body video.cms-video { max-width: 100%; height: auto; display: block; }
   .cms-sections iframe.cms-video-frame, .cms-edit-body iframe.cms-video-frame { max-width: 100%; width: 100%; aspect-ratio: 16 / 9; border: 0; display: block; }
   .single_activiteiten img { width: 100%; display: block; object-fit: cover; }

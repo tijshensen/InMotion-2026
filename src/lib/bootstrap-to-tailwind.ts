@@ -374,7 +374,8 @@ export const TAILWIND_SHELL = `<!DOCTYPE html>
   </script>
   <style type="text/css">
     body { font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; }
-    .cms-sections img, .cms-section img { max-width: 100%; height: auto; }
+    .cms-sections img, .cms-section img { height: auto; }
+    .cms-sections img:not([class*="max-w-"]), .cms-section img:not([class*="max-w-"]) { max-width: 100%; }
     .cms-sections video.cms-video, .cms-section video.cms-video { max-width: 100%; height: auto; display: block; }
     .cms-sections iframe.cms-video-frame, .cms-section iframe.cms-video-frame { max-width: 100%; width: 100%; aspect-ratio: 16 / 9; border: 0; display: block; }
     .single_activiteiten img { width: 100%; display: block; object-fit: cover; }
