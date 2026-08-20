@@ -172,8 +172,8 @@ function scoreRules(page: PageForScore): Record<string, { score: number; note: s
           : 0),
     ),
     note: temptHit
-      ? "Hero heeft beeld/video en copy."
-      : "Geen duidelijke hero (headline + beeld).",
+      ? "Hero has image/video and copy."
+      : "No clear hero (headline + image).",
   };
 
   const influenceHit =
@@ -183,8 +183,8 @@ function scoreRules(page: PageForScore): Record<string, { score: number; note: s
   out.tips_influence = {
     score: influenceHit ? 0.8 : STORY_RE.test(allText) ? 0.45 : 0.15,
     note: influenceHit
-      ? "Vertrouwen/social proof aanwezig."
-      : "Geen duidelijk verhaal of testimonials.",
+      ? "Trust or social proof is present."
+      : "No clear story or testimonials.",
   };
 
   const bullets = countRe(allHtml, /<li\b/gi);
@@ -196,8 +196,8 @@ function scoreRules(page: PageForScore): Record<string, { score: number; note: s
     ),
     note:
       bullets >= 3
-        ? "Voordelen/bullets gevonden."
-        : "Weinig voordeel-bullets; let op specs vs gaten.",
+        ? "Benefits/bullets found."
+        : "Few benefit bullets — sell holes, not drills.",
   };
 
   const sellBits =
@@ -209,8 +209,8 @@ function scoreRules(page: PageForScore): Record<string, { score: number; note: s
     score: clamp01(sellBits / 4),
     note:
       sellBits >= 3
-        ? "Aanbod, CTA en afronding staan erin."
-        : "Offer/CTA/FAQ/prijs is incompleet.",
+        ? "Offer, CTA, and close are in place."
+        : "Offer / CTA / FAQ / price is incomplete.",
   };
 
   const hrefs = (allHtml.match(/href=["']([^"']+)["']/gi) || [])
@@ -234,8 +234,8 @@ function scoreRules(page: PageForScore): Record<string, { score: number; note: s
   out.one_cta = {
     score: ctaScore,
     note: menuToken
-      ? `Header heeft een menu ({{menu}}) — 8x8 wil één CTA.`
-      : `${unique.size} unieke links op de pagina.`,
+      ? "Header still has a menu ({{menu}}) — 8x8 wants one CTA."
+      : `${unique.size} unique links on the page.`,
   };
 
   out.steady_target = {
@@ -244,7 +244,7 @@ function scoreRules(page: PageForScore): Record<string, { score: number; note: s
         (OUTCOME_RE.test(allText) ? 0.45 : 0.1) +
         (/voor.?na|before.?after|was .* nu/i.test(allText) ? 0.2 : 0),
     ),
-    note: "Pijn en gewenste situatie (regels). Grok kan copy scherper beoordelen.",
+    note: "Pain vs desired state (rules). Grok can judge the copy more sharply.",
   };
 
   const specHits = countRe(
@@ -255,8 +255,8 @@ function scoreRules(page: PageForScore): Record<string, { score: number; note: s
     score: clamp01(0.7 - specHits * 0.15 + (OUTCOME_RE.test(allText) ? 0.2 : 0)),
     note:
       specHits > 2
-        ? "Nogal wat technische specs — 8x8: verkoop gaten, geen boren."
-        : "Weinig tech-specs in de copy.",
+        ? "Quite a few technical specs — 8x8: sell holes, not drills."
+        : "Few technical specs in the copy.",
   };
 
   const longParas = countRe(allHtml, /<(p|div)[^>]*>[^<]{400,}/gi);
@@ -269,8 +269,8 @@ function scoreRules(page: PageForScore): Record<string, { score: number; note: s
     ),
     note:
       longParas > 2
-        ? "Lange tekstblokken — knip in hapklare stukken met beeld."
-        : "Blokken zien er scanbaar uit.",
+        ? "Long text blocks — break them up with images."
+        : "Blocks look scannable.",
   };
 
   const progress = /progress|leesvoortgang|scroll-progress/i.test(allHtml);
@@ -281,8 +281,8 @@ function scoreRules(page: PageForScore): Record<string, { score: number; note: s
         (progress ? 0.3 : 0),
     ),
     note: last?.hasCta
-      ? "Pagina sluit met een CTA."
-      : "Onderkant mist een duidelijke call-to-action.",
+      ? "Page closes with a CTA."
+      : "The bottom is missing a clear call-to-action.",
   };
 
   const proofSections = sections.filter(
@@ -295,8 +295,8 @@ function scoreRules(page: PageForScore): Record<string, { score: number; note: s
         ? 0.4
         : 0.1,
     note: proofSections[0]
-      ? `Proof-groep met ${proofSections[0].repeatCount} items.`
-      : "Geen groep testimonials (cheerleader effect).",
+      ? `Proof group with ${proofSections[0].repeatCount} items.`
+      : "No grouped testimonials (cheerleader effect).",
   };
 
   out.urgency = {
@@ -306,15 +306,15 @@ function scoreRules(page: PageForScore): Record<string, { score: number; note: s
         ? 0.4
         : 0.1,
     note: URGENCY_RE.test(allText + allHtml)
-      ? "Urgentie/schaarste gevonden."
-      : "Geen timer, voorraad of deadline.",
+      ? "Urgency or scarcity found."
+      : "No timer, stock limit, or deadline.",
   };
 
   out.aftercare = {
     score: FAQ_RE.test(allText) ? 0.85 : /vertrouw|veilig|risk.?free/i.test(allText) ? 0.4 : 0.15,
     note: FAQ_RE.test(allText)
-      ? "FAQ of garantie aanwezig."
-      : "Geen FAQ/garantie om bezwaren weg te nemen.",
+      ? "FAQ or guarantee present."
+      : "No FAQ/guarantee to remove objections.",
   };
 
   return out;
@@ -334,11 +334,11 @@ async function grokCopyScores(page: PageForScore): Promise<Record<
 
   try {
     const raw = await grokChat({
-      system: `Je beoordeelt een Nederlandstalige salespage t.o.v. de IMU 8x8 Challenge.
-Geef ALLEEN JSON:
+      system: `You score a sales page against the IMU 8x8 Challenge.
+Return JSON only:
 {"steady_target":{"score":0-1,"note":"..."},"emotion_over_specs":{"score":0-1,"note":"..."}}
-score 1 = voldoet, 0 = ontbreekt. note max 140 tekens, Nederlands.`,
-      user: `Pagina: ${page.title}\n\n${outline}`,
+score 1 = meets the criterion, 0 = missing. note max 140 characters, English.`,
+      user: `Page: ${page.title}\n\n${outline}`,
       temperature: 0.2,
       timeoutMs: 40_000,
       json: true,
@@ -382,7 +382,7 @@ export async function scoreEightByEight(
   }
 
   const criteria: CriterionResult[] = EIGHT_BY_EIGHT_CRITERIA.map((c) => {
-    const hit = rules[c.id] || { score: 0, note: "Niet beoordeeld." };
+    const hit = rules[c.id] || { score: 0, note: "Not scored." };
     return {
       id: c.id,
       label: c.label,
