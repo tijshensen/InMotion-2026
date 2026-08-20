@@ -281,12 +281,50 @@ function wrapGenericHeadings(html: string): string {
 
 function wrapImages(html: string): string {
   let imgN = 0;
-  return html.replace(/<img\b([^>]*?)\/?>/gi, (full, attrs: string) => {
+  return html.replace(/<img\b([^>]*?)\/?>/gi, (full, attrs: string, offset: number) => {
     if (/\beditable\s*=/i.test(attrs)) return full;
+    if (isInsideMarker(html, offset)) return full;
     imgN += 1;
     const trimmed = String(attrs || "").replace(/\/\s*$/, "");
     return `<img editable="true" name="Image ${imgN}"${trimmed} />`;
   });
+}
+
+/** Consecutive paragraphs/headings become one multiline; figures/images stay outside. */
+function wrapAdjacentTextBlocks(html: string): string {
+  const re = /<(p|h[1-6])\b[^>]*>[\s\S]*?<\/\1>/gi;
+  const hits: { start: number; end: number }[] = [];
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(html))) {
+    if (isInsideMarker(html, m.index)) continue;
+    if (!stripTags(m[0]) && !/<img\b/i.test(m[0])) continue;
+    hits.push({ start: m.index, end: m.index + m[0].length });
+  }
+  if (!hits.length) return html;
+  const groups: { start: number; end: number }[][] = [];
+  let cur: { start: number; end: number }[] = [hits[0]];
+  for (let i = 1; i < hits.length; i++) {
+    const between = html.slice(cur[cur.length - 1].end, hits[i].start);
+    if (!between.trim()) cur.push(hits[i]);
+    else {
+      groups.push(cur);
+      cur = [hits[i]];
+    }
+  }
+  groups.push(cur);
+  let out = html;
+  for (let g = groups.length - 1; g >= 0; g--) {
+    const group = groups[g];
+    const start = group[0].start;
+    const end = group[group.length - 1].end;
+    const chunk = out.slice(start, end);
+    if (/<multiline\b/i.test(chunk)) continue;
+    out =
+      out.slice(0, start) +
+      `<multiline name="Text ${g + 1}">${chunk}</multiline>` +
+      out.slice(end);
+  }
+  return out;
 }
 
 function stripEmptyHeadings(html: string) {
@@ -412,9 +450,7 @@ export function wrapCloneMarkers(html: string, builder: string): string {
   } else if (kind === "wpbakery") {
     ({ html: s, next: textN } = wrapClassInners(s, "wpb_text_column", "Text", textN));
   } else if (kind === "gutenberg") {
-    if (!/<multiline\b/i.test(s) && (stripTags(s).length > 1 || /<img\b/i.test(s))) {
-      s = `<multiline name="Text">${s}</multiline>`;
-    }
+    s = wrapAdjacentTextBlocks(s);
   } else {
     s = wrapGenericHeadings(s);
   }
