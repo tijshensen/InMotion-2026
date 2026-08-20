@@ -288,18 +288,66 @@ function wrapClassInners(
   return wrapHits(html, collectByClassToken(html, className, { minLength: 16 }), label, start);
 }
 
+export function unwrapTextMarkers(html: string): string {
+  return html.replace(/<\/?(?:multiline|singleline)\b[^>]*>/gi, "");
+}
+
+function nextNamedIndex(html: string, prefix: string): number {
+  let max = 0;
+  const re = new RegExp(`name="${prefix} (\\d+)"`, "gi");
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(html))) {
+    max = Math.max(max, parseInt(m[1], 10) || 0);
+  }
+  return max;
+}
+
+/**
+ * Tailwind / Next / Webflow clones: wrap the INNER of text tags so outer
+ * classes stay on the layout. Headings-only left body copy uneditable.
+ */
 function wrapGenericHeadings(html: string): string {
-  let n = 0;
-  return html.replace(
-    /<(h[1-4])\b([^>]*)>([\s\S]*?)<\/\1>/gi,
-    (full, tag: string, attrs: string, inner: string) => {
-      if (/<multiline\b/i.test(inner) || /<singleline\b/i.test(inner)) return full;
-      const text = inner.replace(/<[^>]+>/g, "").trim();
-      if (text.length < 2) return full;
-      n += 1;
-      return `<${tag}${attrs}><multiline name="Heading ${n}">${inner}</multiline></${tag}>`;
-    },
+  let headingN = nextNamedIndex(html, "Heading");
+  let textN = nextNamedIndex(html, "Text");
+  const wrap = (source: string, re: RegExp, extraSkip?: (inner: string) => boolean) =>
+    source.replace(
+      re,
+      (full: string, tag: string, attrs: string, inner: string, offset: number) => {
+        if (isInsideMarker(source, offset)) return full;
+        if (/<multiline\b/i.test(inner) || /<singleline\b/i.test(inner)) return full;
+        if (extraSkip?.(inner)) return full;
+        const text = inner.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
+        if (text.length < 2) return full;
+        const lower = tag.toLowerCase();
+        if ((lower === "span" || lower === "a") && text.length < 12) return full;
+        const name = /^h[1-6]$/.test(lower)
+          ? `Heading ${++headingN}`
+          : `Text ${++textN}`;
+        return `<${tag}${attrs}><multiline name="${name}">${inner}</multiline></${tag}>`;
+      },
+    );
+
+  const skipNestedBlocks = (inner: string) =>
+    /<(p|h[1-6]|div|ul|ol|section|article|nav|svg|button|picture|img|table)\b/i.test(
+      inner,
+    );
+
+  // Do not include <a> here: skipping a structured link would consume its
+  // inner spans and leave button labels uneditable.
+  let s = wrap(
+    html,
+    /<(p|h[1-6]|li|blockquote|span)\b([^>]*)>([\s\S]*?)<\/\1>/gi,
+    (inner) =>
+      /<(p|h[1-6]|div|ul|ol|section|article|nav|svg|button|picture|img|table)\b/i.test(
+        inner,
+      ),
   );
+  s = wrap(
+    s,
+    /<(a)\b([^>]*)>([\s\S]*?)<\/\1>/gi,
+    skipNestedBlocks,
+  );
+  return s;
 }
 
 function wrapImages(html: string): string {

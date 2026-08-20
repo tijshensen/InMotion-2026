@@ -12,8 +12,10 @@ import {
   cloneSectionName,
   collapseCloneRepeats,
   splitCloneBands,
+  unwrapTextMarkers,
   wrapCloneMarkers,
 } from "./clone-bands";
+import { unwrapRepeatableTags } from "./section-repeat";
 import {
   cloneFixStyleTag,
   cloneReviveScriptTag,
@@ -363,4 +365,60 @@ export async function reclonePageFromUrl(opts: {
     names: plan.sections.map((s) => s.name),
     sourceUrl,
   };
+}
+
+/** Re-run marker wrapping on an existing clone page (does not re-scrape). */
+export async function refreshPageCloneMarkers(pageId: string) {
+  const page = await prisma.page.findUnique({
+    where: { id: pageId },
+    include: {
+      blocks: {
+        orderBy: { sortOrder: "asc" },
+        include: { templateBlock: true },
+      },
+    },
+  });
+  if (!page) throw new Error("Page not found");
+  const snap = await prisma.siteSetting.findUnique({
+    where: { siteId_key: { siteId: page.siteId, key: "cloneSnapshot" } },
+  });
+  let builder = "unknown";
+  try {
+    const parsed = JSON.parse(snap?.value || "{}") as { builder?: string };
+    if (parsed.builder) builder = parsed.builder;
+  } catch {
+    /* keep unknown */
+  }
+
+  const names: string[] = [];
+  for (const block of page.blocks) {
+    const tb = block.templateBlock;
+    if (!tb) continue;
+    const marked = wrapCloneMarkers(
+      unwrapTextMarkers(unwrapRepeatableTags(tb.defaultHtml)),
+      builder,
+    );
+    names.push(tb.name);
+    await prisma.$transaction([
+      prisma.templateBlock.update({
+        where: { id: tb.id },
+        data: {
+          defaultHtml: marked,
+          isRepeatable: /<repeatable\b/i.test(marked),
+        },
+      }),
+      prisma.pageBlockRepeatItem.deleteMany({ where: { pageBlockId: block.id } }),
+      prisma.pageBlock.update({
+        where: { id: block.id },
+        data: {
+          content: serializeContent({
+            fields: emptyFieldsFromTemplate(marked),
+            layoutHtml: marked,
+          }),
+        },
+      }),
+    ]);
+  }
+
+  return { pageId, builder, sectionCount: names.length, names };
 }
