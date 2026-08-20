@@ -2,7 +2,12 @@ import { prisma } from "./db";
 import { createSiteForOrg } from "./sites";
 import { saveMediaBuffer } from "./media";
 import { scrapePage, scrapeBrowserUa, type PageSnapshot, type ScrapedImage } from "./scrape-page";
-import { splitIntoPageSections, splitPageShell, stripTags } from "./html-split";
+import { splitPageShell, stripTags } from "./html-split";
+import {
+  cloneSectionName,
+  splitCloneBands,
+  wrapCloneMarkers,
+} from "./clone-bands";
 import {
   cloneFixStyleTag,
   cloneReviveScriptTag,
@@ -14,40 +19,11 @@ import {
   type ImportPlan,
 } from "./import-from-url";
 
-function headingName(html: string, fallback: string) {
-  const m = html.match(/<h[1-4]\b[^>]*>([\s\S]*?)<\/h[1-4]>/i);
-  const text = (m?.[1] || "")
-    .replace(/<[^>]+>/g, " ")
-    .replace(/\s+/g, " ")
-    .trim()
-    .slice(0, 60);
-  return text || fallback;
-}
-
-function wrapCloneSection(html: string): string {
-  let imgN = 0;
-  let s = html.replace(/<img\b([^>]*?)\/?>/gi, (full, attrs: string) => {
-    if (/\beditable\s*=/i.test(attrs)) return full;
-    imgN += 1;
-    const trimmed = String(attrs || "").replace(/\/\s*$/, "");
-    return `<img editable="true" name="Image ${imgN}"${trimmed} />`;
-  });
-  let hN = 0;
-  s = s.replace(
-    /<(h[1-4])\b([^>]*)>([\s\S]*?)<\/\1>/gi,
-    (full, tag: string, attrs: string, inner: string) => {
-      if (/<singleline\b/i.test(inner)) return full;
-      const text = inner.replace(/<[^>]+>/g, "").trim();
-      if (text.length < 2) return full;
-      hN += 1;
-      return `<${tag}${attrs}><singleline name="Heading ${hN}">${inner}</singleline></${tag}>`;
-    },
-  );
-  return s;
-}
-
-function splitContent(content: string): { name: string; html: string }[] {
-  let chunks = splitIntoPageSections(content);
+function splitContent(
+  content: string,
+  builder: string,
+): { name: string; html: string }[] {
+  let chunks = splitCloneBands(content, builder);
   if (chunks.length > 12) {
     const head = chunks.slice(0, 11);
     const tail = chunks.slice(11).join("\n");
@@ -56,8 +32,8 @@ function splitContent(content: string): { name: string; html: string }[] {
 
   const sections = chunks
     .map((html, i) => ({
-      name: headingName(html, i === 0 ? "Hero" : `Section ${i + 1}`),
-      html: wrapCloneSection(html),
+      name: cloneSectionName(html, i),
+      html: wrapCloneMarkers(html, builder),
     }))
     .filter(
       (s) =>
@@ -66,7 +42,9 @@ function splitContent(content: string): { name: string; html: string }[] {
         /background/i.test(s.html),
     );
 
-  return sections.length ? sections : [{ name: "Content", html: wrapCloneSection(content) }];
+  return sections.length
+    ? sections
+    : [{ name: "Content", html: wrapCloneMarkers(content, builder) }];
 }
 
 function buildCoreHtml(snapshot: PageSnapshot, header: string, footer: string): string {
@@ -179,7 +157,7 @@ export function planCloneFromSnapshot(
   const css = rewriteUrls(snapshot.css, imageMap);
   const snapped = { ...snapshot, html, css };
   const { header, footer, content } = splitShell(snapped);
-  const sections = splitContent(rewriteUrls(content, imageMap));
+  const sections = splitContent(rewriteUrls(content, imageMap), snapshot.builder);
   const coreHtml = buildCoreHtml(
     snapped,
     rewriteUrls(header, imageMap),

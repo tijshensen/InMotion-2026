@@ -61,6 +61,10 @@ export function detectSiteStack(html: string): {
     builder = "divi";
   } else if (h.includes("elementor-") || h.includes("elementor/")) {
     builder = "elementor";
+  } else if (h.includes("wpb_wrapper") || h.includes("js_composer") || h.includes("vc_row")) {
+    builder = "wpbakery";
+  } else if (h.includes("wp-block-group") || h.includes("wp-block-cover") || h.includes("wp-block-post")) {
+    builder = "gutenberg";
   } else if (h.includes("wp-content") || h.includes("wordpress")) builder = "wordpress";
   else if (h.includes("w-mod-") || h.includes("webflow")) builder = "webflow";
   else if (h.includes("cdn.shopify") || h.includes("shopify")) builder = "shopify";

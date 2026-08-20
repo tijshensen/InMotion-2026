@@ -45,6 +45,9 @@ export function ensureBuilderBodyClass(builder: string, bodyClass: string): stri
     tokens.add("et-db");
     tokens.add("et_pb_gutters3");
     tokens.add("et_pb_gutter");
+  } else if (builder === "elementor") {
+    tokens.add("elementor-default");
+    tokens.add("elementor-page");
   }
   return [...tokens].join(" ");
 }
@@ -76,6 +79,13 @@ ${footer}
   if (builder === "elementor") {
     return `${header}
 <div class="elementor">
+${sectionsToken}
+</div>
+${footer}`;
+  }
+  if (builder === "wpbakery") {
+    return `${header}
+<div class="entry-content">
 ${sectionsToken}
 </div>
 ${footer}`;

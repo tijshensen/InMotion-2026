@@ -109,16 +109,22 @@ const SKIP_SECTION =
 const BUILDER_SECTION_RE =
   /<(div|section|article)\b[^>]*\bclass\s*=\s*["'][^"']*\b(et_pb_section|elementor-top-section|e-con-full|vc_section|fl-row|wp-block-cover)\b[^"']*["'][^>]*>/gi;
 
-type Chunk = { start: number; html: string };
+export type HtmlChunk = { start: number; html: string };
 
-function collectMatches(html: string, re: RegExp, skip?: (open: string) => boolean): Chunk[] {
-  const out: Chunk[] = [];
+export function collectMatches(
+  html: string,
+  re: RegExp,
+  opts?: { skip?: (open: string) => boolean; minLength?: number },
+): HtmlChunk[] {
+  const minLength = opts?.minLength ?? 40;
+  const skip = opts?.skip;
+  const out: HtmlChunk[] = [];
   re.lastIndex = 0;
   let m: RegExpExecArray | null;
   while ((m = re.exec(html))) {
     if (skip?.(m[0])) continue;
     const block = extractBalanced(html, m.index);
-    if (!block || block.length < 40) continue;
+    if (!block || block.length < minLength) continue;
     if (out.some((p) => m!.index > p.start && m!.index < p.start + p.html.length)) {
       continue;
     }
@@ -127,7 +133,29 @@ function collectMatches(html: string, re: RegExp, skip?: (open: string) => boole
   return out;
 }
 
-function chunksFromMatches(html: string, matches: Chunk[]): string[] | null {
+export function collectByClassToken(
+  html: string,
+  className: string,
+  opts?: { skip?: (open: string) => boolean; minLength?: number },
+): HtmlChunk[] {
+  const re = new RegExp(
+    `<(div|section|article)\\b[^>]*\\bclass\\s*=\\s*["'][^"']*\\b${escapeRe(className)}\\b[^"']*["'][^>]*>`,
+    "gi",
+  );
+  return collectMatches(html, re, opts);
+}
+
+export function openTag(block: string): string {
+  const m = block.match(/^<[a-zA-Z][a-zA-Z0-9]*\b[^>]*>/);
+  return m ? m[0] : "";
+}
+
+export function closeTag(block: string): string {
+  const m = block.match(/<\/[a-zA-Z][a-zA-Z0-9]*>\s*$/);
+  return m ? m[0] : "";
+}
+
+function chunksFromMatches(html: string, matches: HtmlChunk[]): string[] | null {
   if (matches.length < 2) return null;
   const chunks: string[] = [];
   const lead = html.slice(0, matches[0].start).trim();
@@ -143,13 +171,15 @@ export function splitIntoPageSections(content: string): string[] {
   const trimmed = content.trim();
   if (!trimmed) return ["<p></p>"];
 
-  const builder = collectMatches(trimmed, BUILDER_SECTION_RE, (open) => SKIP_SECTION.test(open));
+  const builder = collectMatches(trimmed, BUILDER_SECTION_RE, {
+    skip: (open) => SKIP_SECTION.test(open),
+  });
   const builderChunks = chunksFromMatches(trimmed, builder);
   if (builderChunks) return builderChunks;
 
-  const semantic = collectMatches(trimmed, /<(section|article)\b[^>]*>/gi, (open) =>
-    /aria-label=["']benefits["']/i.test(open),
-  );
+  const semantic = collectMatches(trimmed, /<(section|article)\b[^>]*>/gi, {
+    skip: (open) => /aria-label=["']benefits["']/i.test(open),
+  });
   // Ignore tiny widget <section> tags (e.g. three "Benefits" labels).
   const large = semantic.filter((c) => c.html.length > 400 || stripTags(c.html).length > 40);
   const semanticChunks = chunksFromMatches(trimmed, large.length >= 2 ? large : semantic);
