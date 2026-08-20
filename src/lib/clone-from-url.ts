@@ -60,7 +60,7 @@ function splitContent(
     : [{ name: "Content", html: wrapCloneMarkers(content, builder) }];
 }
 
-function buildCoreHtml(snapshot: PageSnapshot, header: string, footer: string): string {
+function buildCoreHtml(snapshot: PageSnapshot): string {
   const headMatch = snapshot.html.match(/<head\b[^>]*>([\s\S]*?)<\/head>/i);
   let headInner = headMatch?.[1] || "";
   headInner = headInner.replace(/<title[^>]*>[\s\S]*?<\/title>/i, "<title>{{page.title}}</title>");
@@ -72,7 +72,7 @@ function buildCoreHtml(snapshot: PageSnapshot, header: string, footer: string): 
     : "";
   const lang = (snapshot.htmlLang || "en").replace(/[^a-zA-Z0-9-]/g, "") || "en";
   const bodyClass = (snapshot.bodyClass || "cms-clone").replace(/[^a-zA-Z0-9 _-]/g, "");
-  const chrome = wrapSectionsInBuilderChrome(snapshot.builder, header, footer);
+  const chrome = wrapSectionsInBuilderChrome(snapshot.builder);
   return `<!DOCTYPE html>
 <html lang="${lang}" data-cms-clone="1" data-cms-builder="${snapshot.builder}">
 <head>
@@ -166,23 +166,20 @@ export function planCloneFromSnapshot(
   const css = rewriteUrls(snapshot.css, imageMap);
   const snapped = { ...snapshot, html, css };
   const { header, footer, content, afterContent } = splitShell(snapped);
-  const sections = [
-    ...splitContent(rewriteUrls(content, imageMap), snapshot.builder),
-    ...(afterContent.trim()
-      ? splitContent(rewriteUrls(afterContent, imageMap), snapshot.builder)
-      : []),
-  ];
-  const coreHtml = buildCoreHtml(
-    snapped,
-    rewriteUrls(header, imageMap),
-    rewriteUrls(footer, imageMap),
-  );
+  const sections = splitContent(rewriteUrls(content, imageMap), snapshot.builder);
+  const coreHtml = buildCoreHtml(snapped);
+  const inserts = [
+    { tag: "header", content: rewriteUrls(header, imageMap) },
+    { tag: "after", content: rewriteUrls(afterContent, imageMap) },
+    { tag: "footer", content: rewriteUrls(footer, imageMap) },
+  ].filter((i) => i.content.trim());
   return {
     siteTitle: snapshot.title,
     coreHtml,
     menuHtml: "",
     submenuHtml: "",
     sections,
+    inserts,
   };
 }
 

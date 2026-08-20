@@ -55,14 +55,15 @@ export function ensureBuilderBodyClass(builder: string, bodyClass: string): stri
 /** Keep descendant selectors like `.et_pb_gutters3 .et_pb_column_3_5` working. */
 export function wrapSectionsInBuilderChrome(
   builder: string,
-  header: string,
-  footer: string,
   sectionsToken = "{{sections}}",
 ): string {
+  const header = "{{insert:header}}";
+  const after = "{{insert:after}}";
+  const footer = "{{insert:footer}}";
   if (builder === "divi") {
-    return `<div id="page-container">
+    return `${header}
+<div id="page-container">
 <div id="et-boc" class="et-boc">
-${header}
 <div id="et-main-area">
 <div id="main-content">
 <div class="et-l et-l--post">
@@ -71,16 +72,18 @@ ${sectionsToken}
 </div>
 </div>
 </div>
-${footer}
 </div>
 </div>
-</div>`;
+</div>
+${after}
+${footer}`;
   }
   if (builder === "elementor") {
     return `${header}
 <div class="elementor">
 ${sectionsToken}
 </div>
+${after}
 ${footer}`;
   }
   if (builder === "wpbakery") {
@@ -88,6 +91,7 @@ ${footer}`;
 <div class="entry-content">
 ${sectionsToken}
 </div>
+${after}
 ${footer}`;
   }
   if (builder === "gutenberg" || builder === "wordpress") {
@@ -107,10 +111,12 @@ ${sectionsToken}
 </div>
 </div>
 </div>
+${after}
 ${footer}`;
   }
   return `${header}
 ${sectionsToken}
+${after}
 ${footer}`;
 }
 

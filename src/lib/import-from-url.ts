@@ -161,6 +161,7 @@ export type ImportPlan = {
   submenuHtml: string;
   sections: ImportSection[];
   grokRaw?: string;
+  inserts?: { tag: string; content: string }[];
 };
 
 /** Collapse similar cards after Grok returns — never part of the prompt. */
@@ -361,6 +362,26 @@ export async function applyImportPlanAsTemplate(opts: {
     set = await prisma.templateSet.create({
       data: { siteId: site.id, name: `${site.name} templates` },
     });
+  }
+
+  for (const ins of opts.plan.inserts || []) {
+    const tag = ins.tag.trim();
+    const content = ins.content || "";
+    if (!tag || !content.trim()) continue;
+    const existing = await prisma.insert.findUnique({
+      where: { siteId_tag: { siteId: site.id, tag } },
+    });
+    if (existing?.content?.trim()) continue;
+    if (existing) {
+      await prisma.insert.update({
+        where: { id: existing.id },
+        data: { content },
+      });
+    } else {
+      await prisma.insert.create({
+        data: { siteId: site.id, tag, content },
+      });
+    }
   }
 
   if (

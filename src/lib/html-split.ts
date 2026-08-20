@@ -227,7 +227,9 @@ export function splitPageShell(html: string): {
     findByClass(body, "elementor-location-footer") ||
     "";
 
+  const article = findByTag(body, "article");
   const candidates = [
+    article,
     findByClass(body, "entry-content"),
     findById(body, "et-main-area"),
     findById(body, "main-content"),
@@ -245,8 +247,10 @@ export function splitPageShell(html: string): {
     const text = stripTags(inner);
     const hasBands =
       /et_pb_section|elementor-top-section|e-con-full|vc_section|<section\b/i.test(inner);
-    if (text.length > 80 && (hasBands || text.length > 200)) {
+    if (text.length > 80 && (hasBands || text.length > 200 || article)) {
       content = inner.startsWith("<") ? innerHtml(inner) || inner : inner;
+      content = unwrapRootClass(content, "inside-article");
+      content = unwrapRootClass(content, "entry-content");
       break;
     }
   }
@@ -263,6 +267,17 @@ export function splitPageShell(html: string): {
   const footerOut = `${footer}${authorPanel ? `\n${authorPanel}` : ""}`;
 
   return { header, footer: footerOut, content, afterContent };
+}
+
+function unwrapRootClass(html: string, className: string): string {
+  const trimmed = html.trim();
+  const open = trimmed.match(/^<([a-zA-Z][a-zA-Z0-9]*)\b[^>]*>/);
+  if (!open) return html;
+  const cls = (open[0].match(/\bclass\s*=\s*["']([^"']*)["']/i) || [])[1] || "";
+  if (!new RegExp(`\\b${escapeRe(className)}\\b`).test(cls)) return html;
+  const full = extractBalanced(trimmed, 0);
+  if (!full || full.length < trimmed.length - 8) return html;
+  return innerHtml(full).trim() || html;
 }
 
 /** Site-wide blocks (GeneratePress Elements, GenerateBlocks) after the article. */
