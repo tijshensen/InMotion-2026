@@ -231,19 +231,29 @@ function wrapInnerAsMultiline(block: string, name: string): string {
   return `${open}<multiline name="${name}">${inner}</multiline>${close || ""}`;
 }
 
+function isInsideMarker(html: string, index: number): boolean {
+  const before = html.slice(0, index);
+  const openMl = before.lastIndexOf("<multiline");
+  const closeMl = before.lastIndexOf("</multiline>");
+  const openSl = before.lastIndexOf("<singleline");
+  const closeSl = before.lastIndexOf("</singleline>");
+  return openMl > closeMl || openSl > closeSl;
+}
+
 function wrapHits(
   html: string,
   hits: { start: number; html: string }[],
   label: string,
   start: number,
 ): { html: string; next: number } {
+  const usable = hits.filter((hit) => !isInsideMarker(html, hit.start));
   let out = html;
-  for (let i = hits.length - 1; i >= 0; i--) {
-    const hit = hits[i];
+  for (let i = usable.length - 1; i >= 0; i--) {
+    const hit = usable[i];
     const wrapped = wrapInnerAsMultiline(hit.html, `${label} ${start + i + 1}`);
     out = out.slice(0, hit.start) + wrapped + out.slice(hit.start + hit.html.length);
   }
-  return { html: out, next: start + hits.length };
+  return { html: out, next: start + usable.length };
 }
 
 function wrapClassInners(
@@ -283,9 +293,34 @@ function stripEmptyHeadings(html: string) {
   return html.replace(/<h[1-6]\b[^>]*>\s*<\/h[1-6]>/gi, "");
 }
 
+function isDiviTabWidget(html: string) {
+  return (
+    /\bdgat_advancedtab\b/i.test(html) ||
+    /\bet_pb_tabs\b/i.test(html) ||
+    /\bet_pb_accordion\b/i.test(html)
+  );
+}
+
+function wrapTabWidgetFields(html: string, start: number): { html: string; next: number } {
+  let s = html;
+  let n = start;
+  const navs = collectByClassToken(s, "dg_at_nav", { minLength: 8 }).filter(
+    (h) => /\bdg_at_nav\b/i.test(h.html.slice(0, 180)),
+  );
+  ({ html: s, next: n } = wrapHits(s, navs, "Tab label", n));
+  const panes = collectByClassToken(s, "dg_at_content_wrapper", { minLength: 40 });
+  ({ html: s, next: n } = wrapHits(s, panes, "Tab body", n));
+  const diviTabs = collectByClassToken(s, "et_pb_tab", { minLength: 24 });
+  ({ html: s, next: n } = wrapHits(s, diviTabs, "Tab body", n));
+  const toggles = collectByClassToken(s, "et_pb_toggle_content", { minLength: 24 });
+  ({ html: s, next: n } = wrapHits(s, toggles, "Accordion body", n));
+  return { html: s, next: n };
+}
+
 function wrapDiviLeaves(html: string): string {
   let s = stripEmptyHeadings(html);
   let n = 0;
+  ({ html: s, next: n } = wrapTabWidgetFields(s, n));
   const leaves = [
     "gw-card-title",
     "gw-card-body",
@@ -335,7 +370,7 @@ export function collapseCloneRepeats(
     labels?: Record<string, string>;
   }[];
 } {
-  if (isDiviSliderPiece(html)) return { html, repeatSeeds: [] };
+  if (isDiviSliderPiece(html) || isDiviTabWidget(html)) return { html, repeatSeeds: [] };
   const classes = ["gw-card", "et_pb_post"];
   for (const cls of classes) {
     const hits = collectByClassToken(html, cls, { minLength: 24 });

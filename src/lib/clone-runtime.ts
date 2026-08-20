@@ -108,7 +108,12 @@ img.lzl,img.lzl-ing{opacity:1!important}
 .et_pb_slider .et_pb_slide.et-pb-active-slide,
 .et_pb_slider .et_pb_slide.cms-slide-active{display:block!important}
 .row-slider-nav,.row-slider-tabs,.row-slider-tabs a,.row-slider-nav button,
-.et-pb-arrow-prev,.et-pb-arrow-next{pointer-events:auto!important}
+.et-pb-arrow-prev,.et-pb-arrow-next,.dg_at_nav,.et_pb_tabs_controls{pointer-events:auto!important}
+.et_pb_module.dgat_advancedtabitem{display:none}
+.et_pb_module.dgat_advancedtabitem.cms-tab-active{display:block!important}
+.dg_at_all_tabs>.et_pb_module.dgat_advancedtabitem:first-child:not(.cms-tab-inactive){display:block}
+.et_pb_tabs .et_pb_tab{display:none}
+.et_pb_tabs .et_pb_tab.et_pb_active_content,.et_pb_tabs .et_pb_tab.cms-tab-active{display:block!important}
 .cms-clone .mobile_menu_bar:before{
   content:"☰"!important;
   font-family:inherit!important;
@@ -223,6 +228,37 @@ export const CLONE_REVIVE_JS = `
     }
   }
 
+  function initTabs(root){
+    var navs = root.querySelectorAll(".dg_at_nav");
+    var panes = root.querySelectorAll(".et_pb_module.dgat_advancedtabitem");
+    if (!panes.length) {
+      navs = root.querySelectorAll(".et_pb_tabs_controls li");
+      panes = root.querySelectorAll(".et_pb_tab");
+    }
+    if (panes.length < 2) return;
+    function show(index){
+      for (var i = 0; i < panes.length; i++){
+        var on = i === index;
+        panes[i].classList.toggle("cms-tab-active", on);
+        panes[i].classList.toggle("cms-tab-inactive", !on);
+        panes[i].classList.toggle("et_pb_active_content", on);
+      }
+      for (var n = 0; n < navs.length; n++){
+        navs[n].classList.toggle("dg_at_nav_active", n === index);
+        navs[n].classList.toggle("et_pb_tab_active", n === index);
+      }
+    }
+    show(0);
+    for (var n = 0; n < navs.length; n++){
+      (function(idx){
+        navs[idx].addEventListener("click", function(e){
+          e.preventDefault();
+          show(idx);
+        });
+      })(n);
+    }
+  }
+
   function initDiviSlider(root){
     var slides = Array.prototype.slice.call(root.querySelectorAll(".et_pb_slide"));
     if (slides.length < 2) return;
@@ -288,6 +324,8 @@ export const CLONE_REVIVE_JS = `
     for (var r = 0; r < rowSliders.length; r++) initRowSlider(rowSliders[r]);
     var diviSliders = document.querySelectorAll(".et_pb_slider");
     for (var s = 0; s < diviSliders.length; s++) initDiviSlider(diviSliders[s]);
+    var tabRoots = document.querySelectorAll(".dg_at_container, .et_pb_tabs");
+    for (var tr = 0; tr < tabRoots.length; tr++) initTabs(tabRoots[tr]);
     var mobiles = document.querySelectorAll(".et_mobile_nav_menu, .mobile_nav");
     for (var m = 0; m < mobiles.length; m++) initMobileNav(mobiles[m]);
     document.addEventListener("click", function(e){
