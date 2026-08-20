@@ -141,9 +141,10 @@ export function normalizeLegacyTemplateCore(
 export function isFullThemeShell(html: string): boolean {
   if (!html) return false;
   return (
-    /<!DOCTYPE\s+html/i.test(html) &&
-    (/bootstrap|kiekeboe\.css|navbar-static-top|bs-navbar/i.test(html) ||
-      html.includes("{{sections}}") && html.length > 3000)
+    /data-cms-clone\s*=/.test(html) ||
+    (/<!DOCTYPE\s+html/i.test(html) &&
+      (/bootstrap|kiekeboe\.css|navbar-static-top|bs-navbar/i.test(html) ||
+        (html.includes("{{sections}}") && html.length > 3000)))
   );
 }
 

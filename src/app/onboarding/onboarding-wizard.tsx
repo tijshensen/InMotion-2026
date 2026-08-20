@@ -14,11 +14,13 @@ const PURPOSES = [
 ] as const;
 
 type BuildResult = { siteId: string; pageId: string };
+type ImportMode = "clone" | "inspired";
 
 export function OnboardingWizard({ defaultBrief }: { defaultBrief: string }) {
   const router = useRouter();
   const [step, setStep] = useState<1 | 2 | 3>(1);
   const [sourceUrl, setSourceUrl] = useState("");
+  const [mode, setMode] = useState<ImportMode>("clone");
   const [brief, setBrief] = useState(defaultBrief);
   const [siteName, setSiteName] = useState("");
   const [purpose, setPurpose] = useState<string | null>(null);
@@ -56,7 +58,8 @@ export function OnboardingWizard({ defaultBrief }: { defaultBrief: string }) {
         credentials: "same-origin",
         body: JSON.stringify({
           sourceUrl: sourceUrl.trim(),
-          brief: brief.trim(),
+          brief: mode === "inspired" ? brief.trim() : undefined,
+          mode,
         }),
       });
       if (!data.siteId || !data.pageId) {
@@ -101,11 +104,10 @@ export function OnboardingWizard({ defaultBrief }: { defaultBrief: string }) {
         <>
           <div>
             <h2 className="text-lg font-medium text-slate-900">
-              Which website should yours look like?
+              What&apos;s the website URL?
             </h2>
             <p className="mt-1 text-sm text-slate-600">
-              Paste the homepage of a site you like. We&apos;ll use it as the
-              starting point.
+              Paste your current site, or a page you like as a starting point.
             </p>
           </div>
           <input
@@ -131,19 +133,66 @@ export function OnboardingWizard({ defaultBrief }: { defaultBrief: string }) {
         <>
           <div>
             <h2 className="text-lg font-medium text-slate-900">
-              Anything we should keep or change?
+              How should we use this page?
             </h2>
             <p className="mt-1 text-sm text-slate-600">
-              Optional. We already have a default brief. Add notes if you want
-              a different tone or to keep the original copy.
+              You can keep the look as-is, or treat it as a sketch for a new
+              page.
             </p>
           </div>
-          <textarea
-            value={brief}
-            onChange={(e) => setBrief(e.target.value)}
-            rows={5}
-            className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
-          />
+          <div className="grid gap-2 sm:grid-cols-2">
+            <button
+              type="button"
+              onClick={() => setMode("clone")}
+              className={`rounded-xl border p-4 text-left text-sm ${
+                mode === "clone"
+                  ? "border-blue-600 bg-blue-50"
+                  : "border-slate-200 hover:bg-slate-50"
+              }`}
+            >
+              <span className="block font-medium text-slate-900">
+                Keep it looking the same
+              </span>
+              <span className="mt-1 block text-xs text-slate-600">
+                Best if you already have a site (WordPress, etc.) and just want
+                to edit it here.
+              </span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setMode("inspired")}
+              className={`rounded-xl border p-4 text-left text-sm ${
+                mode === "inspired"
+                  ? "border-blue-600 bg-blue-50"
+                  : "border-slate-200 hover:bg-slate-50"
+              }`}
+            >
+              <span className="block font-medium text-slate-900">
+                Use it as a starting point
+              </span>
+              <span className="mt-1 block text-xs text-slate-600">
+                For a new landing or sales page inspired by this URL.
+              </span>
+            </button>
+          </div>
+          {mode === "inspired" ? (
+            <label className="block space-y-1.5">
+              <span className="text-sm font-medium text-slate-800">
+                Anything we should keep or change?
+              </span>
+              <textarea
+                value={brief}
+                onChange={(e) => setBrief(e.target.value)}
+                rows={4}
+                className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+              />
+            </label>
+          ) : (
+            <p className="text-sm text-slate-600">
+              We&apos;ll copy the layout, styles, and images. You can change
+              text in the editor after.
+            </p>
+          )}
           {error ? <p className="text-sm text-red-600">{error}</p> : null}
           <div className="flex gap-2">
             <button
@@ -162,7 +211,7 @@ export function OnboardingWizard({ defaultBrief }: { defaultBrief: string }) {
               onClick={() => void startBuild()}
               className="flex-1 rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-60"
             >
-              Build my site
+              {mode === "clone" ? "Copy my site" : "Build my site"}
             </button>
           </div>
         </>
@@ -179,7 +228,9 @@ export function OnboardingWizard({ defaultBrief }: { defaultBrief: string }) {
             <p className="mt-1 text-sm text-slate-600">
               {build
                 ? "Last bits — then we open the editor."
-                : "This can take a minute. Meanwhile, tell us about your site."}
+                : mode === "clone"
+                  ? "Copying styles and images. This is usually quick."
+                  : "This can take a minute. Meanwhile, tell us about your site."}
             </p>
           </div>
 

@@ -7,6 +7,7 @@ import {
   importTemplateFromUrl,
   saveImportPrompt,
 } from "@/lib/import-from-url";
+import { cloneTemplateFromUrl } from "@/lib/clone-from-url";
 import { formatServerImportError } from "@/lib/import-error";
 import { getImportJob, startImportJob } from "@/lib/import-job";
 
@@ -18,6 +19,7 @@ const bodySchema = z.object({
   name: z.string().max(200).optional(),
   prompt: z.string().min(1).max(4000).optional(),
   savePromptAsDefault: z.boolean().optional(),
+  mode: z.enum(["clone", "inspired"]).optional(),
 });
 
 export async function GET(req: Request) {
@@ -51,18 +53,25 @@ export async function POST(req: Request) {
     const denied = await assertSiteAccess(user, body.siteId, "EDITOR");
     if (denied) return denied;
 
+    const mode = body.mode || "clone";
     const prompt = (body.prompt || (await getImportPrompt())).trim();
-    if (body.savePromptAsDefault && user.role === "SUPERADMIN") {
+    if (mode === "inspired" && body.savePromptAsDefault && user.role === "SUPERADMIN") {
       await saveImportPrompt(prompt);
     }
 
     const jobId = startImportJob(user.id, () =>
-      importTemplateFromUrl({
-        siteId: body.siteId,
-        sourceUrl: body.sourceUrl,
-        prompt,
-        name: body.name,
-      }),
+      mode === "clone"
+        ? cloneTemplateFromUrl({
+            siteId: body.siteId,
+            sourceUrl: body.sourceUrl,
+            name: body.name,
+          })
+        : importTemplateFromUrl({
+            siteId: body.siteId,
+            sourceUrl: body.sourceUrl,
+            prompt,
+            name: body.name,
+          }),
     );
 
     return NextResponse.json({ jobId }, { status: 202 });

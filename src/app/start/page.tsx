@@ -21,8 +21,8 @@ export default async function StartPage({
           Your site, from a URL you like
         </h1>
         <p className="text-slate-600 leading-relaxed">
-          Sign in with Google. We&apos;ll ask which website you want to look
-          like, then build your first draft.
+          Sign in with Google. Paste your site or a page you like — keep the
+          look, or use it as a starting point.
         </p>
         {error ? (
           <p className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">

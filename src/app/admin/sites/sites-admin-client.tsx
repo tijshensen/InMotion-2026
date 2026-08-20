@@ -77,6 +77,7 @@ export function SitesAdminClient({
   const [prompt, setPrompt] = useState(importPrompt);
   const [savePrompt, setSavePrompt] = useState(false);
   const [importing, setImporting] = useState(false);
+  const [importMode, setImportMode] = useState<"clone" | "inspired">("clone");
   const [selectedId, setSelectedId] = useState(activeSiteId);
 
   useEffect(() => {
@@ -152,8 +153,9 @@ export function SitesAdminClient({
             organizationId,
             sourceUrl,
             name: name || undefined,
-            prompt,
+            prompt: importMode === "inspired" ? prompt : undefined,
             savePromptAsDefault: savePrompt,
+            mode: importMode,
           }),
         },
       );
@@ -221,12 +223,41 @@ export function SitesAdminClient({
           <div>
             <h2 className="font-semibold">Import from a website</h2>
             <p className="text-xs text-slate-500 mt-1">
-              Grok reads the homepage HTML, then builds a Tailwind Home
-              template (header/footer) and named editable sections for the
-              canvas.
+              Keep the original look, or use the page as a sketch for a new
+              Tailwind site.
             </p>
           </div>
-          {!hasXaiKey && (
+          <div className="grid gap-2 sm:grid-cols-2">
+            <label className="flex cursor-pointer gap-2 rounded-lg border border-slate-200 p-3 text-sm has-[:checked]:border-blue-600 has-[:checked]:bg-blue-50">
+              <input
+                type="radio"
+                name="importMode"
+                checked={importMode === "clone"}
+                onChange={() => setImportMode("clone")}
+              />
+              <span>
+                <span className="font-medium">Keep it looking the same</span>
+                <span className="block text-xs text-slate-500">
+                  Copy layout, CSS, and images. No Grok.
+                </span>
+              </span>
+            </label>
+            <label className="flex cursor-pointer gap-2 rounded-lg border border-slate-200 p-3 text-sm has-[:checked]:border-blue-600 has-[:checked]:bg-blue-50">
+              <input
+                type="radio"
+                name="importMode"
+                checked={importMode === "inspired"}
+                onChange={() => setImportMode("inspired")}
+              />
+              <span>
+                <span className="font-medium">Use as a starting point</span>
+                <span className="block text-xs text-slate-500">
+                  Grok rebuilds a Tailwind draft from the page.
+                </span>
+              </span>
+            </label>
+          </div>
+          {importMode === "inspired" && !hasXaiKey && (
             <p className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
               Set <code className="text-xs">XAI_API_KEY</code> in{" "}
               <code className="text-xs">.env</code> then restart the server.
@@ -268,18 +299,20 @@ export function SitesAdminClient({
                 placeholder="Taken from the source title if empty"
               />
             </label>
-            <label className="block text-sm sm:col-span-2">
-              <span className="text-slate-600">Prompt</span>
-              <textarea
-                required
-                value={prompt}
-                onChange={(e) => setPrompt(e.target.value)}
-                rows={4}
-                className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
-              />
-            </label>
+            {importMode === "inspired" ? (
+              <label className="block text-sm sm:col-span-2">
+                <span className="text-slate-600">Prompt</span>
+                <textarea
+                  required
+                  value={prompt}
+                  onChange={(e) => setPrompt(e.target.value)}
+                  rows={4}
+                  className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+                />
+              </label>
+            ) : null}
           </div>
-          {isSuperadmin && (
+          {isSuperadmin && importMode === "inspired" && (
             <label className="flex items-center gap-2 text-sm text-slate-600">
               <input
                 type="checkbox"
@@ -291,12 +324,20 @@ export function SitesAdminClient({
           )}
           <button
             type="submit"
-            disabled={importing || !hasXaiKey || !organizationId}
+            disabled={
+              importing ||
+              !organizationId ||
+              (importMode === "inspired" && !hasXaiKey)
+            }
             className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-800 disabled:opacity-50"
           >
             {importing
-              ? "Reading page and generating with Grok…"
-              : "Generate site with Grok"}
+              ? importMode === "clone"
+                ? "Copying site…"
+                : "Reading page and generating with Grok…"
+              : importMode === "clone"
+                ? "Copy this site"
+                : "Generate site with Grok"}
           </button>
         </form>
       )}

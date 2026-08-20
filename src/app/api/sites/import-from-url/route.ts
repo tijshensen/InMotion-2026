@@ -8,6 +8,7 @@ import {
   importSiteFromUrl,
   saveImportPrompt,
 } from "@/lib/import-from-url";
+import { cloneSiteFromUrl } from "@/lib/clone-from-url";
 import { formatServerImportError } from "@/lib/import-error";
 import { getImportJob, startImportJob } from "@/lib/import-job";
 
@@ -19,6 +20,7 @@ const bodySchema = z.object({
   name: z.string().max(120).optional(),
   prompt: z.string().min(1).max(4000).optional(),
   savePromptAsDefault: z.boolean().optional(),
+  mode: z.enum(["clone", "inspired"]).optional(),
 });
 
 export async function GET(req: Request) {
@@ -61,14 +63,23 @@ export async function POST(req: Request) {
       await saveImportPrompt(prompt);
     }
 
+    const mode = body.mode || "clone";
     const jobId = startImportJob(user.id, async () => {
-      const result = await importSiteFromUrl({
-        organizationId: body.organizationId,
-        name: body.name,
-        sourceUrl: body.sourceUrl,
-        prompt,
-        creatorUserId: user.id,
-      });
+      const result =
+        mode === "clone"
+          ? await cloneSiteFromUrl({
+              organizationId: body.organizationId,
+              name: body.name,
+              sourceUrl: body.sourceUrl,
+              creatorUserId: user.id,
+            })
+          : await importSiteFromUrl({
+              organizationId: body.organizationId,
+              name: body.name,
+              sourceUrl: body.sourceUrl,
+              prompt,
+              creatorUserId: user.id,
+            });
       return {
         siteId: result.site.id,
         siteSlug: result.site.slug,

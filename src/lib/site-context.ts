@@ -158,6 +158,7 @@ export function ensureSiteStylesheets(
   },
 ): string {
   if (!html) return html;
+  if (/data-cms-clone\s*=/.test(html)) return html;
   const tags: string[] = [];
   for (const href of siteStylesheetHrefs(site)) {
     const file = href.split("?")[0]?.split("/").pop() || "";

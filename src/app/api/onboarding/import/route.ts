@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { getSessionUser } from "@/lib/auth";
 import { getImportPrompt, importSiteFromUrl } from "@/lib/import-from-url";
+import { cloneSiteFromUrl } from "@/lib/clone-from-url";
 import { setActiveSiteId } from "@/lib/site-context";
 import { ensurePersonalOrg } from "@/lib/onboarding";
 import { formatServerImportError } from "@/lib/import-error";
@@ -12,6 +13,7 @@ export const maxDuration = 300;
 const bodySchema = z.object({
   sourceUrl: z.string().url(),
   brief: z.string().max(4000).optional(),
+  mode: z.enum(["clone", "inspired"]).optional(),
 });
 
 export async function GET(req: Request) {
@@ -49,13 +51,21 @@ export async function POST(req: Request) {
     const org = await ensurePersonalOrg(user.id, user.email);
     const prompt = (body.brief || (await getImportPrompt())).trim();
 
+    const mode = body.mode || "clone";
     const jobId = startImportJob(user.id, async () => {
-      const result = await importSiteFromUrl({
-        organizationId: org.id,
-        sourceUrl: body.sourceUrl,
-        prompt,
-        creatorUserId: user.id,
-      });
+      const result =
+        mode === "clone"
+          ? await cloneSiteFromUrl({
+              organizationId: org.id,
+              sourceUrl: body.sourceUrl,
+              creatorUserId: user.id,
+            })
+          : await importSiteFromUrl({
+              organizationId: org.id,
+              sourceUrl: body.sourceUrl,
+              prompt,
+              creatorUserId: user.id,
+            });
       return {
         siteId: result.site.id,
         pageId: result.pageId,
