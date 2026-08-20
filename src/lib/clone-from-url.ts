@@ -89,11 +89,7 @@ ${cloneReviveScriptTag()}
 </html>`;
 }
 
-function splitShell(snapshot: PageSnapshot): {
-  header: string;
-  footer: string;
-  content: string;
-} {
+function splitShell(snapshot: PageSnapshot) {
   return splitPageShell(snapshot.html);
 }
 
@@ -169,8 +165,13 @@ export function planCloneFromSnapshot(
   const html = rewriteUrls(snapshot.html, imageMap);
   const css = rewriteUrls(snapshot.css, imageMap);
   const snapped = { ...snapshot, html, css };
-  const { header, footer, content } = splitShell(snapped);
-  const sections = splitContent(rewriteUrls(content, imageMap), snapshot.builder);
+  const { header, footer, content, afterContent } = splitShell(snapped);
+  const sections = [
+    ...splitContent(rewriteUrls(content, imageMap), snapshot.builder),
+    ...(afterContent.trim()
+      ? splitContent(rewriteUrls(afterContent, imageMap), snapshot.builder)
+      : []),
+  ];
   const coreHtml = buildCoreHtml(
     snapped,
     rewriteUrls(header, imageMap),

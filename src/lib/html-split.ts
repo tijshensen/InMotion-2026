@@ -204,15 +204,21 @@ export function splitPageShell(html: string): {
   header: string;
   footer: string;
   content: string;
+  afterContent: string;
 } {
   const body = bodyInner(html);
-  const header =
+  const siteHeader =
     findByTag(body, "header") ||
     findById(body, "masthead") ||
     findByClass(body, "site-header") ||
     findByClass(body, "et-l--header") ||
     findByClass(body, "elementor-location-header") ||
     "";
+  const mobileHeader =
+    findById(body, "mobile-header") ||
+    findByClass(body, "mobile-header-navigation") ||
+    "";
+  const header = [siteHeader, mobileHeader].filter(Boolean).join("\n");
   const footer =
     findByTag(body, "footer") ||
     findById(body, "colophon") ||
@@ -247,11 +253,39 @@ export function splitPageShell(html: string): {
 
   if (!content) {
     content = body;
-    if (header) content = content.replace(header, "");
+    if (siteHeader) content = content.replace(siteHeader, "");
+    if (mobileHeader) content = content.replace(mobileHeader, "");
     if (footer) content = content.replace(footer, "");
   }
 
-  return { header, footer, content };
+  const afterContent = sliceAfterMain(body, footer);
+  const authorPanel = findById(body, "author-panel") || "";
+  const footerOut = `${footer}${authorPanel ? `\n${authorPanel}` : ""}`;
+
+  return { header, footer: footerOut, content, afterContent };
+}
+
+/** Site-wide blocks (GeneratePress Elements, GenerateBlocks) after the article. */
+function sliceAfterMain(body: string, footer: string): string {
+  const ends = ["</article>", "</main>"].map((t) => {
+    const i = body.toLowerCase().lastIndexOf(t);
+    return i < 0 ? -1 : i + t.length;
+  });
+  const start = Math.max(...ends);
+  if (start < 40) return "";
+  let end = body.length;
+  if (footer) {
+    const fi = body.indexOf(footer, start);
+    if (fi > start) end = fi;
+  }
+  if (end === body.length) {
+    const m = body.slice(start).search(/<div[^>]*class="[^"]*site-footer/i);
+    if (m >= 0) end = start + m;
+  }
+  let slice = body.slice(start, end).trim();
+  slice = slice.replace(/^(<\/(?:div|section|main|article)>\s*)+/i, "").trim();
+  if (stripTags(slice).length < 24 && !/<img\b/i.test(slice)) return "";
+  return slice;
 }
 
 const SECTION_CHROME =
