@@ -35,6 +35,9 @@ export type EditorChromeState = {
   onDelete?: () => void;
   /** Toggle the add-section picker (canvas only) */
   onAddSection?: () => void;
+  showEightByEight?: boolean;
+  setShowEightByEight?: (v: boolean | ((prev: boolean) => boolean)) => void;
+  eightByEightScore?: number | null;
 };
 
 type Ctx = {

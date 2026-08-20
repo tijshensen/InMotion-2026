@@ -588,6 +588,23 @@ export function AdminShell({
               <div className="flex rounded-lg border border-slate-700 p-0.5 text-[11px]">
                 <button
                   type="button"
+                  onClick={() => chrome.setShowEightByEight?.((v) => !v)}
+                  className={[
+                    "rounded-md px-2 py-1 whitespace-nowrap",
+                    chrome.showEightByEight
+                      ? "bg-white text-slate-900"
+                      : "text-slate-300 hover:text-white",
+                  ].join(" ")}
+                >
+                  8x8
+                  {chrome.eightByEightScore != null ? (
+                    <span className="ml-1 font-semibold">
+                      {chrome.eightByEightScore}
+                    </span>
+                  ) : null}
+                </button>
+                <button
+                  type="button"
                   onClick={() => chrome.setShowMeta((v) => !v)}
                   className={[
                     "rounded-md px-2 py-1 whitespace-nowrap",

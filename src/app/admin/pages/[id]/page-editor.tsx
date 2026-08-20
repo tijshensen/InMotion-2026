@@ -13,6 +13,7 @@ import {
   type CanvasDevice,
   type EditorMode,
 } from "@/components/editor-chrome-context";
+import { EightByEightPanel } from "./eight-by-eight-panel";
 
 type TemplateBlock = {
   id: string;
@@ -34,6 +35,7 @@ type Page = {
   siteId: string;
   templateId: string | null;
   blocks: PageSection[];
+  eightByEightScore?: number | null;
 };
 
 type Props = {
@@ -106,6 +108,10 @@ export function PageEditor({
   const [status, setStatus] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [showMeta, setShowMeta] = useState(false);
+  const [showEightByEight, setShowEightByEight] = useState(false);
+  const [eightByEightScore, setEightByEightScore] = useState<number | null>(
+    page.eightByEightScore ?? null,
+  );
   const [device, setDevice] = useState<CanvasDevice>(() => {
     if (typeof window === "undefined") return "phone";
     try {
@@ -304,8 +310,23 @@ export function PageEditor({
       saving,
       saveStatus: status,
       showMeta,
-      setShowMeta,
+      setShowMeta: (v: boolean | ((prev: boolean) => boolean)) => {
+        setShowMeta((p) => {
+          const n = typeof v === "function" ? v(p) : v;
+          if (n) setShowEightByEight(false);
+          return n;
+        });
+      },
       showAdd,
+      showEightByEight,
+      setShowEightByEight: (v: boolean | ((prev: boolean) => boolean)) => {
+        setShowEightByEight((p) => {
+          const n = typeof v === "function" ? v(p) : v;
+          if (n) setShowMeta(false);
+          return n;
+        });
+      },
+      eightByEightScore,
       editorMode:
         !layoutModeAvailable && editorMode === "layout" ? "content" : editorMode,
       setEditorMode,
@@ -321,6 +342,8 @@ export function PageEditor({
       status,
       showMeta,
       showAdd,
+      showEightByEight,
+      eightByEightScore,
       onDelete,
       editorMode,
       layoutModeAvailable,
@@ -374,6 +397,13 @@ export function PageEditor({
           }
         />
       </div>
+
+      <EightByEightPanel
+        pageId={page.id}
+        open={showEightByEight}
+        onClose={() => setShowEightByEight(false)}
+        onScore={setEightByEightScore}
+      />
 
       {/* Page settings — dark slide-in from the right */}
       {showMeta && (

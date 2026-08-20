@@ -13,6 +13,7 @@ type PageRow = {
   site: { id: string; name: string; slug: string };
   language?: { id: string; name: string; code: string } | null;
   _count: { blocks: number };
+  eightByEightScore?: number | null;
 };
 
 export function PagesTable({
@@ -84,6 +85,7 @@ export function PagesTable({
               <th className="px-4 py-3 font-medium">Title</th>
               <th className="px-4 py-3 font-medium">Slug</th>
               <th className="px-4 py-3 font-medium">Blocks</th>
+              <th className="px-4 py-3 font-medium">8x8</th>
               <th className="px-4 py-3 font-medium">Status</th>
               <th className="px-4 py-3 font-medium">Edit</th>
             </tr>
@@ -104,6 +106,24 @@ export function PagesTable({
                   {p.slug}
                 </td>
                 <td className="px-4 py-3 text-slate-600">{p._count.blocks}</td>
+                <td className="px-4 py-3">
+                  {p.eightByEightScore != null ? (
+                    <span
+                      className={[
+                        "rounded-full px-2 py-0.5 text-[11px] font-semibold",
+                        p.eightByEightScore >= 75
+                          ? "bg-emerald-50 text-emerald-800"
+                          : p.eightByEightScore >= 45
+                            ? "bg-amber-50 text-amber-800"
+                            : "bg-rose-50 text-rose-800",
+                      ].join(" ")}
+                    >
+                      {p.eightByEightScore}
+                    </span>
+                  ) : (
+                    <span className="text-slate-400">—</span>
+                  )}
+                </td>
                 <td className="px-4 py-3">
                   {p.isDefault && (
                     <span className="mr-1 rounded-full bg-blue-50 px-2 py-0.5 text-[11px] text-blue-700">
@@ -133,7 +153,7 @@ export function PagesTable({
             {filtered.length === 0 && (
               <tr>
                 <td
-                  colSpan={5}
+                  colSpan={6}
                   className="px-4 py-10 text-center text-slate-500"
                 >
                   No pages match.

@@ -249,6 +249,11 @@ model Page {
   sortOrder       Int      @default(0)
   /// Original MotionCMS page.id — used for #internalURI{id} link resolution
   legacyId        Int?
+  /// Last IMU 8x8 sales-page score (0–100). Null = not scored yet.
+  eightByEightScore      Int?
+  eightByEightBreakdown  String    @default("")
+  eightByEightScoredAt   DateTime?
+  eightByEightVersion    String    @default("")
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
   blocks          PageBlock[]
