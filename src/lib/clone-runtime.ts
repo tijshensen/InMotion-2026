@@ -202,6 +202,20 @@ body.contained-content .cms-clone .entry-content{padding-left:20px;padding-right
 }
 .et_mobile_menu .cms-clone-sub-open>.sub-menu,
 #mobile_menu .cms-clone-sub-open>.sub-menu{display:block!important}
+.cms-clone .logos-grid{
+  display:flex;
+  flex-wrap:wrap;
+  align-items:center;
+  justify-content:center;
+  gap:24px 36px;
+}
+.cms-clone .logos-grid .image,
+.cms-clone .logos-grid img{
+  max-height:56px;
+  width:auto;
+  max-width:180px;
+  object-fit:contain;
+}
 `.trim();
 
 export const CLONE_REVIVE_JS = `

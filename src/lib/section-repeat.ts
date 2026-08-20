@@ -134,10 +134,31 @@ function similarItems(a: Frag, b: Frag): boolean {
   const sigA = childTagSig(a);
   const sigB = childTagSig(b);
   const classScore = classSimilarity(a.className || "", b.className || "");
-  if (sigA && sigA === sigB && classScore >= 0.28) return true;
-  if (classScore >= 0.5) return true;
-  if (!a.className && !b.className && sigA && sigA === sigB) return true;
+  const sameSig = Boolean(sigA && sigA === sigB);
+  // Same inner outline + overlapping classes → a card/logo/slide list.
+  if (sameSig && classScore >= 0.28) return true;
+  // High class overlap only counts when the insides match (or both are empty).
+  // Two wp-block-column / col-* siblings often share classes but are layout
+  // (text | image), not a repeatable list.
+  if (classScore >= 0.5 && (!sigA || !sigB || sameSig)) return true;
+  if (!a.className && !b.className && sameSig) return true;
   return false;
+}
+
+function isLayoutColumnClass(cls: string): boolean {
+  return (
+    /\bwp-block-column\b/.test(cls) ||
+    /(^|\s)col-(?:[a-z]{2}-)?\d/.test(cls)
+  );
+}
+
+function isLayoutRowClass(cls: string): boolean {
+  return /\bwp-block-columns\b/.test(cls) || /(^|\s)row(\s|$)/.test(cls);
+}
+
+function fragHasTag(el: Frag, tag: string): boolean {
+  if (el.tag === tag) return true;
+  return el.children.some((c) => c.type === "el" && fragHasTag(c, tag));
 }
 
 function elementKids(nodes: Frag[]): Frag[] {
@@ -179,6 +200,19 @@ function longestSimilarRun(kids: Frag[]): Frag[] | null {
   }
   if (best.length < 2) return null;
   if (best.every(isPlainTextItem)) return null;
+  // Rows of columns are layout chrome, not a card list.
+  if (best.every((el) => isLayoutRowClass(el.className || ""))) return null;
+  // A pair of bootstrap / Gutenberg columns is a layout, not a list.
+  if (best.length === 2) {
+    const [a, b] = best;
+    if (
+      isLayoutColumnClass(a.className || "") ||
+      isLayoutColumnClass(b.className || "")
+    ) {
+      return null;
+    }
+    if (fragHasTag(a, "img") !== fragHasTag(b, "img")) return null;
+  }
   return best;
 }
 

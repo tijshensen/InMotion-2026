@@ -7,9 +7,11 @@
 import {
   closeTag,
   collectByClassToken,
+  collectGutenbergBands,
   collectMatches,
   innerHtml,
   openTag,
+  splitByMatches,
   splitIntoPageSections,
   stripTags,
   type HtmlChunk,
@@ -200,14 +202,35 @@ function splitWpbakery(content: string): string[] {
   );
 }
 
+function glueEmptyBands(chunks: string[]): string[] {
+  const out: string[] = [];
+  for (const chunk of chunks) {
+    if (isEmptyBand(chunk) && out.length) {
+      out[out.length - 1] += chunk;
+    } else {
+      out.push(chunk);
+    }
+  }
+  return out.length ? out : chunks;
+}
+
 function splitGutenberg(content: string): string[] {
+  const custom = collectGutenbergBands(content);
+  if (custom.length >= 2) {
+    return glueEmptyBands(splitByMatches(content, custom));
+  }
   const covers = collectByClassToken(content, "wp-block-cover");
-  const groups = collectByClassToken(content, "wp-block-group");
+  const groups = collectByClassToken(content, "wp-block-group", {
+    skip: (open) => /wp-block-group__inner-container/i.test(open),
+  });
   const bands = [...covers, ...groups]
     .sort((a, b) => a.start - b.start)
-    .filter((c, i, all) => !all.some((p, j) => j !== i && c.start > p.start && c.start < p.start + p.html.length));
-  if (bands.length < 2) return splitIntoPageSections(content);
-  return bands.map((c) => c.html);
+    .filter(
+      (c, i, all) =>
+        !all.some((p, j) => j !== i && c.start > p.start && c.start < p.start + p.html.length),
+    );
+  if (bands.length >= 2) return glueEmptyBands(splitByMatches(content, bands));
+  return splitIntoPageSections(content);
 }
 
 export function splitCloneBands(content: string, builder: string): string[] {

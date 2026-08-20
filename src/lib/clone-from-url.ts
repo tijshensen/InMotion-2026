@@ -24,15 +24,25 @@ import {
   applyImportPlanAsTemplate,
   type ImportPlan,
 } from "./import-from-url";
+import { emptyFieldsFromTemplate, serializeContent } from "./sections";
+import { scheduleSectionPreview } from "./section-preview";
 
 function splitContent(
   content: string,
   builder: string,
-): { name: string; html: string; repeatSeeds?: { groupKey: string; fields: Record<string, string> }[] }[] {
+): {
+  name: string;
+  html: string;
+  repeatSeeds?: {
+    groupKey: string;
+    fields: Record<string, string>;
+    labels?: Record<string, string>;
+  }[];
+}[] {
   let chunks = splitCloneBands(content, builder);
-  if (chunks.length > 12) {
-    const head = chunks.slice(0, 11);
-    const tail = chunks.slice(11).join("\n");
+  if (chunks.length > 20) {
+    const head = chunks.slice(0, 19);
+    const tail = chunks.slice(19).join("\n");
     chunks = [...head, tail];
   }
 
@@ -261,4 +271,96 @@ export async function cloneTemplateFromUrl(opts: {
     plan,
     templateName: opts.name || snapshot.title,
   });
+}
+
+/** Re-run clone split onto an existing page (same template + page id). */
+export async function reclonePageFromUrl(opts: {
+  pageId: string;
+  sourceUrl?: string;
+  skipPreview?: boolean;
+}) {
+  const page = await prisma.page.findUnique({
+    where: { id: opts.pageId },
+    include: {
+      site: { select: { id: true, slug: true } },
+    },
+  });
+  if (!page) throw new Error("Page not found");
+  if (!page.templateId) throw new Error("Page has no template");
+  const sourceUrl =
+    opts.sourceUrl ||
+    (
+      await prisma.siteSetting.findUnique({
+        where: { siteId_key: { siteId: page.siteId, key: "importedFromUrl" } },
+      })
+    )?.value;
+  if (!sourceUrl) throw new Error("No source URL stored for this site");
+
+  const snapshot = await scrapePage(sourceUrl);
+  const imageMap = await downloadImages(snapshot.images, {
+    siteId: page.site.id,
+    siteSlug: page.site.slug,
+    referer: snapshot.finalUrl,
+  });
+  const plan = planCloneFromSnapshot(snapshot, imageMap);
+  const templateId = page.templateId;
+
+  await prisma.$transaction(async (tx) => {
+    await tx.pageBlock.deleteMany({ where: { pageId: page.id } });
+    await tx.templateBlock.deleteMany({ where: { templateId } });
+    await tx.template.update({
+      where: { id: templateId },
+      data: { coreHtml: plan.coreHtml },
+    });
+    for (let i = 0; i < plan.sections.length; i++) {
+      const s = plan.sections[i];
+      const tb = await tx.templateBlock.create({
+        data: {
+          templateId,
+          name: s.name,
+          defaultHtml: s.html,
+          isRepeatable: /<repeatable\b/i.test(s.html),
+          sortOrder: i,
+        },
+      });
+      await tx.pageBlock.create({
+        data: {
+          pageId: page.id,
+          templateBlockId: tb.id,
+          content: serializeContent({
+            fields: emptyFieldsFromTemplate(s.html),
+            layoutHtml: s.html,
+          }),
+          sortOrder: i,
+          repeatItems: {
+            create: (s.repeatSeeds || []).map((seed, ri) => ({
+              groupKey: seed.groupKey,
+              sortOrder: ri,
+              origin: "scraped",
+              content: serializeContent({
+                fields: seed.fields,
+                labels: seed.labels,
+              }),
+            })),
+          },
+        },
+      });
+    }
+  });
+
+  if (!opts.skipPreview) {
+    const tbs = await prisma.templateBlock.findMany({
+      where: { templateId },
+      select: { id: true },
+    });
+    for (const tb of tbs) scheduleSectionPreview(tb.id);
+  }
+
+  return {
+    pageId: page.id,
+    templateId,
+    sectionCount: plan.sections.length,
+    names: plan.sections.map((s) => s.name),
+    sourceUrl,
+  };
 }

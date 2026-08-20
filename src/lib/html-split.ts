@@ -109,6 +109,68 @@ const SKIP_SECTION =
 const BUILDER_SECTION_RE =
   /<(div|section|article)\b[^>]*\bclass\s*=\s*["'][^"']*\b(et_pb_section|elementor-top-section|e-con-full|vc_section|fl-row|wp-block-cover)\b[^"']*["'][^>]*>/gi;
 
+/**
+ * Gutenberg / GenerateBlocks / custom theme bands. Lookahead so id/class
+ * order does not matter. Do not match inner classes like block-title.
+ */
+function gutenbergBandRe() {
+  return /<(div|section|article)\b(?=[^>]*(?:id\s*=\s*["'][^"']*-block_[a-zA-Z0-9]+["']|class\s*=\s*["'][^"']*\b(?:alignfull|acf-block-[a-z0-9-]+|wp-block-cover|wp-block-group|wp-block-media-text|wp-block-uagb-[a-z0-9-]+|block-(?:hero|client-logos|content-container|process-steps|usp|highlights|check-grid|case-selection|cta-large|accordeon)(?:-v\d+)?)\b))[^>]*>/gi;
+}
+
+export function collectGutenbergBands(html: string): HtmlChunk[] {
+  return collectMatches(html, gutenbergBandRe(), {
+    skip: (open) =>
+      SKIP_SECTION.test(open) || /wp-block-group__inner-container/i.test(open),
+    minLength: 80,
+  });
+}
+
+/** Spacers, a trailing mobile image, empty wrappers — not their own section. */
+export function isMinorInterstitial(html: string): boolean {
+  const t = html.trim();
+  if (!t) return true;
+  if (/<h[1-6]\b/i.test(t)) return false;
+  if (stripTags(t).length > 60) return false;
+  const imgs = t.match(/<img\b/gi) || [];
+  return imgs.length <= 2;
+}
+
+/**
+ * Split html on already-collected top-level bands. Substantial gaps (a form
+ * with its own h2) become sections; spacers and a lone mobile image glue
+ * onto the previous band so wrappers stay intact.
+ */
+export function splitByMatches(html: string, matches: HtmlChunk[]): string[] {
+  if (!matches.length) return html.trim() ? [html] : [];
+  const chunks: string[] = [];
+  let cursor = 0;
+  for (let i = 0; i < matches.length; i++) {
+    const m = matches[i];
+    const between = html.slice(cursor, m.start);
+    if (!chunks.length) {
+      if (between.trim() && !isMinorInterstitial(between)) {
+        chunks.push(between.trim());
+        chunks.push(m.html);
+      } else {
+        chunks.push(between + m.html);
+      }
+    } else if (isMinorInterstitial(between)) {
+      chunks[chunks.length - 1] += between;
+      chunks.push(m.html);
+    } else {
+      chunks.push(between.trim());
+      chunks.push(m.html);
+    }
+    cursor = m.start + m.html.length;
+  }
+  const tail = html.slice(cursor);
+  if (tail.trim()) {
+    if (isMinorInterstitial(tail) && chunks.length) chunks[chunks.length - 1] += tail;
+    else chunks.push(tail.trim());
+  }
+  return chunks.map((c) => c.trim()).filter(Boolean);
+}
+
 export type HtmlChunk = { start: number; html: string };
 
 export function collectMatches(
@@ -186,6 +248,12 @@ export function splitIntoPageSections(content: string): string[] {
   if (semanticChunks && (large.length >= 2 || semantic.length >= 2)) {
     const avg = semantic.reduce((n, c) => n + c.html.length, 0) / semantic.length;
     if (large.length >= 2 || avg > 800) return semanticChunks;
+  }
+
+  const gutenberg = collectGutenbergBands(trimmed);
+  if (gutenberg.length >= 2) {
+    const gbChunks = splitByMatches(trimmed, gutenberg);
+    if (gbChunks.length >= 2) return gbChunks;
   }
 
   const h2Count = (trimmed.match(/<h2\b/gi) || []).length;
