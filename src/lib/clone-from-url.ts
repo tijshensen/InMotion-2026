@@ -2,46 +2,15 @@ import { prisma } from "./db";
 import { createSiteForOrg } from "./sites";
 import { saveMediaBuffer } from "./media";
 import { scrapePage, scrapeBrowserUa, type PageSnapshot, type ScrapedImage } from "./scrape-page";
+import { splitIntoPageSections, splitPageShell, stripTags } from "./html-split";
 import {
   applyImportPlan,
   applyImportPlanAsTemplate,
   type ImportPlan,
 } from "./import-from-url";
 
-function blockByTag(html: string, tag: string): string | null {
-  const re = new RegExp(`<${tag}\\b[^>]*>[\\s\\S]*?<\\/${tag}>`, "i");
-  const m = html.match(re);
-  return m ? m[0] : null;
-}
-
-function innerByTag(html: string, tag: string): string | null {
-  const re = new RegExp(`<${tag}\\b[^>]*>([\\s\\S]*?)<\\/${tag}>`, "i");
-  const m = html.match(re);
-  return m?.[1] || null;
-}
-
-function innerByIdOrClass(html: string, idOrClass: string): string | null {
-  const re = new RegExp(
-    `<([a-z0-9]+)\\b[^>]*(?:id|class)=["'][^"']*${idOrClass}[^"']*["'][^>]*>`,
-    "i",
-  );
-  const open = html.match(re);
-  if (!open || open.index == null) return null;
-  const tag = open[1];
-  const start = open.index;
-  const after = html.slice(start);
-  const close = after.search(new RegExp(`<\\/${tag}>`, "i"));
-  if (close < 0) return after.slice(0, Math.min(after.length, 80_000));
-  return after.slice(0, close + tag.length + 3);
-}
-
-function bodyInner(html: string) {
-  const m = html.match(/<body\b[^>]*>([\s\S]*)<\/body>/i);
-  return m?.[1] || html;
-}
-
 function headingName(html: string, fallback: string) {
-  const m = html.match(/<h[1-3]\b[^>]*>([\s\S]*?)<\/h[1-3]>/i);
+  const m = html.match(/<h[1-4]\b[^>]*>([\s\S]*?)<\/h[1-4]>/i);
   const text = (m?.[1] || "")
     .replace(/<[^>]+>/g, " ")
     .replace(/\s+/g, " ")
@@ -60,7 +29,7 @@ function wrapCloneSection(html: string): string {
   });
   let hN = 0;
   s = s.replace(
-    /<(h[1-3])\b([^>]*)>([\s\S]*?)<\/\1>/gi,
+    /<(h[1-4])\b([^>]*)>([\s\S]*?)<\/\1>/gi,
     (full, tag: string, attrs: string, inner: string) => {
       if (/<singleline\b/i.test(inner)) return full;
       const text = inner.replace(/<[^>]+>/g, "").trim();
@@ -73,33 +42,26 @@ function wrapCloneSection(html: string): string {
 }
 
 function splitContent(content: string): { name: string; html: string }[] {
-  const trimmed = content.trim();
-  if (!trimmed) return [{ name: "Content", html: "<p></p>" }];
-
-  let chunks: string[] = [];
-  if ((trimmed.match(/<section\b/gi) || []).length >= 2) {
-    chunks = trimmed.split(/(?=<section\b)/i).map((c) => c.trim()).filter(Boolean);
-  } else if ((trimmed.match(/<h2\b/gi) || []).length >= 2) {
-    const parts = trimmed.split(/(?=<h2\b)/i);
-    const lead = parts[0]?.trim() || "";
-    const rest = parts.slice(1);
-    chunks = lead && !/^<h2\b/i.test(lead) ? [lead, ...rest] : rest;
-  } else {
-    chunks = [trimmed];
-  }
-
+  let chunks = splitIntoPageSections(content);
   if (chunks.length > 12) {
     const head = chunks.slice(0, 11);
     const tail = chunks.slice(11).join("\n");
     chunks = [...head, tail];
   }
 
-  return chunks
+  const sections = chunks
     .map((html, i) => ({
       name: headingName(html, i === 0 ? "Hero" : `Section ${i + 1}`),
       html: wrapCloneSection(html),
     }))
-    .filter((s) => s.html.replace(/<[^>]+>/g, "").trim().length > 8 || /<img\b/i.test(s.html));
+    .filter(
+      (s) =>
+        stripTags(s.html).length > 8 ||
+        /<img\b/i.test(s.html) ||
+        /background/i.test(s.html),
+    );
+
+  return sections.length ? sections : [{ name: "Content", html: wrapCloneSection(content) }];
 }
 
 function buildCoreHtml(snapshot: PageSnapshot, header: string, footer: string): string {
@@ -112,6 +74,11 @@ function buildCoreHtml(snapshot: PageSnapshot, header: string, footer: string): 
   const clonedCss = snapshot.css
     ? `<style data-cms-cloned-css="1">\n${snapshot.css}\n</style>`
     : "";
+  const cloneFixes = `<style data-cms-clone-fix="1">
+.et_animated,.et-waypoint,.et_had_animation{opacity:1!important;animation:none!important;transform:none!important}
+.lzl,.lzl-ing{display:revert!important;opacity:1!important}
+img.lzl,img.lzl-ing{opacity:1!important}
+</style>`;
   return `<!DOCTYPE html>
 <html lang="en" data-cms-clone="1" data-cms-builder="${snapshot.builder}">
 <head>
@@ -119,6 +86,7 @@ function buildCoreHtml(snapshot: PageSnapshot, header: string, footer: string): 
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 ${headInner}
 ${clonedCss}
+${cloneFixes}
 </head>
 <body>
 ${header}
@@ -133,27 +101,7 @@ function splitShell(snapshot: PageSnapshot): {
   footer: string;
   content: string;
 } {
-  const body = bodyInner(snapshot.html);
-  const header =
-    blockByTag(body, "header") ||
-    innerByIdOrClass(body, "masthead") ||
-    innerByIdOrClass(body, "site-header") ||
-    innerByIdOrClass(body, "navbar") ||
-    "";
-  const footer =
-    blockByTag(body, "footer") ||
-    innerByIdOrClass(body, "colophon") ||
-    innerByIdOrClass(body, "site-footer") ||
-    "";
-  let content =
-    innerByTag(body, "main") ||
-    innerByIdOrClass(body, "site-content") ||
-    innerByIdOrClass(body, "content") ||
-    innerByIdOrClass(body, "primary") ||
-    body;
-  if (header) content = content.replace(header, "");
-  if (footer) content = content.replace(footer, "");
-  return { header, footer, content };
+  return splitPageShell(snapshot.html);
 }
 
 async function downloadImages(
@@ -161,7 +109,7 @@ async function downloadImages(
   opts: { siteId: string; siteSlug: string; referer: string },
 ): Promise<Map<string, string>> {
   const map = new Map<string, string>();
-  const queue = images.slice(0, 30);
+  const queue = images.slice(0, 48);
   let i = 0;
   const workers = Array.from({ length: Math.min(4, queue.length) }, async () => {
     while (i < queue.length) {

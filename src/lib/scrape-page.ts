@@ -1,3 +1,5 @@
+import { extractBalanced } from "./html-split";
+
 const BROWSER_UA =
   "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36";
 
@@ -21,7 +23,7 @@ function absUrl(base: string, href: string): string | null {
     return null;
   }
   try {
-    return new URL(raw, base).href;
+    return unwrapCacheUrl(new URL(raw, base).href);
   } catch {
     return null;
   }
@@ -32,13 +34,31 @@ function attr(tag: string, name: string): string {
   return (m?.[2] ?? m?.[3] ?? m?.[4] ?? "").trim();
 }
 
+export function unwrapCacheUrl(url: string): string {
+  try {
+    const u = new URL(url);
+    const gi = u.searchParams.get("seraph_accel_gi");
+    if (gi) {
+      const path = gi.startsWith("/") ? gi : `/${gi}`;
+      return new URL(path, `${u.origin}/`).href;
+    }
+  } catch {
+    /* keep original */
+  }
+  return url;
+}
+
 export function detectSiteStack(html: string): {
   builder: string;
   cssKind: "bootstrap" | "tailwind" | "custom";
 } {
   const h = html.toLowerCase();
   let builder = "unknown";
-  if (h.includes("wp-content") || h.includes("wordpress")) builder = "wordpress";
+  if (h.includes("et_pb_") || h.includes("et_divi_theme") || h.includes("et-l--header")) {
+    builder = "divi";
+  } else if (h.includes("elementor-") || h.includes("elementor/")) {
+    builder = "elementor";
+  } else if (h.includes("wp-content") || h.includes("wordpress")) builder = "wordpress";
   else if (h.includes("w-mod-") || h.includes("webflow")) builder = "webflow";
   else if (h.includes("cdn.shopify") || h.includes("shopify")) builder = "shopify";
   else if (h.includes("__next") || h.includes("_next/static")) builder = "nextjs";
@@ -82,15 +102,130 @@ function stripScripts(html: string) {
   return html
     .replace(/<script\b[\s\S]*?<\/script>/gi, "")
     .replace(/<noscript\b[\s\S]*?<\/noscript>/gi, "")
+    .replace(/<img\b[^>]*z-index:\s*-99999[^>]*>/gi, "")
     .replace(/\s+on\w+="[^"]*"/gi, "")
     .replace(/\s+on\w+='[^']*'/gi, "");
 }
 
+const LAZY_SRC_ATTRS = [
+  "data-lzl-src",
+  "data-lazy-src",
+  "data-src",
+  "data-original",
+  "data-bg",
+  "data-large_image",
+  "data-nitro-lazy-src",
+];
+
+const LAZY_CLASSES = new Set([
+  "lzl",
+  "lzl-ing",
+  "lzl-ed",
+  "js-lzl-ing",
+  "seraph-accel-js-lzl-ing",
+  "lazyload",
+  "lazy-hidden",
+]);
+
+function isPlaceholderSrc(src: string) {
+  if (!src) return true;
+  if (src.startsWith("data:")) return true;
+  if (/spacer\.gif|1x1|pixel\./i.test(src)) return true;
+  return false;
+}
+
+function classAttrTokens(openTag: string): string[] {
+  const m = openTag.match(/\bclass\s*=\s*(["'])([^"']*)\1/i);
+  return m ? m[2].split(/\s+/).filter(Boolean) : [];
+}
+
+function removeClassedElements(html: string, className: string): string {
+  const re = /<([a-zA-Z][a-zA-Z0-9]*)\b[^>]*>/g;
+  const ranges: { start: number; end: number }[] = [];
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(html))) {
+    if (!classAttrTokens(m[0]).includes(className)) continue;
+    const block = extractBalanced(html, m.index);
+    if (!block) continue;
+    ranges.push({ start: m.index, end: m.index + block.length });
+    re.lastIndex = m.index + block.length;
+  }
+  let out = html;
+  for (let i = ranges.length - 1; i >= 0; i--) {
+    const r = ranges[i];
+    out = out.slice(0, r.start) + out.slice(r.end);
+  }
+  return out;
+}
+
+/** Cache plugins hide whole sections with .lzl { display:none }. Clone has no JS, so un-hide. */
+export function unlazyHtml(html: string, base: string): string {
+  let out = removeClassedElements(html, "js-lzl-ing");
+  out = out.replace(/\bclass=(["'])([^"']*)\1/gi, (_full, q: string, cls: string) => {
+    const next = cls
+      .split(/\s+/)
+      .filter((c) => c && !LAZY_CLASSES.has(c))
+      .join(" ");
+    return `class=${q}${next}${q}`;
+  });
+
+  out = out.replace(/<img\b[^>]*>/gi, (tag) => {
+    const src = attr(tag, "src");
+    let nextSrc = src;
+    if (isPlaceholderSrc(src)) {
+      for (const name of LAZY_SRC_ATTRS) {
+        const v = attr(tag, name);
+        if (v && !isPlaceholderSrc(v)) {
+          nextSrc = v;
+          break;
+        }
+      }
+      const srcset = attr(tag, "srcset") || attr(tag, "data-srcset") || attr(tag, "data-lzl-srcset");
+      if (isPlaceholderSrc(nextSrc) && srcset) {
+        nextSrc = pickSrcset(srcset, base) || nextSrc;
+      }
+    }
+    const abs = nextSrc ? absUrl(base, nextSrc) : null;
+    if (!abs) return tag;
+    if (/\bsrc\s*=/i.test(tag)) {
+      return tag.replace(/\bsrc\s*=\s*("([^"]*)"|'([^']*)'|([^\s>]+))/i, `src="${abs}"`);
+    }
+    return tag.replace(/<img\b/i, `<img src="${abs}"`);
+  });
+
+  out = out.replace(
+    /url\((['"]?)([^'")]+)\1\)/gi,
+    (full, _q, raw: string) => {
+      const abs = absUrl(base, raw.trim());
+      return abs ? `url("${abs}")` : full;
+    },
+  );
+
+  out = out.replace(/\.lzl\{display:none!important;\}/gi, "");
+  out = out.replace(/img\.lzl,img\.lzl-ing\{opacity:0\.01;\}/gi, "");
+
+  return out;
+}
+
 function absolutizeHtml(html: string, base: string) {
   return html.replace(
-    /\s(href|src|poster|action)\s*=\s*("([^"]*)"|'([^']*)')/gi,
+    /\s(href|src|poster|action|data-lzl-src|data-lazy-src|data-src|data-original|srcset|data-srcset)\s*=\s*("([^"]*)"|'([^']*)')/gi,
     (full, name, _q, d, s) => {
       const val = d ?? s ?? "";
+      if (String(name).toLowerCase().includes("srcset")) {
+        const rewritten = val
+          .split(",")
+          .map((part) => {
+            const p = part.trim();
+            const sp = p.lastIndexOf(" ");
+            const url = sp > 0 && /\d+[wx]$/i.test(p.slice(sp + 1)) ? p.slice(0, sp) : p;
+            const desc = sp > 0 && /\d+[wx]$/i.test(p.slice(sp + 1)) ? p.slice(sp) : "";
+            const abs = absUrl(base, url);
+            return abs ? `${abs}${desc}` : p;
+          })
+          .join(", ");
+        return ` ${name}="${rewritten}"`;
+      }
       const abs = absUrl(base, val);
       if (!abs || abs === val) return full;
       return ` ${name}="${abs}"`;
@@ -125,29 +260,47 @@ function pickSrcset(srcset: string, base: string): string | null {
 const SKIP_IMG =
   /pixel|1x1|tracking|facebook\.com\/tr|google-analytics|doubleclick|gravatar\.com\/avatar|spinner|spacer\.gif/i;
 
+function pushImage(
+  out: ScrapedImage[],
+  seen: Set<string>,
+  url: string | null,
+  alt = "",
+) {
+  if (!url || seen.has(url) || SKIP_IMG.test(url) || url.startsWith("data:")) return;
+  if (out.length >= 48) return;
+  seen.add(url);
+  out.push({ url, alt });
+}
+
 export function collectImages(html: string, base: string): ScrapedImage[] {
   const seen = new Set<string>();
   const out: ScrapedImage[] = [];
   const re = /<img\b[^>]*>/gi;
   let m: RegExpExecArray | null;
-  while ((m = re.exec(html)) && out.length < 40) {
+  while ((m = re.exec(html)) && out.length < 48) {
     const tag = m[0];
-    const srcset = attr(tag, "srcset") || attr(tag, "data-srcset");
+    const srcset =
+      attr(tag, "srcset") || attr(tag, "data-srcset") || attr(tag, "data-lzl-srcset");
     const raw =
-      pickSrcset(srcset, base) ||
       absUrl(
         base,
         attr(tag, "src") ||
+          attr(tag, "data-lzl-src") ||
           attr(tag, "data-src") ||
           attr(tag, "data-lazy-src") ||
           attr(tag, "data-original") ||
           "",
-      );
-    if (!raw || seen.has(raw) || SKIP_IMG.test(raw) || raw.startsWith("data:")) {
-      continue;
+      ) || pickSrcset(srcset, base);
+    pushImage(out, seen, raw, attr(tag, "alt"));
+  }
+
+  const cssUrlRe = /url\((['"]?)([^'")]+)\1\)/gi;
+  let cu: RegExpExecArray | null;
+  while ((cu = cssUrlRe.exec(html)) && out.length < 48) {
+    const abs = absUrl(base, cu[2].trim());
+    if (abs && /\.(png|jpe?g|webp|gif|svg|avif)(\?|$)/i.test(abs)) {
+      pushImage(out, seen, abs);
     }
-    seen.add(raw);
-    out.push({ url: raw, alt: attr(tag, "alt") });
   }
   return out;
 }
@@ -161,11 +314,16 @@ function stylesheetHrefs(html: string, base: string): string[] {
     const rel = (attr(tag, "rel") || "").toLowerCase();
     if (!rel.includes("stylesheet") && attr(tag, "as") !== "style") continue;
     const href = absUrl(base, attr(tag, "href"));
-    if (href && !href.includes("fonts.googleapis.com") && !href.includes("fonts.gstatic.com")) {
+    if (
+      href &&
+      !href.startsWith("data:") &&
+      !href.includes("fonts.googleapis.com") &&
+      !href.includes("fonts.gstatic.com")
+    ) {
       hrefs.push(href);
     }
   }
-  return [...new Set(hrefs)].slice(0, 8);
+  return [...new Set(hrefs)].slice(0, 12);
 }
 
 function inlineStyles(html: string): string {
@@ -200,6 +358,7 @@ export async function scrapePage(sourceUrl: string): Promise<PageSnapshot> {
 
   const base = fetched.url || sourceUrl;
   let html = stripScripts(fetched.body);
+  html = unlazyHtml(html, base);
   html = absolutizeHtml(html, base);
   const textLen = html.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim().length;
   if (textLen < 80) {
@@ -209,16 +368,22 @@ export async function scrapePage(sourceUrl: string): Promise<PageSnapshot> {
   }
 
   const stack = detectSiteStack(html);
-  const cssChunks = [inlineStyles(html)];
-  const sheets = stylesheetHrefs(html, base);
-  for (const href of sheets) {
-    try {
-      const sheet = await fetchText(href, { timeoutMs: 12_000, referer: base });
-      if (sheet.status >= 200 && sheet.status < 300 && sheet.body.length < 400_000) {
-        cssChunks.push(`/* ${href} */\n${sheet.body}`);
+  const inline = inlineStyles(html);
+  const cssChunks: string[] = [];
+  // Head already keeps original <style> tags. Only fetch extra sheets when
+  // the page didn't inline much CSS (cache plugins often split 80+ files).
+  if (inline.length < 80_000) {
+    cssChunks.push(inline);
+    const sheets = stylesheetHrefs(html, base);
+    for (const href of sheets) {
+      try {
+        const sheet = await fetchText(href, { timeoutMs: 12_000, referer: base });
+        if (sheet.status >= 200 && sheet.status < 300 && sheet.body.length < 400_000) {
+          cssChunks.push(`/* ${href} */\n${unlazyHtml(sheet.body, href)}`);
+        }
+      } catch {
+        /* keep going — look still works without every sheet */
       }
-    } catch {
-      /* keep going — look still works without every sheet */
     }
   }
 
