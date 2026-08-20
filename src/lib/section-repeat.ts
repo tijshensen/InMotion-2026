@@ -159,6 +159,14 @@ export type DetectedRepeats = {
   items: DetectedRepeatItem[];
 };
 
+function isPlainTextItem(el: Frag): boolean {
+  const tag = (el.tag || "").toLowerCase();
+  const cls = (el.className || "").toLowerCase();
+  if (tag === "p" || /^h[1-6]$/.test(tag)) return true;
+  if (/\bwp-block-paragraph\b|\bwp-block-heading\b/.test(cls)) return true;
+  return false;
+}
+
 function longestSimilarRun(kids: Frag[]): Frag[] | null {
   let best: Frag[] = [];
   let i = 0;
@@ -169,7 +177,9 @@ function longestSimilarRun(kids: Frag[]): Frag[] | null {
     if (run.length > best.length) best = run;
     i = j > i + 1 ? j : i + 1;
   }
-  return best.length >= 2 ? best : null;
+  if (best.length < 2) return null;
+  if (best.every(isPlainTextItem)) return null;
+  return best;
 }
 
 function walkFindRun(
@@ -179,6 +189,7 @@ function walkFindRun(
   const run = longestSimilarRun(kids);
   if (run) return { parentKids: kids, run };
   for (const n of kids) {
+    if (isPlainTextItem(n)) continue;
     const inner = walkFindRun(n.children);
     if (inner) return inner;
   }

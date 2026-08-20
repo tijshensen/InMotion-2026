@@ -90,6 +90,25 @@ ${sectionsToken}
 </div>
 ${footer}`;
   }
+  if (builder === "gutenberg" || builder === "wordpress") {
+    return `${header}
+<div id="content" class="site-content">
+<div class="grid-container">
+<div id="primary" class="content-area">
+<main id="main" class="site-main">
+<article class="page type-page">
+<div class="inside-article">
+<div class="entry-content">
+${sectionsToken}
+</div>
+</div>
+</article>
+</main>
+</div>
+</div>
+</div>
+${footer}`;
+  }
   return `${header}
 ${sectionsToken}
 ${footer}`;
@@ -100,6 +119,10 @@ export const CLONE_FIX_CSS = `
 .lzl,.lzl-ing{display:revert!important;opacity:1!important}
 img.lzl,img.lzl-ing{opacity:1!important}
 .et_pb_row:after,.et_pb_row_inner:after{content:"";display:table;clear:both}
+.cms-clone .site-content .grid-container,
+.cms-clone .inside-article,
+.cms-clone .entry-content{max-width:1100px;margin-left:auto;margin-right:auto;width:100%}
+body.contained-content .cms-clone .entry-content{padding-left:20px;padding-right:20px}
 .row-slider .et_pb_row{display:none}
 .row-slider .et_pb_row.inactive{display:none!important}
 .row-slider .et_pb_row.active,.row-slider .et_pb_row.cms-slide-active,

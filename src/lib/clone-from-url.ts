@@ -2,7 +2,12 @@ import { prisma } from "./db";
 import { createSiteForOrg } from "./sites";
 import { saveMediaBuffer } from "./media";
 import { scrapePage, scrapeBrowserUa, type PageSnapshot, type ScrapedImage } from "./scrape-page";
-import { splitPageShell, stripTags } from "./html-split";
+import {
+  balanceHtmlFragment,
+  splitPageShell,
+  stripSectionChrome,
+  stripTags,
+} from "./html-split";
 import {
   cloneSectionName,
   collapseCloneRepeats,
@@ -33,8 +38,9 @@ function splitContent(
 
   const sections = chunks
     .map((html, i) => {
-      const name = cloneSectionName(html, i);
-      const marked = wrapCloneMarkers(html, builder);
+      const cleaned = balanceHtmlFragment(stripSectionChrome(html));
+      const name = cloneSectionName(cleaned, i);
+      const marked = wrapCloneMarkers(cleaned, builder);
       const collapsed = collapseCloneRepeats(marked, name);
       return {
         name,

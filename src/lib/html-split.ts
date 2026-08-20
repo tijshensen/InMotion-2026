@@ -222,10 +222,10 @@ export function splitPageShell(html: string): {
     "";
 
   const candidates = [
-    findByTag(body, "main"),
+    findByClass(body, "entry-content"),
     findById(body, "et-main-area"),
     findById(body, "main-content"),
-    findByClass(body, "entry-content"),
+    findByTag(body, "main"),
     findById(body, "content"),
     findByClass(body, "site-content"),
   ].filter((x): x is string => Boolean(x));
@@ -252,4 +252,61 @@ export function splitPageShell(html: string): {
   }
 
   return { header, footer, content };
+}
+
+const SECTION_CHROME =
+  /\b(inside-article|entry-content|site-main|content-area|site-content|grid-container|hfeed|wp-site-blocks)\b/i;
+
+/** Drop page/theme wrappers that belong in the template shell, not a CMS section. */
+export function stripSectionChrome(html: string): string {
+  let s = html.trim();
+  for (let n = 0; n < 8; n++) {
+    const m = s.match(/^<(article|div|main|section)\b([^>]*)>/i);
+    if (!m) break;
+    const tag = m[1];
+    const attrs = m[2] || "";
+    const cls = (attrs.match(/\bclass\s*=\s*["']([^"']*)["']/i) || [])[1] || "";
+    const isChrome =
+      tag.toLowerCase() === "article" || SECTION_CHROME.test(cls);
+    if (!isChrome) break;
+    s = s.slice(m[0].length).trim();
+    s = s.replace(new RegExp(`</${tag}>\\s*$`, "i"), "").trim();
+  }
+  for (let n = 0; n < 8; n++) {
+    const m = s.match(/<\/(article|div|main|section)>\s*$/i);
+    if (!m) break;
+    const tag = m[1].toLowerCase();
+    const opens = s.match(new RegExp(`<${tag}\\b`, "gi")) || [];
+    const closes = s.match(new RegExp(`</${tag}>`, "gi")) || [];
+    if (closes.length <= opens.length) break;
+    s = s.replace(new RegExp(`</${tag}>\\s*$`, "i"), "").trim();
+  }
+  return s;
+}
+
+/** Close leftover tags so a section cannot swallow the next cms-edit-section. */
+export function balanceHtmlFragment(html: string): string {
+  const stack: string[] = [];
+  const re = /<\/?([a-zA-Z][a-zA-Z0-9]*)\b[^>]*\/?>/g;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(html))) {
+    const tag = m[1].toLowerCase();
+    if (VOID_TAGS.has(tag) || /\/\s*>$/.test(m[0])) continue;
+    if (m[0].startsWith("</")) {
+      for (let i = stack.length - 1; i >= 0; i--) {
+        if (stack[i] === tag) {
+          stack.length = i;
+          break;
+        }
+      }
+    } else {
+      stack.push(tag);
+    }
+  }
+  if (!stack.length) return html;
+  return `${html}${stack
+    .slice()
+    .reverse()
+    .map((t) => `</${t}>`)
+    .join("")}`;
 }

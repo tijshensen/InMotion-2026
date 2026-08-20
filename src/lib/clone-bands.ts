@@ -412,8 +412,9 @@ export function wrapCloneMarkers(html: string, builder: string): string {
   } else if (kind === "wpbakery") {
     ({ html: s, next: textN } = wrapClassInners(s, "wpb_text_column", "Text", textN));
   } else if (kind === "gutenberg") {
-    ({ html: s, next: textN } = wrapClassInners(s, "wp-block-paragraph", "Text", textN));
-    s = wrapGenericHeadings(s);
+    if (!/<multiline\b/i.test(s) && (stripTags(s).length > 1 || /<img\b/i.test(s))) {
+      s = `<multiline name="Text">${s}</multiline>`;
+    }
   } else {
     s = wrapGenericHeadings(s);
   }

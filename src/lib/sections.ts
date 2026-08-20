@@ -32,6 +32,7 @@ import {
   rewriteThemeAssetUrls,
 } from "./theme";
 import { detectVideoSource, isLikelyMediaSrc } from "./video-media";
+import { balanceHtmlFragment } from "./html-split";
 
 export type FieldType = "singleline" | "multiline" | "image" | "file";
 
@@ -803,7 +804,7 @@ export function renderSectionHtml(
     html = html.replace(/\s*data-cms-nid=(["'])[^"']*\1/gi, "");
   }
 
-  return html;
+  return balanceHtmlFragment(html);
 }
 
 export type EditorPreviewSection = {
