@@ -12,7 +12,9 @@ import {
   openTag,
   splitIntoPageSections,
   stripTags,
+  type HtmlChunk,
 } from "./html-split";
+import { prepareRepeatableSection } from "./section-repeat";
 
 export type CloneBuilder =
   | "divi"
@@ -277,13 +279,94 @@ function wrapImages(html: string): string {
   });
 }
 
+function stripEmptyHeadings(html: string) {
+  return html.replace(/<h[1-6]\b[^>]*>\s*<\/h[1-6]>/gi, "");
+}
+
+function wrapDiviLeaves(html: string): string {
+  let s = stripEmptyHeadings(html);
+  let n = 0;
+  const leaves = [
+    "gw-card-title",
+    "gw-card-body",
+    "et_pb_module_header",
+    "et_pb_blurb_description",
+    "entry-title",
+  ];
+  for (const cls of leaves) {
+    ({ html: s, next: n } = wrapClassInners(s, cls, "Text", n));
+  }
+  ({ html: s, next: n } = wrapClassInners(s, "et_pb_text_inner", "Text", n));
+  const cards = collectMatches(
+    s,
+    /<article\b[^>]*\bclass\s*=\s*["'][^"']*\bcard\b[^"']*["'][^>]*>/gi,
+    { minLength: 24 },
+  );
+  ({ html: s, next: n } = wrapHits(s, cards, "Text", n));
+  ({ html: s, next: n } = wrapClassInners(s, "et_pb_button", "Button", n));
+  return s;
+}
+
+function adjacentGroups(html: string, hits: HtmlChunk[]): HtmlChunk[][] {
+  if (!hits.length) return [];
+  const groups: HtmlChunk[][] = [];
+  let cur: HtmlChunk[] = [hits[0]];
+  for (let i = 1; i < hits.length; i++) {
+    const prev = hits[i - 1];
+    const between = html.slice(prev.start + prev.html.length, hits[i].start);
+    if (!stripTags(between)) cur.push(hits[i]);
+    else {
+      groups.push(cur);
+      cur = [hits[i]];
+    }
+  }
+  groups.push(cur);
+  return groups;
+}
+
+export function collapseCloneRepeats(
+  html: string,
+  sectionName: string,
+): {
+  html: string;
+  repeatSeeds: {
+    groupKey: string;
+    fields: Record<string, string>;
+    labels?: Record<string, string>;
+  }[];
+} {
+  if (isDiviSliderPiece(html)) return { html, repeatSeeds: [] };
+  const classes = ["gw-card", "et_pb_post"];
+  for (const cls of classes) {
+    const hits = collectByClassToken(html, cls, { minLength: 24 });
+    const best = adjacentGroups(html, hits)
+      .filter((g) => g.length >= 2)
+      .sort((a, b) => b.length - a.length)[0];
+    if (!best) continue;
+    const start = best[0].start;
+    const end = best[best.length - 1].start + best[best.length - 1].html.length;
+    const slice = html.slice(start, end);
+    const prepared = prepareRepeatableSection(slice, {}, sectionName);
+    if (prepared.items.length < 2) continue;
+    return {
+      html: html.slice(0, start) + prepared.html + html.slice(end),
+      repeatSeeds: prepared.items.map((it) => ({
+        groupKey: it.groupKey,
+        fields: it.fields,
+        labels: it.labels,
+      })),
+    };
+  }
+  return { html, repeatSeeds: [] };
+}
+
 /** Editable markers: module text as multiline (keeps inner HTML), images editable. */
 export function wrapCloneMarkers(html: string, builder: string): string {
   const kind = cloneBuilderFromStack(builder);
   let s = html;
   let textN = 0;
   if (kind === "divi") {
-    ({ html: s, next: textN } = wrapClassInners(s, "et_pb_text_inner", "Text", textN));
+    s = wrapDiviLeaves(s);
   } else if (kind === "elementor") {
     const widgets = collectMatches(
       s,

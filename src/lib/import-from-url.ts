@@ -397,7 +397,7 @@ export async function applyImportPlanAsTemplate(opts: {
         templateId: template.id,
         name: s.name,
         defaultHtml: s.html,
-        isRepeatable: false,
+        isRepeatable: /<repeatable\b/i.test(s.html),
         sortOrder: i,
       },
     });

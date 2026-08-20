@@ -5,6 +5,7 @@ import { scrapePage, scrapeBrowserUa, type PageSnapshot, type ScrapedImage } fro
 import { splitPageShell, stripTags } from "./html-split";
 import {
   cloneSectionName,
+  collapseCloneRepeats,
   splitCloneBands,
   wrapCloneMarkers,
 } from "./clone-bands";
@@ -22,7 +23,7 @@ import {
 function splitContent(
   content: string,
   builder: string,
-): { name: string; html: string }[] {
+): { name: string; html: string; repeatSeeds?: { groupKey: string; fields: Record<string, string> }[] }[] {
   let chunks = splitCloneBands(content, builder);
   if (chunks.length > 12) {
     const head = chunks.slice(0, 11);
@@ -31,10 +32,16 @@ function splitContent(
   }
 
   const sections = chunks
-    .map((html, i) => ({
-      name: cloneSectionName(html, i),
-      html: wrapCloneMarkers(html, builder),
-    }))
+    .map((html, i) => {
+      const name = cloneSectionName(html, i);
+      const marked = wrapCloneMarkers(html, builder);
+      const collapsed = collapseCloneRepeats(marked, name);
+      return {
+        name,
+        html: collapsed.html,
+        repeatSeeds: collapsed.repeatSeeds,
+      };
+    })
     .filter(
       (s) =>
         stripTags(s.html).length > 8 ||

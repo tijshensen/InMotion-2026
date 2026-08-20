@@ -139,7 +139,7 @@ export function collectByClassToken(
   opts?: { skip?: (open: string) => boolean; minLength?: number },
 ): HtmlChunk[] {
   const re = new RegExp(
-    `<(div|section|article)\\b[^>]*\\bclass\\s*=\\s*["'][^"']*\\b${escapeRe(className)}\\b[^"']*["'][^>]*>`,
+    `<([a-zA-Z][a-zA-Z0-9]*)\\b[^>]*\\bclass\\s*=\\s*["'][^"']*\\b${escapeRe(className)}\\b[^"']*["'][^>]*>`,
     "gi",
   );
   return collectMatches(html, re, opts);
