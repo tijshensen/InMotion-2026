@@ -220,9 +220,9 @@ function absolutizeHtml(html: string, base: string) {
     (full, name, _q, d, s) => {
       const val = d ?? s ?? "";
       if (String(name).toLowerCase().includes("srcset")) {
-        const rewritten = val
+        const rewritten = String(val)
           .split(",")
-          .map((part) => {
+          .map((part: string) => {
             const p = part.trim();
             const sp = p.lastIndexOf(" ");
             const url = sp > 0 && /\d+[wx]$/i.test(p.slice(sp + 1)) ? p.slice(0, sp) : p;
