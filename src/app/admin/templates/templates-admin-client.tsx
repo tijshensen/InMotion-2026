@@ -3,6 +3,7 @@
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { HtmlCodeEditor } from "@/components/html-code-editor";
+import { FoldedHtmlEditor } from "@/components/folded-html-editor";
 import { type MenuPage } from "@/lib/menu";
 import {
   renderMenuFromSnippets,
@@ -568,9 +569,10 @@ export function TemplatesAdminClient({
                     </code>
                     .
                   </p>
-                  <HtmlCodeEditor
+                  <FoldedHtmlEditor
                     value={coreHtml}
                     onChange={setCoreHtml}
+                    resetKey={selectedId || "new"}
                     minHeight="420px"
                     placeholder="<!DOCTYPE html>…"
                   />
