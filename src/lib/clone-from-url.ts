@@ -4,6 +4,11 @@ import { saveMediaBuffer } from "./media";
 import { scrapePage, scrapeBrowserUa, type PageSnapshot, type ScrapedImage } from "./scrape-page";
 import { splitIntoPageSections, splitPageShell, stripTags } from "./html-split";
 import {
+  cloneFixStyleTag,
+  cloneReviveScriptTag,
+  wrapSectionsInBuilderChrome,
+} from "./clone-runtime";
+import {
   applyImportPlan,
   applyImportPlanAsTemplate,
   type ImportPlan,
@@ -74,24 +79,21 @@ function buildCoreHtml(snapshot: PageSnapshot, header: string, footer: string): 
   const clonedCss = snapshot.css
     ? `<style data-cms-cloned-css="1">\n${snapshot.css}\n</style>`
     : "";
-  const cloneFixes = `<style data-cms-clone-fix="1">
-.et_animated,.et-waypoint,.et_had_animation{opacity:1!important;animation:none!important;transform:none!important}
-.lzl,.lzl-ing{display:revert!important;opacity:1!important}
-img.lzl,img.lzl-ing{opacity:1!important}
-</style>`;
+  const lang = (snapshot.htmlLang || "en").replace(/[^a-zA-Z0-9-]/g, "") || "en";
+  const bodyClass = (snapshot.bodyClass || "cms-clone").replace(/[^a-zA-Z0-9 _-]/g, "");
+  const chrome = wrapSectionsInBuilderChrome(snapshot.builder, header, footer);
   return `<!DOCTYPE html>
-<html lang="en" data-cms-clone="1" data-cms-builder="${snapshot.builder}">
+<html lang="${lang}" data-cms-clone="1" data-cms-builder="${snapshot.builder}">
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 ${headInner}
 ${clonedCss}
-${cloneFixes}
+${cloneFixStyleTag()}
 </head>
-<body>
-${header}
-{{sections}}
-${footer}
+<body class="${bodyClass}">
+${chrome}
+${cloneReviveScriptTag()}
 </body>
 </html>`;
 }

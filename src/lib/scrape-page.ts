@@ -1,4 +1,5 @@
 import { extractBalanced } from "./html-split";
+import { ensureBuilderBodyClass, extractBodyClass, extractHtmlLang } from "./clone-runtime";
 
 const BROWSER_UA =
   "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36";
@@ -15,6 +16,8 @@ export type PageSnapshot = {
   cssKind: "bootstrap" | "tailwind" | "custom";
   images: ScrapedImage[];
   headings: string[];
+  bodyClass: string;
+  htmlLang: string;
 };
 
 function absUrl(base: string, href: string): string | null {
@@ -397,6 +400,8 @@ export async function scrapePage(sourceUrl: string): Promise<PageSnapshot> {
     cssKind: stack.cssKind,
     images: collectImages(html, base),
     headings: extractHeadings(html),
+    bodyClass: ensureBuilderBodyClass(stack.builder, extractBodyClass(html)),
+    htmlLang: extractHtmlLang(html),
   };
 }
 
