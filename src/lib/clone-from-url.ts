@@ -94,19 +94,57 @@ function stripHeadScripts(head: string) {
     );
 }
 
-function rewriteStylesheetHrefs(head: string, hrefMap: Map<string, string>): string {
-  let out = head;
-  for (const [from, to] of hrefMap) {
-    if (!from || !to || from === to) continue;
-    out = out.split(from).join(to);
-    try {
-      const pathOnly = new URL(from).pathname;
-      if (pathOnly && pathOnly !== from) out = out.split(pathOnly).join(to);
-    } catch {
-      /* not a URL */
+function linkHref(tag: string): string {
+  const m = tag.match(/\bhref\s*=\s*("([^"]*)"|'([^']*)'|([^\s>]+))/i);
+  return (m?.[2] ?? m?.[3] ?? m?.[4] ?? "").trim();
+}
+
+function linkRel(tag: string): string {
+  const m = tag.match(/\brel\s*=\s*("([^"]*)"|'([^']*)'|([^\s>]+))/i);
+  return (m?.[2] ?? m?.[3] ?? m?.[4] ?? "").trim().toLowerCase();
+}
+
+/** Local clone.css is rewritten from the original bytes, so SRI hashes must go. */
+export function rewriteStylesheetHrefs(
+  head: string,
+  hrefMap: Map<string, string>,
+): string {
+  if (!head || hrefMap.size === 0) return head;
+  const locals = [...hrefMap.entries()];
+  return head.replace(/<link\b[^>]*>/gi, (tag) => {
+    const rel = linkRel(tag);
+    if (!rel.includes("stylesheet") && !/\bas\s*=\s*["']?style/i.test(tag)) {
+      return tag;
     }
-  }
-  return out;
+    const href = linkHref(tag);
+    let local = hrefMap.get(href);
+    if (!local && href) {
+      for (const [from, to] of locals) {
+        try {
+          if (from === href || new URL(from).pathname === href) {
+            local = to;
+            break;
+          }
+        } catch {
+          if (from.endsWith(href) || href.endsWith(from.split("/").pop() || "\0")) {
+            local = to;
+            break;
+          }
+        }
+      }
+    }
+    if (!local) return tag;
+    let next = tag.replace(
+      /\bhref\s*=\s*("([^"]*)"|'([^']*)'|([^\s>]+))/i,
+      `href="${local}"`,
+    );
+    next = next.replace(/\s+integrity\s*=\s*("([^"]*)"|'([^']*)'|([^\s>]+))/i, "");
+    next = next.replace(/\s+crossorigin(?:\s*=\s*("([^"]*)"|'([^']*)'|([^\s>]+)))?/gi, "");
+    if (!/data-cms-cloned-css/i.test(next)) {
+      next = next.replace(/<link\b/i, `<link data-cms-cloned-css="1"`);
+    }
+    return next;
+  });
 }
 
 async function persistLargeStylesheets(

@@ -78,7 +78,10 @@ export function detectSiteStack(html: string): {
     builder = "gutenberg";
   } else if (isWordpressInstall(html)) {
     builder = "wordpress";
-  } else if (h.includes("w-mod-")) {
+  } else if (
+    h.includes("w-mod-") ||
+    /\bdata-wf-(?:site|page|domain)\s*=/.test(h)
+  ) {
     builder = "webflow";
   } else if (h.includes("cdn.shopify")) {
     builder = "shopify";
@@ -100,7 +103,11 @@ export function detectSiteStack(html: string): {
   }
 
   let cssKind: "bootstrap" | "tailwind" | "custom" = "custom";
-  if (h.includes("bootstrap") || h.includes("glyphicon") || /\bcol-sm-|\bnavbar-/.test(h)) {
+  if (
+    h.includes("bootstrap") ||
+    h.includes("glyphicon") ||
+    /\bcol-sm-|\bnavbar-(?:nav|default|collapse|toggle)\b/.test(h)
+  ) {
     cssKind = "bootstrap";
   } else if (h.includes("cdn.tailwindcss.com") || h.includes("tailwindcss")) {
     // Compiled utility CSS without this string stays "custom" so we do not

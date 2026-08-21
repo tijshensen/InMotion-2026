@@ -25,10 +25,19 @@ describe("detectSiteStack", () => {
       detectSiteStack(`<html class="w-mod-js"><body>Hello</body></html>`).builder,
       "webflow",
     );
+    assert.equal(
+      detectSiteStack(`<html data-wf-site="abc" lang="en"><body></body></html>`).builder,
+      "webflow",
+    );
     assert.notEqual(
       detectSiteStack(`<p>Built on Webflow</p>`).builder,
       "webflow",
     );
+  });
+
+  it("does not treat Webflow navbar-container as Bootstrap", () => {
+    const html = `<div class="navbar-container sticky-top"></div>`;
+    assert.equal(detectSiteStack(html).cssKind, "custom");
   });
 
   it("still detects a real WordPress theme path", () => {
@@ -82,6 +91,20 @@ describe("sanitizeCloneBodyClass", () => {
     assert.match(out, /dark:bg-gray-900/);
     assert.match(out, /dark:text-gray-100/);
     assert.doesNotMatch(out, /darkbg-gray/);
+  });
+});
+
+describe("rewriteStylesheetHrefs", () => {
+  it("drops integrity when pointing at a local clone.css", async () => {
+    const { rewriteStylesheetHrefs } = await import("./clone-from-url");
+    const head = `<link href="https://cdn.example.com/app.css" rel="stylesheet" integrity="sha384-abc" crossorigin="anonymous"/>`;
+    const out = rewriteStylesheetHrefs(
+      head,
+      new Map([["https://cdn.example.com/app.css", "/uploads/x/clone.css"]]),
+    );
+    assert.match(out, /href="\/uploads\/x\/clone\.css"/);
+    assert.doesNotMatch(out, /integrity/);
+    assert.doesNotMatch(out, /crossorigin/);
   });
 });
 
