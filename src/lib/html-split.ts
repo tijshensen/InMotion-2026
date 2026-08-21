@@ -344,11 +344,31 @@ export function splitPageShell(html: string): {
     if (footer) content = content.replace(footer, "");
   }
 
-  const afterContent = sliceAfterMain(body, footer);
+  const afterContent = distinctAfterContent(
+    sliceAfterMain(body, footer),
+    footer,
+  );
   const authorPanel = findById(body, "author-panel") || "";
   const footerOut = `${footer}${authorPanel ? `\n${authorPanel}` : ""}`;
 
   return { header, footer: footerOut, content, afterContent };
+}
+
+/** Drop after-content that is the footer again (Vite landings without </main>). */
+export function distinctAfterContent(after: string, footer: string): string {
+  const a = (after || "").trim();
+  const f = (footer || "").trim();
+  if (!a) return "";
+  if (!f) return a;
+  if (a.includes(f) && a.length < f.length * 1.15) {
+    return a.replace(f, "").trim();
+  }
+  const at = stripTags(a).replace(/\s+/g, " ").trim();
+  const ft = stripTags(f).replace(/\s+/g, " ").trim();
+  if (at.length > 40 && ft.length > 40 && (at === ft || at.includes(ft))) {
+    return "";
+  }
+  return a;
 }
 
 function unwrapRootClass(html: string, className: string): string {

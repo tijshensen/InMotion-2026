@@ -1,7 +1,19 @@
+import path from "path";
+import { mkdir, writeFile } from "fs/promises";
 import { prisma } from "./db";
 import { createSiteForOrg } from "./sites";
-import { saveMediaBuffer } from "./media";
-import { scrapePage, scrapeBrowserUa, type PageSnapshot, type ScrapedImage } from "./scrape-page";
+import { publicUrlFor, saveMediaBuffer } from "./media";
+import { uploadsRoot } from "./paths";
+import {
+  scrapePage,
+  scrapeBrowserUa,
+  extractDocumentHead,
+  sanitizeCloneBodyClass,
+  CLONE_CSS_FILE_MIN,
+  type PageSnapshot,
+  type ScrapedImage,
+  type CssSheet,
+} from "./scrape-page";
 import {
   balanceHtmlFragment,
   splitPageShell,
@@ -72,18 +84,82 @@ function splitContent(
     : [{ name: "Content", html: wrapCloneMarkers(content, builder) }];
 }
 
-function buildCoreHtml(snapshot: PageSnapshot): string {
-  const headMatch = snapshot.html.match(/<head\b[^>]*>([\s\S]*?)<\/head>/i);
-  let headInner = headMatch?.[1] || "";
-  headInner = headInner.replace(/<title[^>]*>[\s\S]*?<\/title>/i, "<title>{{page.title}}</title>");
+function stripHeadScripts(head: string) {
+  return head
+    .replace(/<script\b[\s\S]*?<\/script>/gi, "")
+    .replace(/<link\b[^>]*rel=["']?modulepreload["']?[^>]*>/gi, "")
+    .replace(
+      /<link\b[^>]*rel=["']?preload["']?[^>]*as=["']?script["']?[^>]*>/gi,
+      "",
+    );
+}
+
+function rewriteStylesheetHrefs(head: string, hrefMap: Map<string, string>): string {
+  let out = head;
+  for (const [from, to] of hrefMap) {
+    if (!from || !to || from === to) continue;
+    out = out.split(from).join(to);
+    try {
+      const pathOnly = new URL(from).pathname;
+      if (pathOnly && pathOnly !== from) out = out.split(pathOnly).join(to);
+    } catch {
+      /* not a URL */
+    }
+  }
+  return out;
+}
+
+async function persistLargeStylesheets(
+  siteSlug: string,
+  sheets: CssSheet[],
+): Promise<Map<string, string>> {
+  const map = new Map<string, string>();
+  const slug = siteSlug.replace(/[^a-zA-Z0-9_-]/g, "_").slice(0, 64) || "site";
+  const dir = path.join(uploadsRoot(), slug);
+  let n = 0;
+  for (const sheet of sheets) {
+    if (!sheet.css || sheet.css.length < CLONE_CSS_FILE_MIN) continue;
+    n += 1;
+    const file = n === 1 ? "clone.css" : `clone-${n}.css`;
+    await mkdir(dir, { recursive: true });
+    await writeFile(path.join(dir, file), sheet.css, "utf8");
+    map.set(sheet.href, publicUrlFor(`${slug}/${file}`));
+  }
+  return map;
+}
+
+function buildCoreHtml(
+  snapshot: PageSnapshot,
+  sheetHrefMap: Map<string, string> = new Map(),
+): string {
+  let headInner = stripHeadScripts(extractDocumentHead(snapshot.html));
+  headInner = headInner.replace(
+    /<title[^>]*>[\s\S]*?<\/title>/i,
+    "<title>{{page.title}}</title>",
+  );
   if (!/<title/i.test(headInner)) {
     headInner = `<title>{{page.title}}</title>\n${headInner}`;
   }
-  const clonedCss = snapshot.css
-    ? `<style data-cms-cloned-css="1">\n${snapshot.css}\n</style>`
-    : "";
+  headInner = rewriteStylesheetHrefs(headInner, sheetHrefMap);
+  for (const localHref of sheetHrefMap.values()) {
+    if (localHref && !headInner.includes(localHref)) {
+      headInner += `\n<link rel="stylesheet" href="${localHref}" data-cms-cloned-css="1" />\n`;
+    }
+  }
+
+  const hasSheetLink = /<link\b[^>]*stylesheet/i.test(headInner);
+  const clonedCss =
+    !hasSheetLink && snapshot.css.trim()
+      ? `<style data-cms-cloned-css="1">\n${snapshot.css}\n</style>`
+      : "";
+
   const lang = (snapshot.htmlLang || "en").replace(/[^a-zA-Z0-9-]/g, "") || "en";
-  const bodyClass = (snapshot.bodyClass || "cms-clone").replace(/[^a-zA-Z0-9 _-]/g, "");
+  const bodyClass = sanitizeCloneBodyClass(
+    snapshot.bodyClass || "cms-clone",
+  );
+  const withClone = /\bcms-clone\b/.test(bodyClass)
+    ? bodyClass
+    : `${bodyClass} cms-clone`.trim();
   const chrome = wrapSectionsInBuilderChrome(snapshot.builder);
   return `<!DOCTYPE html>
 <html lang="${lang}" data-cms-clone="1" data-cms-builder="${snapshot.builder}">
@@ -94,7 +170,7 @@ ${headInner}
 ${clonedCss}
 ${cloneFixStyleTag()}
 </head>
-<body class="${bodyClass}">
+<body class="${withClone}">
 ${chrome}
 ${cloneReviveScriptTag()}
 </body>
@@ -173,13 +249,18 @@ function rewriteUrls(html: string, map: Map<string, string>) {
 export function planCloneFromSnapshot(
   snapshot: PageSnapshot,
   imageMap: Map<string, string>,
+  sheetHrefMap: Map<string, string> = new Map(),
 ): ImportPlan {
   const html = rewriteUrls(snapshot.html, imageMap);
   const css = rewriteUrls(snapshot.css, imageMap);
-  const snapped = { ...snapshot, html, css };
+  const cssSheets = (snapshot.cssSheets || []).map((s) => ({
+    href: s.href,
+    css: rewriteUrls(s.css, imageMap),
+  }));
+  const snapped = { ...snapshot, html, css, cssSheets };
   const { header, footer, content, afterContent } = splitShell(snapped);
   const sections = splitContent(rewriteUrls(content, imageMap), snapshot.builder);
-  const coreHtml = buildCoreHtml(snapped);
+  const coreHtml = buildCoreHtml(snapped, sheetHrefMap);
   const inserts = [
     { tag: "header", content: rewriteUrls(header, imageMap) },
     { tag: "after", content: rewriteUrls(afterContent, imageMap) },
@@ -218,7 +299,14 @@ export async function cloneSiteFromUrl(opts: {
     siteSlug: site.slug,
     referer: snapshot.finalUrl,
   });
-  const plan = planCloneFromSnapshot(snapshot, imageMap);
+  const sheetHrefMap = await persistLargeStylesheets(
+    site.slug,
+    (snapshot.cssSheets || []).map((s) => ({
+      href: s.href,
+      css: rewriteUrls(s.css, imageMap),
+    })),
+  );
+  const plan = planCloneFromSnapshot(snapshot, imageMap, sheetHrefMap);
   const applied = await applyImportPlan({
     siteId: site.id,
     languageId: language.id,
@@ -268,7 +356,14 @@ export async function cloneTemplateFromUrl(opts: {
     siteSlug: site.slug,
     referer: snapshot.finalUrl,
   });
-  const plan = planCloneFromSnapshot(snapshot, imageMap);
+  const sheetHrefMap = await persistLargeStylesheets(
+    site.slug,
+    (snapshot.cssSheets || []).map((s) => ({
+      href: s.href,
+      css: rewriteUrls(s.css, imageMap),
+    })),
+  );
+  const plan = planCloneFromSnapshot(snapshot, imageMap, sheetHrefMap);
   return applyImportPlanAsTemplate({
     siteId: site.id,
     plan,
@@ -305,7 +400,14 @@ export async function reclonePageFromUrl(opts: {
     siteSlug: page.site.slug,
     referer: snapshot.finalUrl,
   });
-  const plan = planCloneFromSnapshot(snapshot, imageMap);
+  const sheetHrefMap = await persistLargeStylesheets(
+    page.site.slug,
+    (snapshot.cssSheets || []).map((s) => ({
+      href: s.href,
+      css: rewriteUrls(s.css, imageMap),
+    })),
+  );
+  const plan = planCloneFromSnapshot(snapshot, imageMap, sheetHrefMap);
   const templateId = page.templateId;
 
   await prisma.$transaction(async (tx) => {

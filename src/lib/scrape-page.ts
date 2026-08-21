@@ -6,12 +6,16 @@ const BROWSER_UA =
 
 export type ScrapedImage = { url: string; alt: string };
 
+export type CssSheet = { href: string; css: string };
+
 export type PageSnapshot = {
   sourceUrl: string;
   finalUrl: string;
   title: string;
   html: string;
   css: string;
+  /** Fetched stylesheets (absolute href + body). Used to persist large files. */
+  cssSheets: CssSheet[];
   builder: string;
   cssKind: "bootstrap" | "tailwind" | "custom";
   images: ScrapedImage[];
@@ -19,6 +23,13 @@ export type PageSnapshot = {
   bodyClass: string;
   htmlLang: string;
 };
+
+/** One compiled app CSS (Vite/Tailwind) is often ~1MB. Cap a single sheet. */
+export const CLONE_CSS_SHEET_MAX = 1_500_000;
+/** Don't ingest every WP cache-plugin file. First sheets win. */
+export const CLONE_CSS_TOTAL_MAX = 1_500_000;
+/** Persist sheets larger than this as a file instead of inlining. */
+export const CLONE_CSS_FILE_MIN = 48_000;
 
 function absUrl(base: string, href: string): string | null {
   const raw = href.trim().split("#")[0] || "";
@@ -65,20 +76,74 @@ export function detectSiteStack(html: string): {
     builder = "wpbakery";
   } else if (h.includes("wp-block-group") || h.includes("wp-block-cover") || h.includes("wp-block-post")) {
     builder = "gutenberg";
-  } else if (h.includes("wp-content") || h.includes("wordpress")) builder = "wordpress";
-  else if (h.includes("w-mod-") || h.includes("webflow")) builder = "webflow";
-  else if (h.includes("cdn.shopify") || h.includes("shopify")) builder = "shopify";
-  else if (h.includes("__next") || h.includes("_next/static")) builder = "nextjs";
-  else if (h.includes("wix.com") || h.includes("parastorage")) builder = "wix";
-  else if (h.includes("squarespace")) builder = "squarespace";
+  } else if (isWordpressInstall(html)) {
+    builder = "wordpress";
+  } else if (h.includes("w-mod-")) {
+    builder = "webflow";
+  } else if (h.includes("cdn.shopify")) {
+    builder = "shopify";
+  } else if (h.includes("__next") || h.includes("_next/static")) {
+    builder = "nextjs";
+  } else if (h.includes("wix.com") || h.includes("parastorage")) {
+    builder = "wix";
+  } else if (
+    h.includes("static1.squarespace.com") ||
+    h.includes("squarespace-cdn") ||
+    /\bsqs-(?:block|layout|site)\b/.test(h)
+  ) {
+    builder = "squarespace";
+  } else if (
+    /\/static\/css\/[^"'>\s]+\.css/i.test(html) &&
+    /modulepreload/i.test(html)
+  ) {
+    builder = "vite";
+  }
 
   let cssKind: "bootstrap" | "tailwind" | "custom" = "custom";
   if (h.includes("bootstrap") || h.includes("glyphicon") || /\bcol-sm-|\bnavbar-/.test(h)) {
     cssKind = "bootstrap";
   } else if (h.includes("cdn.tailwindcss.com") || h.includes("tailwindcss")) {
+    // Compiled utility CSS without this string stays "custom" so we do not
+    // inject the Play CDN on top of a hashed stylesheet.
     cssKind = "tailwind";
   }
   return { builder, cssKind };
+}
+
+/** Real WP install paths/meta — not the word "WordPress" in marketing copy. */
+export function isWordpressInstall(html: string): boolean {
+  const h = html.toLowerCase();
+  return (
+    h.includes("wp-content/") ||
+    h.includes("wp-includes/") ||
+    h.includes("wp-json/") ||
+    /name=["']generator["'][^>]*content=["']wordpress/i.test(html) ||
+    /content=["']wordpress[^"']*["'][^>]*name=["']generator["']/i.test(html)
+  );
+}
+
+/**
+ * Head inner HTML. Vite prerenders assets as <html> children with no <head>.
+ * Do not match `<header` as `<head`.
+ */
+export function extractDocumentHead(html: string): string {
+  const classic = html.match(/<head\b[^>]*>([\s\S]*?)<\/head>/i);
+  if (classic?.[1]?.trim()) return classic[1].trim();
+  const htmlOpen = html.match(/<html\b[^>]*>/i);
+  if (!htmlOpen || htmlOpen.index == null) return "";
+  const start = htmlOpen.index + htmlOpen[0].length;
+  const rest = html.slice(start);
+  const bodyAt = rest.search(/<body\b/i);
+  if (bodyAt >= 0) return rest.slice(0, bodyAt).trim();
+  return "";
+}
+
+/** Keep Tailwind variants like dark:bg-gray-900; strip quotes/angles only. */
+export function sanitizeCloneBodyClass(raw: string): string {
+  return (raw || "")
+    .replace(/[^\w\s:/-]/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
 }
 
 async function fetchText(
@@ -375,31 +440,15 @@ export async function scrapePage(sourceUrl: string): Promise<PageSnapshot> {
   }
 
   const stack = detectSiteStack(html);
-  const inline = inlineStyles(html);
-  const cssChunks: string[] = [];
-  // Head already keeps original <style> tags. Only fetch extra sheets when
-  // the page didn't inline much CSS (cache plugins often split 80+ files).
-  if (inline.length < 80_000) {
-    cssChunks.push(inline);
-    const sheets = stylesheetHrefs(html, base);
-    for (const href of sheets) {
-      try {
-        const sheet = await fetchText(href, { timeoutMs: 12_000, referer: base });
-        if (sheet.status >= 200 && sheet.status < 300 && sheet.body.length < 400_000) {
-          cssChunks.push(`/* ${href} */\n${unlazyHtml(sheet.body, href)}`);
-        }
-      } catch {
-        /* keep going — look still works without every sheet */
-      }
-    }
-  }
+  const { combined: css, sheets: cssSheets } = await collectPageCss(html, base);
 
   return {
     sourceUrl,
     finalUrl: base,
     title: extractTitle(html) || new URL(base).hostname,
     html,
-    css: cssChunks.filter(Boolean).join("\n\n"),
+    css,
+    cssSheets,
     builder: stack.builder,
     cssKind: stack.cssKind,
     images: collectImages(html, base),
@@ -407,6 +456,39 @@ export async function scrapePage(sourceUrl: string): Promise<PageSnapshot> {
     bodyClass: ensureBuilderBodyClass(stack.builder, extractBodyClass(html)),
     htmlLang: extractHtmlLang(html),
   };
+}
+
+async function collectPageCss(
+  html: string,
+  base: string,
+): Promise<{ combined: string; sheets: CssSheet[] }> {
+  const inline = inlineStyles(html);
+  const sheets: CssSheet[] = [];
+  const parts: string[] = [];
+  if (inline) parts.push(inline);
+  let total = inline.length;
+
+  // Always consider linked sheets. A compiled Tailwind file is often the
+  // whole design and larger than the old 400KB skip. A total budget still
+  // stops us from swallowing 80 WordPress cache-plugin files.
+  for (const href of stylesheetHrefs(html, base)) {
+    if (total >= CLONE_CSS_TOTAL_MAX && sheets.length > 0) break;
+    try {
+      const sheet = await fetchText(href, { timeoutMs: 15_000, referer: base });
+      if (sheet.status < 200 || sheet.status >= 300) continue;
+      if (sheet.body.length > CLONE_CSS_SHEET_MAX) continue;
+      const remaining = CLONE_CSS_TOTAL_MAX - total;
+      if (sheets.length > 0 && sheet.body.length > remaining) continue;
+      const css = unlazyHtml(sheet.body, href);
+      sheets.push({ href, css });
+      parts.push(`/* ${href} */\n${css}`);
+      total += css.length;
+    } catch {
+      /* original <link> in the head still hotlinks if fetch fails */
+    }
+  }
+
+  return { combined: parts.filter(Boolean).join("\n\n"), sheets };
 }
 
 export const scrapeBrowserUa = BROWSER_UA;
