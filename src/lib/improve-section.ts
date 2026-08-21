@@ -12,6 +12,7 @@ import {
   emptyFieldsFromTemplate,
   parseSectionFields,
   parseStoredContent,
+  repeatGroupsFromHtml,
   serializeContent,
   META,
 } from "./sections";
@@ -47,7 +48,32 @@ Rules:
 - css: extra CSS only, no <style> tags.
 - js: vanilla JavaScript only, no <script> tags, no React, no JSX, no imports, no eval, no document.write.
 - For a monthly/yearly (or similar) toggle: put both amounts on the element (data-monthly / data-yearly) and toggle them with a click handler. Use event delegation on the section root.
-- Prefer repairing missing behavior over inventing a new layout.`;
+- Prefer repairing missing behavior over inventing a new layout.
+- Do not wrap unique headings or intros in <repeatable>. That tag is only for repeating cards/rows.
+- Do not leave copy at opacity:0. Strip scroll-reveal hide styles (lp-reveal-pending opacity/transform) so the section is visible without extra JS.`;
+
+/** Unique h1/h2 intros must not live in <repeatable> (clone false-positives). */
+export function unwrapHeadingRepeatables(html: string): string {
+  if (!html || !/<repeatable\b/i.test(html)) return html;
+  return html.replace(
+    /<repeatable(\s[^>]*)?>([\s\S]*?)<\/repeatable>/gi,
+    (full, _attrs: string, inner: string) => {
+      const sample = inner
+        .replace(/<style\b[\s\S]*?<\/style>/gi, " ")
+        .replace(/<script\b[\s\S]*?<\/script>/gi, " ");
+      const hasHeading = /<h[12]\b/i.test(sample);
+      const cardish =
+        (sample.match(/<(article|li)\b/gi) || []).length >= 2 ||
+        /lp-how-row|lp-create-grid|lp-faq-question|et_pb_blurb|elementor-column/i.test(
+          sample,
+        );
+      if (hasHeading && !cardish) {
+        return inner.replace(/\s+slot=(["']).*?\1/gi, "");
+      }
+      return full;
+    },
+  );
+}
 
 function cap(html: string, max = MAX_BAND) {
   if (html.length <= max) return html;
@@ -144,7 +170,7 @@ function stripCss(raw: string) {
 }
 
 function stripJs(raw: string) {
-  let s = raw
+  const s = raw
     .replace(/<\/?script\b[^>]*>/gi, "")
     .replace(/^```(?:js|javascript)?\s*|\s*```$/gi, "")
     .trim();
@@ -396,6 +422,7 @@ ${sourceBand ? `--- ORIGINAL SOURCE BAND ---\n${cap(sourceBand)}` : "--- ORIGINA
   if (!/<multiline\b/i.test(html) && !/<img\b[^>]*editable/i.test(html)) {
     html = wrapCloneMarkers(html, builder);
   }
+  html = unwrapHeadingRepeatables(html);
   const css = stripCss(String(parsedJson.css || "")) || block.css || "";
   const js = stripJs(String(parsedJson.js || ""));
   const summary = String(parsedJson.summary || "Updated this section.").slice(0, 400);
@@ -417,16 +444,28 @@ ${sourceBand ? `--- ORIGINAL SOURCE BAND ---\n${cap(sourceBand)}` : "--- ORIGINA
   }
 
   const fields = mergeFields(html, parsed.fields);
+  const nextGroups = repeatGroupsFromHtml(html);
   const content = serializeContent({
     fields,
     layoutHtml: html,
-    repeatGroups: parsed.repeatGroups,
+    repeatGroups: nextGroups.length ? nextGroups : undefined,
   });
 
   await prisma.pageBlock.update({
     where: { id: block.id },
     data: { content, css, js },
   });
+
+  const keepGroups = nextGroups.map((g) => g.key);
+  if (keepGroups.length === 0) {
+    await prisma.pageBlockRepeatItem.deleteMany({
+      where: { pageBlockId: block.id },
+    });
+  } else {
+    await prisma.pageBlockRepeatItem.deleteMany({
+      where: { pageBlockId: block.id, groupKey: { notIn: keepGroups } },
+    });
+  }
 
   await snapshotVersion({
     pageBlockId: block.id,

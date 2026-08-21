@@ -33,6 +33,7 @@ import {
 } from "./theme";
 import { detectVideoSource, isLikelyMediaSrc } from "./video-media";
 import { balanceHtmlFragment } from "./html-split";
+import { ensureCloneFixInHtml } from "./clone-runtime";
 
 export type FieldType = "singleline" | "multiline" | "image" | "file";
 
@@ -529,8 +530,10 @@ function normalizeRepeatablePayload(
   if (synced === payload.layoutHtml && groups.length === (payload.repeatGroups?.length || 0)) {
     return payload;
   }
+  const { repeatGroups: _dropped, ...rest } = payload;
+  void _dropped;
   return {
-    ...payload,
+    ...rest,
     layoutHtml: synced,
     ...(groups.length ? { repeatGroups: groups } : {}),
   };
@@ -798,7 +801,7 @@ export function renderSectionHtml(
   // Bootstrap sites (e.g. Kiekeboe) keep col-md-*, container, navbar, etc.
 
   if (sectionCss?.trim()) {
-    html = `<div class="cms-section"><style>${sectionCss}</style>${html}</div>`;
+    html = `<style data-cms-section-css="1">${sectionCss}</style>${html}`;
   }
   const extraJs = opts?.sectionJs?.trim() || "";
   if (extraJs) {
@@ -917,7 +920,10 @@ export function buildEditorPreviewHtml(opts: {
     .join("\n");
 
   // Keep full site themes (Bootstrap/custom) as-is so the builder matches live CSS
-  let shell = (opts.shellHtml || "").trim() || TAILWIND_SHELL || defaultEditorShell();
+  let shell =
+    ensureCloneFixInHtml((opts.shellHtml || "").trim()) ||
+    TAILWIND_SHELL ||
+    defaultEditorShell();
   const fullTheme = isFullThemeShell(shell);
   if (!fullTheme && !shell.includes("{{sections}}") && shell.length < 500) {
     shell = TAILWIND_SHELL;

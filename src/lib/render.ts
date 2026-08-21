@@ -16,6 +16,7 @@ import {
   resolveMenuSnippets,
 } from "./menu-snippets";
 import { renderAllSections } from "./sections";
+import { ensureCloneFixInHtml } from "./clone-runtime";
 import { ensureSiteStylesheets } from "./site-context";
 import {
   applySiteLogo,
@@ -137,7 +138,9 @@ export async function renderPublicPage({
     menuTitle: p.menuTitle,
   }));
 
-  let html = page.template?.coreHtml?.trim() || TAILWIND_SHELL;
+  let html = ensureCloneFixInHtml(
+    page.template?.coreHtml?.trim() || TAILWIND_SHELL,
+  );
   const fullTheme = isFullThemeShell(html);
 
   const snippets = resolveMenuSnippets({

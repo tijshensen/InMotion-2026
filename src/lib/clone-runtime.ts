@@ -122,6 +122,8 @@ ${footer}`;
 
 export const CLONE_FIX_CSS = `
 .et_animated,.et-waypoint,.et_had_animation{opacity:1!important;animation:none!important;transform:none!important}
+.lp-reveal-pending{opacity:1!important;transform:none!important}
+.lp-how-card-slot,.lp-how-arm{opacity:1!important;transform:none!important}
 .lzl,.lzl-ing{display:revert!important;opacity:1!important}
 img.lzl,img.lzl-ing{opacity:1!important}
 .et_pb_row:after,.et_pb_row_inner:after{content:"";display:table;clear:both}
@@ -410,6 +412,23 @@ export const CLONE_REVIVE_JS = `
 
 export function cloneFixStyleTag(): string {
   return `<style data-cms-clone-fix="1">\n${CLONE_FIX_CSS}\n</style>`;
+}
+
+/** Keep existing clone shells on the current fix CSS (baked-in copy goes stale). */
+export function ensureCloneFixInHtml(html: string): string {
+  if (!html) return html;
+  const tag = cloneFixStyleTag();
+  if (/<style\b[^>]*data-cms-clone-fix/i.test(html)) {
+    return html.replace(
+      /<style\b[^>]*data-cms-clone-fix[\s\S]*?<\/style>/i,
+      tag,
+    );
+  }
+  if (!/data-cms-clone|cms-clone/i.test(html)) return html;
+  if (/<\/head>/i.test(html)) {
+    return html.replace(/<\/head>/i, `${tag}</head>`);
+  }
+  return `${tag}${html}`;
 }
 
 export function cloneReviveScriptTag(): string {
