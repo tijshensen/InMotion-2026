@@ -682,6 +682,10 @@ export function VisualPageBuilder({
   const [showAddInternal, setShowAddInternal] = useState(false);
   const [adding, setAdding] = useState(false);
   const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
+  const [suggestRequest, setSuggestRequest] = useState<{
+    sectionId: string;
+    nonce: number;
+  } | null>(null);
   const confirmRemoveRef = useRef<(id: string) => Promise<void>>(async () => {});
   const [deviceInternal, setDeviceInternal] = useState<CanvasDevice>("phone");
   const device = deviceProp ?? deviceInternal;
@@ -1150,6 +1154,15 @@ export function VisualPageBuilder({
         }
         return;
       }
+      if (data.type === "cms-improve-section") {
+        if (typeof data.sectionId !== "string") return;
+        const winImp = iframeRef.current?.contentWindow;
+        if (winImp) scrollRestore.current = winImp.scrollY || 0;
+        setSelectedSectionId(data.sectionId);
+        setLayoutHit(null);
+        setSuggestRequest({ sectionId: data.sectionId, nonce: Date.now() });
+        return;
+      }
       if (data.type !== "cms-select-section") return;
       if (typeof data.sectionId !== "string") return;
       const win = iframeRef.current?.contentWindow;
@@ -1520,6 +1533,11 @@ export function VisualPageBuilder({
             <SectionGrokPanel
               pageId={pageId}
               section={selected}
+              autoSuggestKey={
+                suggestRequest && suggestRequest.sectionId === selected.id
+                  ? String(suggestRequest.nonce)
+                  : ""
+              }
               onApplied={(patch) =>
                 onChange((prev) =>
                   prev.map((s) =>

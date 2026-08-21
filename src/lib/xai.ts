@@ -9,6 +9,11 @@ export function xaiModel() {
   return process.env.XAI_MODEL?.trim() || "grok-4.5";
 }
 
+/** Faster / cheaper model for review-only calls (prompt suggestions). */
+export function xaiCheapModel() {
+  return process.env.XAI_CHEAP_MODEL?.trim() || "grok-4-1-fast-non-reasoning";
+}
+
 export function xaiApiKey() {
   return process.env.XAI_API_KEY?.trim() || "";
 }
@@ -18,6 +23,8 @@ export async function grokChat(opts: {
   user: string;
   temperature?: number;
   timeoutMs?: number;
+  /** Override XAI_MODEL for this call. */
+  model?: string;
   /** Ask the API to emit a JSON object (OpenAI-compatible). */
   json?: boolean;
 }): Promise<string> {
@@ -28,8 +35,10 @@ export async function grokChat(opts: {
     );
   }
 
+  const timeoutMs = opts.timeoutMs ?? 300_000;
+  const model = opts.model?.trim() || xaiModel();
   const controller = new AbortController();
-  const t = setTimeout(() => controller.abort(), opts.timeoutMs ?? 300_000);
+  const t = setTimeout(() => controller.abort(), timeoutMs);
 
   try {
     const res = await fetch(`${XAI_BASE}/chat/completions`, {
@@ -40,7 +49,7 @@ export async function grokChat(opts: {
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        model: xaiModel(),
+        model,
         temperature: opts.temperature ?? 0.3,
         messages: [
           { role: "system", content: opts.system },
@@ -70,8 +79,9 @@ export async function grokChat(opts: {
     return text;
   } catch (e) {
     if (e && typeof e === "object" && "name" in e && e.name === "AbortError") {
+      const secs = Math.max(1, Math.round(timeoutMs / 1000));
       throw new Error(
-        "Grok timed out after 5 minutes. Try a smaller page or try again.",
+        `Grok timed out after ${secs} second${secs === 1 ? "" : "s"}. Try again.`,
       );
     }
     throw e;

@@ -907,7 +907,10 @@ export function buildEditorPreviewHtml(opts: {
       const ring = active ? " is-selected" : "";
       const label = escapeAttr(s.name || `Section ${idx + 1}`);
       return `<div class="cms-edit-section${hidden}${ring}" data-section-id="${escapeAttr(s.id)}" data-section-label="${label}" title="Click to edit: ${label}">
-  <div class="cms-edit-badge">${idx + 1}. ${escapeHtml(s.name || "Section")}${s.isHidden ? " (hidden)" : ""}</div>
+  <div class="cms-edit-badge">
+    <span class="cms-edit-badge-label">${idx + 1}. ${escapeHtml(s.name || "Section")}${s.isHidden ? " (hidden)" : ""}</span>
+    <button type="button" class="cms-edit-improve" data-cms-improve="1">Improve</button>
+  </div>
   <div class="cms-edit-body">${body || '<p style="padding:1rem;color:#94a3b8">Empty section</p>'}</div>
 </div>`;
     })
@@ -1053,19 +1056,37 @@ export function buildEditorPreviewHtml(opts: {
     top: 6px;
     left: 6px;
     z-index: 20;
+    display: flex;
+    align-items: center;
+    gap: 6px;
     background: rgba(15, 23, 42, 0.9);
     color: #fff;
     font: 600 11px/1.2 system-ui, sans-serif;
-    padding: 4px 8px;
+    padding: 3px 4px 3px 8px;
     border-radius: 4px;
     opacity: 0;
     pointer-events: none;
     transition: opacity .15s;
-    max-width: 70%;
-    white-space: nowrap;
+    max-width: calc(100% - 12px);
+  }
+  .cms-edit-badge-label {
     overflow: hidden;
     text-overflow: ellipsis;
+    white-space: nowrap;
+    min-width: 0;
   }
+  .cms-edit-improve {
+    pointer-events: auto;
+    flex-shrink: 0;
+    border: 0;
+    border-radius: 3px;
+    background: #2563eb;
+    color: #fff;
+    font: 600 10px/1 system-ui, sans-serif;
+    padding: 4px 7px;
+    cursor: pointer;
+  }
+  .cms-edit-improve:hover { background: #1d4ed8; }
   .cms-edit-section:hover .cms-edit-badge,
   .cms-edit-section.is-selected .cms-edit-badge {
     opacity: 1;
@@ -1159,6 +1180,24 @@ export function buildEditorPreviewHtml(opts: {
   document.addEventListener("click", function (e) {
     var mode = document.documentElement.getAttribute("data-cms-mode") || "content";
     if (e.target && e.target.closest && e.target.closest(".cms-edit-delete-mask")) {
+      return;
+    }
+    var improveBtn = e.target && e.target.closest ? e.target.closest(".cms-edit-improve") : null;
+    if (improveBtn && mode !== "view") {
+      e.preventDefault();
+      e.stopPropagation();
+      var improveSection = improveBtn.closest(".cms-edit-section");
+      var improveId = improveSection && improveSection.getAttribute("data-section-id");
+      if (improveId) {
+        try {
+          var allImp = document.querySelectorAll(".cms-edit-section.is-selected");
+          for (var ii = 0; ii < allImp.length; ii++) allImp[ii].classList.remove("is-selected");
+          improveSection.classList.add("is-selected");
+        } catch (errImp) {}
+        try {
+          window.parent.postMessage({ type: "cms-improve-section", sectionId: improveId }, "*");
+        } catch (errImp2) {}
+      }
       return;
     }
     if (mode === "view") {

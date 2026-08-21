@@ -109,7 +109,7 @@ export function extractSourceBand(
   return "";
 }
 
-async function fetchSourceHtml(url: string): Promise<string> {
+export async function fetchSourceHtml(url: string): Promise<string> {
   const ctrl = new AbortController();
   const t = setTimeout(() => ctrl.abort(), 20_000);
   try {
