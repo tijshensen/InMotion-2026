@@ -17,6 +17,7 @@ import {
   type SetStateAction,
 } from "react";
 import { useRouter } from "next/navigation";
+import { SectionGrokPanel } from "@/components/section-grok-panel";
 import {
   META,
   buildEditorPreviewHtml,
@@ -62,6 +63,7 @@ export type PageSection = {
   id: string;
   content: string;
   css: string;
+  js?: string;
   sortOrder: number;
   isHidden: boolean;
   templateBlockId: string | null;
@@ -77,6 +79,19 @@ export type LinkPageOption = LinkablePage & {
 };
 
 type CanvasDevice = "desktop" | "tablet" | "phone";
+
+function reviveInsertedScripts(root: Element) {
+  const doc = root.ownerDocument;
+  if (!doc) return;
+  root.querySelectorAll("script").forEach((old) => {
+    const neu = doc.createElement("script");
+    for (const attr of Array.from(old.attributes)) {
+      neu.setAttribute(attr.name, attr.value);
+    }
+    neu.textContent = old.textContent;
+    old.replaceWith(neu);
+  });
+}
 
 type Props = {
   pageId: string;
@@ -761,6 +776,7 @@ export function VisualPageBuilder({
           templateHtml: s.templateBlock?.defaultHtml || "",
           content: s.content,
           css: s.css,
+          js: s.js,
           isHidden: s.isHidden,
           name: s.templateBlock?.name,
           repeatItems: s.repeatItems,
@@ -896,7 +912,7 @@ export function VisualPageBuilder({
       const body = wrap.querySelector(".cms-edit-body");
       if (!body) return false;
 
-      const paintKey = `${s.content}\n/*css*/\n${s.css}\n/*hidden*/\n${s.isHidden}\n/*rep*/\n${(s.repeatItems || [])
+      const paintKey = `${s.content}\n/*css*/\n${s.css}\n/*js*/\n${s.js || ""}\n/*hidden*/\n${s.isHidden}\n/*rep*/\n${(s.repeatItems || [])
         .map((i) => `${i.id}:${i.isHidden}:${i.content}`)
         .join("|")}`;
       if (paintedContentRef.current.get(s.id) === paintKey) {
@@ -914,11 +930,13 @@ export function VisualPageBuilder({
           linkPages,
           origin,
           repeatItems: s.repeatItems,
+          sectionJs: s.js,
         },
       );
 
       // Preserve scroll: only replace the section body, never the document
       body.innerHTML = html || "";
+      reviveInsertedScripts(body);
       wrap.classList.toggle("is-hidden", Boolean(s.isHidden));
       paintedContentRef.current.set(s.id, paintKey);
       const hit = layoutHitRef.current;
@@ -968,7 +986,7 @@ export function VisualPageBuilder({
     // Seed paint cache so we don't rewrite immediately.
     paintedContentRef.current.clear();
     for (const s of ordered) {
-      const paintKey = `${s.content}\n/*css*/\n${s.css}\n/*hidden*/\n${s.isHidden}\n/*rep*/\n${(s.repeatItems || [])
+      const paintKey = `${s.content}\n/*css*/\n${s.css}\n/*js*/\n${s.js || ""}\n/*hidden*/\n${s.isHidden}\n/*rep*/\n${(s.repeatItems || [])
         .map((i) => `${i.id}:${i.isHidden}:${i.content}`)
         .join("|")}`;
       paintedContentRef.current.set(s.id, paintKey);
@@ -1508,6 +1526,24 @@ export function VisualPageBuilder({
                 linkPages={linkPages}
                 onChange={setField}
                 onChangeMany={setFields}
+              />
+              <SectionGrokPanel
+                pageId={pageId}
+                section={selected}
+                onApplied={(patch) =>
+                  onChange((prev) =>
+                    prev.map((s) =>
+                      s.id === selected.id
+                        ? {
+                            ...s,
+                            content: patch.content,
+                            css: patch.css,
+                            js: patch.js,
+                          }
+                        : s,
+                    ),
+                  )
+                }
               />
               {selectedRepeatGroups.length ? (
                 <SectionRepeatEditor

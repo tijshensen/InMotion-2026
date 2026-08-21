@@ -273,10 +273,31 @@ model PageBlock {
   templateBlock   TemplateBlock? @relation(fields: [templateBlockId], references: [id], onDelete: SetNull)
   content         String   @default("") // HTML / JSON content
   css             String   @default("")
+  /// Extra vanilla JS for this section (toggles, accordions).
+  js              String   @default("")
   sortOrder       Int      @default(0)
   isHidden        Boolean  @default(false)
   updatedAt       DateTime @updatedAt
   repeatItems     PageBlockRepeatItem[]
+  versions        PageBlockVersion[]
+}
+
+/// Snapshots of a page section (scrape original, Grok improves, restores).
+model PageBlockVersion {
+  id          String    @id @default(cuid())
+  pageBlockId String
+  pageBlock   PageBlock @relation(fields: [pageBlockId], references: [id], onDelete: Cascade)
+  /// scrape | grok | restore
+  source      String    @default("grok")
+  prompt      String    @default("")
+  summary     String    @default("")
+  layoutHtml  String    @default("")
+  css         String    @default("")
+  js          String    @default("")
+  fieldsJson  String    @default("{}")
+  createdAt   DateTime  @default(now())
+
+  @@index([pageBlockId, createdAt])
 }
 
 /// Extra / extracted items inside a section (cards, columns).

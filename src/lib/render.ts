@@ -164,6 +164,7 @@ export async function renderPublicPage({
       templateHtml: b.templateBlock?.defaultHtml || "",
       content: b.content,
       css: b.css,
+      js: b.js,
       isHidden: b.isHidden,
       repeatItems: b.repeatItems,
     })),

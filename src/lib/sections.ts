@@ -716,6 +716,7 @@ export function renderSectionHtml(
     keepNids?: boolean;
     repeatItems?: RepeatItemRender[];
     skipRepeats?: boolean;
+    sectionJs?: string;
   },
 ): string {
   const normalized = normalizeSectionHtml(templateHtml);
@@ -799,6 +800,13 @@ export function renderSectionHtml(
   if (sectionCss?.trim()) {
     html = `<div class="cms-section"><style>${sectionCss}</style>${html}</div>`;
   }
+  const extraJs = opts?.sectionJs?.trim() || "";
+  if (extraJs) {
+    const body = /^\s*\(/m.test(extraJs)
+      ? extraJs
+      : `(function(){\n${extraJs}\n})();`;
+    html += `<script data-cms-section-js="1">${body}</script>`;
+  }
 
   if (!opts?.keepNids) {
     html = html.replace(/\s*data-cms-nid=(["'])[^"']*\1/gi, "");
@@ -812,6 +820,7 @@ export type EditorPreviewSection = {
   templateHtml: string;
   content: string;
   css?: string;
+  js?: string;
   isHidden?: boolean;
   name?: string;
   repeatItems?: RepeatItemRender[];
@@ -841,11 +850,13 @@ export function renderSectionHtmlForEditor(
     linkPages?: LinkablePage[];
     origin?: string;
     repeatItems?: RepeatItemRender[];
+    sectionJs?: string;
   },
 ): string {
   let body = renderSectionHtml(templateHtml, contentJson, sectionCss, {
     keepNids: true,
     repeatItems: opts?.repeatItems,
+    sectionJs: opts?.sectionJs,
   });
   if (opts?.siteSlug && opts.linkPages?.length) {
     body = resolveInternalLinks(body, opts.siteSlug, opts.linkPages);
@@ -888,6 +899,7 @@ export function buildEditorPreviewHtml(opts: {
           linkPages: opts.linkPages,
           origin,
           repeatItems: s.repeatItems,
+          sectionJs: s.js,
         },
       );
       const active = opts.selectedSectionId === s.id;
@@ -1302,6 +1314,7 @@ export function renderAllSections(
     templateHtml: string;
     content: string;
     css?: string;
+    js?: string;
     isHidden?: boolean;
     repeatItems?: RepeatItemRender[];
   }[],
@@ -1311,6 +1324,7 @@ export function renderAllSections(
     .map((s) =>
       renderSectionHtml(s.templateHtml, s.content, s.css, {
         repeatItems: s.repeatItems,
+        sectionJs: s.js,
       }),
     )
     .join("\n");

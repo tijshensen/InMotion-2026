@@ -44,6 +44,7 @@ const updateSchema = z.object({
         id: z.string(),
         content: z.string(),
         css: z.string().optional(),
+        js: z.string().optional(),
         isHidden: z.boolean().optional(),
       }),
     )
@@ -67,6 +68,7 @@ export async function PATCH(req: Request, ctx: Ctx) {
             data: {
               content: b.content,
               css: b.css ?? undefined,
+              js: b.js ?? undefined,
               isHidden: b.isHidden ?? undefined,
             },
           }),

@@ -21,6 +21,7 @@ const bodySchema = z.object({
         sortOrder: z.number().int().optional(),
         isHidden: z.boolean().optional(),
         css: z.string().optional(),
+        js: z.string().optional(),
         fields: z.record(z.string(), z.string()).optional(),
         layoutHtml: z.string().optional(),
         content: z.string().optional(),
@@ -88,6 +89,7 @@ export async function PUT(req: Request, ctx: Ctx) {
           ...(s.sortOrder !== undefined ? { sortOrder: s.sortOrder } : {}),
           ...(s.isHidden !== undefined ? { isHidden: s.isHidden } : {}),
           ...(s.css !== undefined ? { css: s.css } : {}),
+          ...(s.js !== undefined ? { js: s.js } : {}),
           ...(content !== undefined ? { content } : {}),
         };
 
@@ -104,6 +106,7 @@ export async function PUT(req: Request, ctx: Ctx) {
               templateBlockId: s.templateBlockId,
               content: content ?? "",
               css: s.css ?? "",
+              js: s.js ?? "",
               isHidden: s.isHidden ?? false,
               sortOrder: s.sortOrder ?? 0,
             },

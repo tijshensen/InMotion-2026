@@ -117,6 +117,7 @@ export async function PUT(req: Request, ctx: Ctx) {
           sortOrder: z.number().int().optional(),
           isHidden: z.boolean().optional(),
           css: z.string().optional(),
+          js: z.string().optional(),
           content: z.string().optional(),
           fields: z.record(z.string(), z.string()).optional(),
         }),
@@ -132,6 +133,7 @@ export async function PUT(req: Request, ctx: Ctx) {
           ...(s.sortOrder !== undefined ? { sortOrder: s.sortOrder } : {}),
           ...(s.isHidden !== undefined ? { isHidden: s.isHidden } : {}),
           ...(s.css !== undefined ? { css: s.css } : {}),
+          ...(s.js !== undefined ? { js: s.js } : {}),
           ...(s.fields
             ? { content: serializeFields(s.fields) }
             : s.content !== undefined

@@ -79,6 +79,7 @@ function snapshotPayload(snap: Snapshot) {
         sortOrder: i,
         isHidden: s.isHidden,
         css: s.css,
+        js: s.js || "",
         fields: parsed.fields,
         layoutHtml: parsed.layoutHtml,
       };
@@ -212,6 +213,8 @@ export function PageEditor({
         lastOkJsonRef.current = encoded;
         setSaving(false);
         setStatus("Saved");
+        const latest = JSON.stringify(snapshotPayload(snapRef.current));
+        if (latest !== encoded) pendingRef.current = true;
       } catch {
         setSaving(false);
         setStatus("Save failed");
