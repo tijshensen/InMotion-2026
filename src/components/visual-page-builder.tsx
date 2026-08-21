@@ -1517,6 +1517,25 @@ export function VisualPageBuilder({
               </button>
             </div>
 
+            <SectionGrokPanel
+              pageId={pageId}
+              section={selected}
+              onApplied={(patch) =>
+                onChange((prev) =>
+                  prev.map((s) =>
+                    s.id === selected.id
+                      ? {
+                          ...s,
+                          content: patch.content,
+                          css: patch.css,
+                          js: patch.js,
+                        }
+                      : s,
+                  ),
+                )
+              }
+            />
+
             <div className="flex-1 overflow-y-auto px-4 py-4">
               <FieldEditors
                 fields={selectedFields}
@@ -1526,24 +1545,6 @@ export function VisualPageBuilder({
                 linkPages={linkPages}
                 onChange={setField}
                 onChangeMany={setFields}
-              />
-              <SectionGrokPanel
-                pageId={pageId}
-                section={selected}
-                onApplied={(patch) =>
-                  onChange((prev) =>
-                    prev.map((s) =>
-                      s.id === selected.id
-                        ? {
-                            ...s,
-                            content: patch.content,
-                            css: patch.css,
-                            js: patch.js,
-                          }
-                        : s,
-                    ),
-                  )
-                }
               />
               {selectedRepeatGroups.length ? (
                 <SectionRepeatEditor

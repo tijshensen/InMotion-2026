@@ -128,7 +128,7 @@ export function SectionGrokPanel({ pageId, section, onApplied }: Props) {
   }
 
   return (
-    <div className="mt-6 space-y-3 border-t border-slate-800 pt-4">
+    <div className="space-y-3 border-b border-slate-800 px-4 py-3">
       <p className="text-[11px] uppercase tracking-wide text-slate-500">
         Improve with Grok
       </p>
