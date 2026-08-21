@@ -20,13 +20,17 @@ function hostnameKey(url: string): string | null {
 export async function getSiteCloneSource(
   siteId: string,
 ): Promise<SiteCloneSource | null> {
+  const site = await prisma.site.findUnique({
+    where: { id: siteId },
+    select: { sourceUrl: true },
+  });
   const rows = await prisma.siteSetting.findMany({
     where: { siteId, key: { in: ["importMode", "importedFromUrl"] } },
     select: { key: true, value: true },
   });
   const map = Object.fromEntries(rows.map((r) => [r.key, r.value]));
   if (map.importMode !== "clone") return null;
-  const url = (map.importedFromUrl || "").trim();
+  const url = (site?.sourceUrl || map.importedFromUrl || "").trim();
   if (!url) return null;
   try {
     const u = new URL(url);

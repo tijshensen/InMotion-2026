@@ -519,6 +519,7 @@ export async function importSiteFromUrl(opts: {
     name: (opts.name || plan.siteTitle).trim(),
     siteTitle: plan.siteTitle,
     cssFramework: "tailwind",
+    sourceUrl: opts.sourceUrl,
     creatorUserId: opts.creatorUserId,
   });
 

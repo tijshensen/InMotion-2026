@@ -28,6 +28,7 @@ type SiteCard = {
   slug: string;
   domain: string | null;
   cssFramework: string;
+  sourceUrl: string;
   themeSlug: string;
   lastGeneratedAt: string | null;
   cloudflareProject: string;
@@ -79,6 +80,7 @@ export function SitesAdminClient({
   const [importing, setImporting] = useState(false);
   const [importMode, setImportMode] = useState<"clone" | "inspired">("clone");
   const [selectedId, setSelectedId] = useState(activeSiteId);
+  const [settingsId, setSettingsId] = useState<string | null>(null);
 
   useEffect(() => {
     setSelectedId(activeSiteId);
@@ -177,8 +179,8 @@ export function SitesAdminClient({
         <div>
           <h1 className="text-2xl font-semibold">Websites</h1>
           <p className="text-slate-500 mt-1 text-sm max-w-2xl">
-            Click a website to work on it. Pages, media, and publish then
-            use that site.
+            Click a website to open settings. That site becomes the one
+            Pages, media, and publish use.
           </p>
         </div>
         {canCreate && (
@@ -418,13 +420,16 @@ export function SitesAdminClient({
         </form>
       )}
 
-      <div className="grid gap-4">
+      <div className="grid gap-2">
         {sites.map((site) => (
-          <SiteEditor
+          <SlimSiteCard
             key={site.id}
             site={site}
             selected={site.id === selectedId}
-            onSelect={() => void selectSite(site.id)}
+            onOpen={() => {
+              void selectSite(site.id);
+              setSettingsId(site.id);
+            }}
           />
         ))}
         {sites.length === 0 && (
@@ -436,18 +441,156 @@ export function SitesAdminClient({
           </p>
         )}
       </div>
+
+      {settingsId && (
+        <SiteSettingsDrawer
+          site={sites.find((s) => s.id === settingsId) || null}
+          selected={settingsId === selectedId}
+          onClose={() => setSettingsId(null)}
+          onSelect={() => {
+            if (settingsId) void selectSite(settingsId);
+          }}
+        />
+      )}
     </div>
   );
 }
 
-function SiteEditor({
+function frameworkLabel(fw: string) {
+  const v = (fw || "none").toLowerCase();
+  if (v === "bootstrap") return "Bootstrap";
+  if (v === "tailwind") return "Tailwind";
+  if (v === "custom") return "Custom CSS";
+  return "No framework";
+}
+
+function sourceHost(url: string) {
+  try {
+    return new URL(url).hostname.replace(/^www\./i, "");
+  } catch {
+    return "";
+  }
+}
+
+function SlimSiteCard({
+  site,
+  selected,
+  onOpen,
+}: {
+  site: SiteCard;
+  selected: boolean;
+  onOpen: () => void;
+}) {
+  const host = site.sourceUrl ? sourceHost(site.sourceUrl) : "";
+  return (
+    <button
+      type="button"
+      aria-current={selected ? "true" : undefined}
+      onClick={onOpen}
+      className={[
+        "flex w-full items-center gap-3 rounded-xl border px-3 py-2.5 text-left shadow-sm transition-colors",
+        selected
+          ? "border-blue-500 bg-blue-50 ring-1 ring-blue-200"
+          : "border-slate-200 bg-white hover:border-slate-300",
+      ].join(" ")}
+    >
+      <span className="flex h-10 w-14 shrink-0 items-center justify-center overflow-hidden rounded-md border border-slate-200 bg-slate-50">
+        {site.logoPath ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={site.logoPath}
+            alt=""
+            className="h-full w-full object-contain p-0.5"
+          />
+        ) : (
+          <span className="text-[10px] text-slate-400">Logo</span>
+        )}
+      </span>
+      <span className="min-w-0 flex-1">
+        <span className="flex items-center gap-2">
+          <span className="truncate text-sm font-medium text-slate-900">
+            {site.siteTitle || site.name}
+          </span>
+          {selected && (
+            <span className="rounded-full bg-blue-600 px-1.5 py-px text-[9px] font-semibold uppercase tracking-wide text-white">
+              Active
+            </span>
+          )}
+        </span>
+        <span className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-slate-500">
+          {host ? (
+            <span className="truncate font-mono" title={site.sourceUrl}>
+              {host}
+            </span>
+          ) : (
+            <span className="text-slate-400">No scrape source</span>
+          )}
+          <span className="text-slate-300">·</span>
+          <span>{frameworkLabel(site.cssFramework)}</span>
+          <span className="text-slate-300">·</span>
+          <span>
+            {site.pageCount} page{site.pageCount === 1 ? "" : "s"}
+          </span>
+        </span>
+      </span>
+    </button>
+  );
+}
+
+function SiteSettingsDrawer({
+  site,
+  selected,
+  onClose,
+  onSelect,
+}: {
+  site: SiteCard | null;
+  selected: boolean;
+  onClose: () => void;
+  onSelect: () => void;
+}) {
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      if (e.key === "Escape") onClose();
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onClose]);
+
+  if (!site) return null;
+  return (
+    <>
+      <button
+        type="button"
+        aria-label="Close settings"
+        className="fixed inset-0 z-[60] bg-slate-900/30"
+        style={{ top: "var(--admin-header-h, 56px)" }}
+        onClick={onClose}
+      />
+      <aside
+        className="fixed right-0 z-[61] flex w-full max-w-md flex-col overflow-y-auto border-l border-slate-200 bg-white shadow-2xl"
+        style={{ top: "var(--admin-header-h, 56px)", bottom: 0 }}
+      >
+        <SiteSettingsForm
+          site={site}
+          selected={selected}
+          onSelect={onSelect}
+          onClose={onClose}
+        />
+      </aside>
+    </>
+  );
+}
+
+function SiteSettingsForm({
   site,
   selected,
   onSelect,
+  onClose,
 }: {
   site: SiteCard;
   selected: boolean;
   onSelect: () => void;
+  onClose: () => void;
 }) {
   const router = useRouter();
   const [title, setTitle] = useState(site.siteTitle || site.name);
@@ -566,23 +709,51 @@ function SiteEditor({
     router.refresh();
   }
 
+  const host = site.sourceUrl ? sourceHost(site.sourceUrl) : "";
+
   return (
-    <div
-      aria-current={selected ? "true" : undefined}
-      onClick={onSelect}
-      className={[
-        "rounded-xl border p-5 shadow-sm cursor-pointer transition-colors",
-        selected
-          ? "border-blue-500 bg-blue-50 ring-2 ring-blue-200"
-          : "border-slate-200 bg-white hover:border-slate-300",
-      ].join(" ")}
-    >
-      <div className="flex flex-col gap-5 sm:flex-row sm:items-start">
+    <div className="flex h-full flex-col">
+      <div className="flex items-start justify-between gap-3 border-b border-slate-100 px-4 py-3">
+        <div className="min-w-0">
+          <p className="text-[11px] uppercase tracking-wide text-slate-400">
+            Website settings
+          </p>
+          <h2 className="truncate font-semibold text-slate-900">
+            {site.siteTitle || site.name}
+          </h2>
+          <p className="mt-0.5 text-xs text-slate-500">
+            {host ? (
+              <a
+                href={site.sourceUrl}
+                target="_blank"
+                rel="noreferrer"
+                className="font-mono hover:underline"
+              >
+                {host}
+              </a>
+            ) : (
+              "Created from scratch"
+            )}
+            <span className="text-slate-300"> · </span>
+            {frameworkLabel(site.cssFramework)}
+            {selected ? " · Active" : ""}
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={onClose}
+          className="rounded-lg border border-slate-200 px-2 py-1 text-xs text-slate-600 hover:bg-slate-50"
+        >
+          Close
+        </button>
+      </div>
+
+      <div className="flex-1 space-y-4 overflow-y-auto px-4 py-4">
+        <div className="flex flex-col gap-5 sm:flex-row sm:items-start">
         <div className="shrink-0">
           <button
             type="button"
-            onClick={(e) => {
-              e.stopPropagation();
+            onClick={() => {
               onSelect();
               setMediaOpen(true);
             }}
@@ -608,17 +779,6 @@ function SiteEditor({
         </div>
 
         <div className="min-w-0 flex-1 space-y-3">
-          <div className="flex items-center justify-between gap-2">
-            {selected ? (
-              <span className="rounded-full bg-blue-600 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-white">
-                Active
-              </span>
-            ) : (
-              <span className="text-[10px] uppercase tracking-wide text-slate-400">
-                Click to work on this site
-              </span>
-            )}
-          </div>
           <label className="block">
             <span className="text-[11px] uppercase tracking-wide text-slate-400">
               Website title
@@ -790,6 +950,7 @@ function SiteEditor({
             {!saving && saved && <span className="text-emerald-600">Saved</span>}
           </div>
           {error && <p className="text-xs text-red-600">{error}</p>}
+        </div>
         </div>
       </div>
 

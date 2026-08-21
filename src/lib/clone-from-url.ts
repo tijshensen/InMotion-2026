@@ -207,6 +207,7 @@ export async function cloneSiteFromUrl(opts: {
     name: (opts.name || snapshot.title).trim(),
     siteTitle: snapshot.title,
     cssFramework: snapshot.cssKind,
+    sourceUrl: snapshot.finalUrl || opts.sourceUrl,
     creatorUserId: opts.creatorUserId,
   });
   const language = site.languages[0];

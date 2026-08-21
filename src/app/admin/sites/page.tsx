@@ -71,6 +71,7 @@ export default async function SitesAdminPage() {
         slug: site.slug,
         domain: site.domain,
         cssFramework: site.cssFramework || "none",
+        sourceUrl: site.sourceUrl || "",
         themeSlug: site.themeSlug || site.slug,
         lastGeneratedAt: site.lastGeneratedAt?.toISOString() ?? null,
         cloudflareProject: site.cloudflareProject || "",

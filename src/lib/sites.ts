@@ -21,6 +21,7 @@ export async function createSiteForOrg(opts: {
   domain?: string | null;
   siteTitle?: string;
   cssFramework?: string;
+  sourceUrl?: string;
   themeSlug?: string;
   creatorUserId: string;
   /** Site role for the creator (default ADMIN). Superadmin still gets membership. */
@@ -48,6 +49,7 @@ export async function createSiteForOrg(opts: {
       domain: opts.domain?.trim() || null,
       siteTitle: (opts.siteTitle || opts.name).trim(),
       cssFramework: opts.cssFramework || "none",
+      sourceUrl: (opts.sourceUrl || "").trim(),
       themeSlug: opts.themeSlug?.trim() || slug,
       organizationId: opts.organizationId,
       languages: {
