@@ -11,6 +11,13 @@ import {
 } from "@/lib/menu-snippets";
 import { formatCaughtError, waitForImportJob } from "@/lib/import-error";
 
+type CloneSource = {
+  url: string;
+  host: string;
+  displayHost: string;
+  origin: string;
+};
+
 type TemplateRow = {
   id: string;
   name: string;
@@ -31,6 +38,7 @@ type Props = {
   hasXaiKey: boolean;
   isSuperadmin: boolean;
   menuPages: MenuPage[];
+  cloneSource: CloneSource | null;
 };
 
 export function TemplatesAdminClient({
@@ -42,6 +50,7 @@ export function TemplatesAdminClient({
   hasXaiKey,
   isSuperadmin,
   menuPages,
+  cloneSource,
 }: Props) {
   const [templates, setTemplates] = useState<TemplateRow[]>([]);
   const [loading, setLoading] = useState(true);
@@ -62,6 +71,7 @@ export function TemplatesAdminClient({
   const [savePrompt, setSavePrompt] = useState(false);
   const [importing, setImporting] = useState(false);
   const [importMode, setImportMode] = useState<"clone" | "inspired">("clone");
+  const cloneOnly = Boolean(cloneSource);
 
   const selected = templates.find((t) => t.id === selectedId) || null;
 
@@ -151,6 +161,21 @@ export function TemplatesAdminClient({
 
   async function onImport(e: FormEvent) {
     e.preventDefault();
+    const mode = cloneOnly ? "clone" : importMode;
+    if (cloneSource) {
+      let host = "";
+      try {
+        host = new URL(sourceUrl).hostname.replace(/^www\./i, "").toLowerCase();
+      } catch {
+        host = "";
+      }
+      if (host !== cloneSource.host) {
+        setError(
+          `This site was copied from ${cloneSource.displayHost}. Extra page templates must be scraped from that domain.`,
+        );
+        return;
+      }
+    }
     setImporting(true);
     setError(null);
     setStatus(null);
@@ -165,9 +190,9 @@ export function TemplatesAdminClient({
           siteId,
           sourceUrl,
           name: importName || undefined,
-          prompt: importMode === "inspired" ? grokPrompt : undefined,
+          prompt: mode === "inspired" ? grokPrompt : undefined,
           savePromptAsDefault: savePrompt,
-          mode: importMode,
+          mode,
         }),
       });
       setShowImport(false);
@@ -300,20 +325,33 @@ export function TemplatesAdminClient({
         <button
           type="button"
           onClick={() => {
-            setShowImport((v) => !v);
+            setShowImport((v) => {
+              const next = !v;
+              if (next && cloneSource && !sourceUrl) {
+                setSourceUrl(`${cloneSource.origin}/`);
+              }
+              if (next && cloneOnly) setImportMode("clone");
+              return next;
+            });
             setError(null);
           }}
-          className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-medium hover:bg-slate-50"
+          className={
+            cloneOnly && !showImport
+              ? "rounded-lg bg-slate-900 px-3 py-2 text-sm font-medium text-white hover:bg-slate-800"
+              : "rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-medium hover:bg-slate-50"
+          }
         >
-          {showImport ? "Cancel" : "Import from URL"}
+          {showImport ? "Cancel" : cloneOnly ? "Copy another page" : "Import from URL"}
         </button>
-        <button
-          type="button"
-          onClick={() => void onCreate()}
-          className="rounded-lg bg-slate-900 px-3 py-2 text-sm font-medium text-white hover:bg-slate-800"
-        >
-          + New template
-        </button>
+        {!cloneOnly && (
+          <button
+            type="button"
+            onClick={() => void onCreate()}
+            className="rounded-lg bg-slate-900 px-3 py-2 text-sm font-medium text-white hover:bg-slate-800"
+          >
+            + New template
+          </button>
+        )}
         <button
           type="button"
           onClick={() => void load()}
@@ -323,6 +361,7 @@ export function TemplatesAdminClient({
         </button>
         <p className="text-sm text-slate-500">
           {siteName} · framework: {cssFramework}
+          {cloneSource ? ` · copied from ${cloneSource.displayHost}` : ""}
         </p>
       </div>
 
@@ -332,11 +371,16 @@ export function TemplatesAdminClient({
           className="rounded-xl border border-slate-200 bg-white p-5 space-y-3 shadow-sm"
         >
           <div>
-            <h2 className="font-semibold">Import from a website</h2>
+            <h2 className="font-semibold">
+              {cloneOnly ? "Copy another page from this site" : "Import from a website"}
+            </h2>
             <p className="text-xs text-slate-500 mt-1">
-              Keep the original look, or let Grok rebuild a Tailwind draft.
+              {cloneSource
+                ? `This website is an exact copy of ${cloneSource.displayHost}. New templates can only be scraped from that domain.`
+                : "Keep the original look, or let Grok rebuild a Tailwind draft."}
             </p>
           </div>
+          {!cloneOnly && (
           <div className="grid gap-2 sm:grid-cols-2">
             <label className="flex cursor-pointer gap-2 rounded-lg border border-slate-200 p-3 text-sm has-[:checked]:border-blue-600 has-[:checked]:bg-blue-50">
               <input
@@ -367,6 +411,7 @@ export function TemplatesAdminClient({
               </span>
             </label>
           </div>
+          )}
           {importMode === "inspired" && !hasXaiKey && (
             <p className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
               Set <code className="text-xs">XAI_API_KEY</code> in{" "}
@@ -384,14 +429,22 @@ export function TemplatesAdminClient({
           )}
           <div className="grid gap-3 sm:grid-cols-2">
             <label className="block text-sm sm:col-span-2">
-              <span className="text-slate-600">Website URL</span>
+              <span className="text-slate-600">
+                {cloneSource
+                  ? `Page URL on ${cloneSource.displayHost}`
+                  : "Website URL"}
+              </span>
               <input
                 required
                 type="url"
                 value={sourceUrl}
                 onChange={(e) => setSourceUrl(e.target.value)}
                 className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 font-mono text-sm"
-                placeholder="https://example.com"
+                placeholder={
+                  cloneSource
+                    ? `${cloneSource.origin}/about`
+                    : "https://example.com"
+                }
               />
             </label>
             <label className="block text-sm">
@@ -403,7 +456,7 @@ export function TemplatesAdminClient({
                 placeholder="Taken from the source title if empty"
               />
             </label>
-            {importMode === "inspired" ? (
+            {!cloneOnly && importMode === "inspired" ? (
               <label className="block text-sm sm:col-span-2">
                 <span className="text-slate-600">Prompt</span>
                 <textarea

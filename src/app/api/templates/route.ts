@@ -3,6 +3,10 @@ import { z } from "zod";
 import { getSessionUser } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { TAILWIND_SHELL } from "@/lib/bootstrap-to-tailwind";
+import {
+  cloneHostMismatchMessage,
+  getSiteCloneSource,
+} from "@/lib/clone-source";
 
 export async function GET(req: Request) {
   const user = await getSessionUser();
@@ -73,6 +77,14 @@ export async function POST(req: Request) {
     const site = await prisma.site.findUnique({ where: { id: data.siteId } });
     if (!site) {
       return NextResponse.json({ error: "Site not found" }, { status: 404 });
+    }
+
+    const cloneSource = await getSiteCloneSource(site.id);
+    if (cloneSource && !data.coreHtml?.trim()) {
+      return NextResponse.json(
+        { error: cloneHostMismatchMessage(cloneSource) },
+        { status: 400 },
+      );
     }
 
     let set = await prisma.templateSet.findFirst({

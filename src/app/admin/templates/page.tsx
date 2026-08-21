@@ -2,6 +2,7 @@ import { requireUser } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { getActiveSite } from "@/lib/site-context";
 import { getImportPrompt } from "@/lib/import-from-url";
+import { getSiteCloneSource } from "@/lib/clone-source";
 import { TemplatesAdminClient } from "./templates-admin-client";
 
 export const dynamic = "force-dynamic";
@@ -64,6 +65,7 @@ export default async function TemplatesAdminPage() {
         importPrompt={await getImportPrompt()}
         hasXaiKey={Boolean(process.env.XAI_API_KEY)}
         isSuperadmin={user.role === "SUPERADMIN"}
+        cloneSource={await getSiteCloneSource(active.id)}
         menuPages={JSON.parse(
           JSON.stringify(
             await prisma.page.findMany({

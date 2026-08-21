@@ -10,6 +10,11 @@ import {
 import { cloneTemplateFromUrl } from "@/lib/clone-from-url";
 import { formatServerImportError } from "@/lib/import-error";
 import { getImportJob, startImportJob } from "@/lib/import-job";
+import {
+  cloneHostMismatchMessage,
+  getSiteCloneSource,
+  sameCloneHost,
+} from "@/lib/clone-source";
 
 export const maxDuration = 300;
 
@@ -53,7 +58,21 @@ export async function POST(req: Request) {
     const denied = await assertSiteAccess(user, body.siteId, "EDITOR");
     if (denied) return denied;
 
-    const mode = body.mode || "clone";
+    const cloneSource = await getSiteCloneSource(body.siteId);
+    if (cloneSource && body.mode === "inspired") {
+      return NextResponse.json(
+        { error: cloneHostMismatchMessage(cloneSource) },
+        { status: 400 },
+      );
+    }
+    if (cloneSource && !sameCloneHost(body.sourceUrl, cloneSource)) {
+      return NextResponse.json(
+        { error: cloneHostMismatchMessage(cloneSource) },
+        { status: 400 },
+      );
+    }
+
+    const mode = cloneSource ? "clone" : body.mode || "clone";
     const prompt = (body.prompt || (await getImportPrompt())).trim();
     if (mode === "inspired" && body.savePromptAsDefault && user.role === "SUPERADMIN") {
       await saveImportPrompt(prompt);
