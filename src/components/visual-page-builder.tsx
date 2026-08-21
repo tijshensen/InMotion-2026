@@ -900,8 +900,9 @@ export function VisualPageBuilder({
         el.classList.remove("is-selected");
       });
       if (!sectionId) return;
-      const el = doc.querySelector(sectionSelector(sectionId));
-      if (el) el.classList.add("is-selected");
+      doc.querySelectorAll(sectionSelector(sectionId)).forEach((el) => {
+        el.classList.add("is-selected");
+      });
     },
     [sectionSelector],
   );

@@ -16,6 +16,7 @@ import {
   resolveMenuSnippets,
 } from "./menu-snippets";
 import { renderAllSections } from "./sections";
+import { replaceLiteral } from "./html-split";
 import { ensureCloneFixInHtml } from "./clone-runtime";
 import { ensureSiteStylesheets } from "./site-context";
 import {
@@ -188,21 +189,28 @@ export async function renderPublicPage({
   html = rewriteThemeAssetUrls(html, site.slug);
   html = applySiteLogo(html, site.logoPath, site.themeSlug || site.slug);
 
-  html = html
-    .replaceAll("{{page.title}}", escapeHtml(page.title))
-    .replaceAll("{{page.metaDescription}}", escapeHtml(page.metaDescription))
-    .replaceAll("{{site.title}}", escapeHtml(site.siteTitle || site.name))
-    .replaceAll("{{site.slug}}", escapeHtml(site.slug))
-    .replaceAll("{{menu}}", menu)
-    .replaceAll("{{submenu}}", submenu)
-    .replaceAll("{{sections}}", sectionsHtml);
+  html = replaceLiteral(html, "{{page.title}}", escapeHtml(page.title));
+  html = replaceLiteral(
+    html,
+    "{{page.metaDescription}}",
+    escapeHtml(page.metaDescription),
+  );
+  html = replaceLiteral(
+    html,
+    "{{site.title}}",
+    escapeHtml(site.siteTitle || site.name),
+  );
+  html = replaceLiteral(html, "{{site.slug}}", escapeHtml(site.slug));
+  html = replaceLiteral(html, "{{menu}}", menu);
+  html = replaceLiteral(html, "{{submenu}}", submenu);
+  html = replaceLiteral(html, "{{sections}}", sectionsHtml);
 
   // Fallback if shell has no {{sections}} token
   if (!html.includes(sectionsHtml)) {
     if (html.includes("</main>")) {
-      html = html.replace("</main>", `${sectionsHtml}</main>`);
+      html = replaceLiteral(html, "</main>", `${sectionsHtml}</main>`);
     } else if (html.includes("</body>")) {
-      html = html.replace("</body>", `${sectionsHtml}</body>`);
+      html = replaceLiteral(html, "</body>", `${sectionsHtml}</body>`);
     } else {
       html += sectionsHtml;
     }

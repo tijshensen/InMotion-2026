@@ -116,8 +116,10 @@ function applyTokens(
       }
       return current;
     })
-    .replaceAll("[[href]]", pageHref(siteSlug, page))
-    .replaceAll("[[title]]", escapeHtml(page.menuTitle || page.title))
+    .split("[[href]]")
+    .join(pageHref(siteSlug, page))
+    .split("[[title]]")
+    .join(escapeHtml(page.menuTitle || page.title))
     .replace(/class="\s+/g, 'class="')
     .replace(/\s+class=""/g, "");
 }

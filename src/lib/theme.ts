@@ -71,7 +71,7 @@ export function applySiteLogo(
   const fallback =
     themeSlug ? `/theme/${themeSlug}/images/logo.png` : "";
   const src = path || fallback;
-  let s = html.replaceAll("{{site.logo}}", src);
+  let s = html.split("{{site.logo}}").join(src);
   if (path && themeSlug) {
     s = s.replaceAll(`/theme/${themeSlug}/images/logo.png`, path);
     s = s.replaceAll(`/theme/${themeSlug}/images/logo.PNG`, path);

@@ -32,7 +32,7 @@ import {
   rewriteThemeAssetUrls,
 } from "./theme";
 import { detectVideoSource, isLikelyMediaSrc } from "./video-media";
-import { balanceHtmlFragment } from "./html-split";
+import { balanceHtmlFragment, replaceLiteral } from "./html-split";
 import { ensureCloneFixInHtml } from "./clone-runtime";
 
 export type FieldType = "singleline" | "multiline" | "image" | "file";
@@ -954,27 +954,27 @@ export function buildEditorPreviewHtml(opts: {
     }
   }
 
-  let html = shell
-    .replaceAll("{{page.title}}", escapeHtml(opts.pageTitle))
-    .replaceAll(
-      "{{page.metaDescription}}",
-      escapeHtml(opts.metaDescription || ""),
-    )
-    .replaceAll("{{site.title}}", escapeHtml(opts.siteTitle))
-    .replaceAll("{{site.slug}}", escapeHtml(opts.siteSlug || ""))
-    .replaceAll("{{menu}}", opts.menuHtml || "")
-    .replaceAll("{{sections}}", sectionsHtml);
+  let html = replaceLiteral(shell, "{{page.title}}", escapeHtml(opts.pageTitle));
+  html = replaceLiteral(
+    html,
+    "{{page.metaDescription}}",
+    escapeHtml(opts.metaDescription || ""),
+  );
+  html = replaceLiteral(html, "{{site.title}}", escapeHtml(opts.siteTitle));
+  html = replaceLiteral(html, "{{site.slug}}", escapeHtml(opts.siteSlug || ""));
+  html = replaceLiteral(html, "{{menu}}", opts.menuHtml || "");
+  html = replaceLiteral(html, "{{sections}}", sectionsHtml);
 
   if (!html.includes(sectionsHtml)) {
     if (html.includes("</main>")) {
-      html = html.replace("</main>", `${sectionsHtml}</main>`);
+      html = replaceLiteral(html, "</main>", `${sectionsHtml}</main>`);
     } else if (html.includes("cms-sections")) {
       html = html.replace(
         /(<div[^>]*cms-sections[^>]*>)/i,
-        `$1${sectionsHtml}`,
+        (_m) => `${_m}${sectionsHtml}`,
       );
     } else if (html.includes("</body>")) {
-      html = html.replace("</body>", `${sectionsHtml}</body>`);
+      html = replaceLiteral(html, "</body>", `${sectionsHtml}</body>`);
     } else {
       html += sectionsHtml;
     }
@@ -1176,8 +1176,9 @@ export function buildEditorPreviewHtml(opts: {
     try {
       var all = document.querySelectorAll(".cms-edit-section.is-selected");
       for (var i = 0; i < all.length; i++) all[i].classList.remove("is-selected");
-      var target = document.querySelector('.cms-edit-section[data-section-id="' + id.replace(/"/g, '') + '"]');
-      if (target) target.classList.add("is-selected");
+      var safe = id.replace(/"/g, "");
+      var targets = document.querySelectorAll('.cms-edit-section[data-section-id="' + safe + '"]');
+      for (var t = 0; t < targets.length; t++) targets[t].classList.add("is-selected");
     } catch (e) {}
     try {
       window.parent.postMessage({ type: "cms-select-section", sectionId: id }, "*");

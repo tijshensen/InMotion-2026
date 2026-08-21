@@ -23,6 +23,7 @@ import {
 } from "./menu-snippets";
 import { normalizeInsertHtml } from "./insert-html";
 import { renderSectionHtml } from "./sections";
+import { replaceLiteral } from "./html-split";
 
 const VIEWPORT_W = 1200;
 const CLIP_MAX_H = 640;
@@ -166,14 +167,17 @@ function fillShell(opts: {
   html = ensureSiteStylesheets(html, opts.site);
 
   const marked = `<div id="cms-preview-section">${wrapSectionForPreview(opts.sectionHtml)}</div>`;
-  html = html.replaceAll("{{sections}}", marked);
-  html = html
-    .replaceAll("{{page.title}}", escapeHtml(opts.blockName))
-    .replaceAll("{{page.metaDescription}}", "")
-    .replaceAll("{{site.title}}", escapeHtml(opts.site.siteTitle || opts.site.name))
-    .replaceAll("{{site.slug}}", escapeHtml(opts.site.slug))
-    .replaceAll("{{menu}}", opts.menuHtml)
-    .replaceAll("{{submenu}}", "");
+  html = replaceLiteral(html, "{{sections}}", marked);
+  html = replaceLiteral(html, "{{page.title}}", escapeHtml(opts.blockName));
+  html = replaceLiteral(html, "{{page.metaDescription}}", "");
+  html = replaceLiteral(
+    html,
+    "{{site.title}}",
+    escapeHtml(opts.site.siteTitle || opts.site.name),
+  );
+  html = replaceLiteral(html, "{{site.slug}}", escapeHtml(opts.site.slug));
+  html = replaceLiteral(html, "{{menu}}", opts.menuHtml);
+  html = replaceLiteral(html, "{{submenu}}", "");
   html = html.replace(/\{\{block:[a-zA-Z0-9_-]+\}\}/g, "");
 
   const resolveInsert = (tag: string) => {

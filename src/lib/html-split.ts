@@ -25,6 +25,20 @@ function escapeRe(s: string) {
   return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
+/**
+ * Insert `value` at every `token` without JS `$&` / `$1` replacement rules.
+ * `String.replaceAll` treats `$&` in the replacement as "the match", so a
+ * price like `R$&nbsp;39` used to rewrite `{{sections}}` and duplicate the page.
+ */
+export function replaceLiteral(
+  haystack: string,
+  token: string,
+  value: string,
+): string {
+  if (!haystack || !token || !haystack.includes(token)) return haystack;
+  return haystack.split(token).join(value);
+}
+
 /** Slice one element starting at `start` (index of its "<"), including nested same-tags. */
 export function extractBalanced(html: string, start: number): string | null {
   if (start < 0 || start >= html.length || html[start] !== "<") return null;
