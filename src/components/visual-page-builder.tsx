@@ -80,6 +80,14 @@ export type LinkPageOption = LinkablePage & {
 
 type CanvasDevice = "desktop" | "tablet" | "phone";
 
+function iframeDocument(
+  iframe: HTMLIFrameElement | null | undefined,
+): Document | null {
+  const doc = iframe?.contentDocument;
+  if (!doc?.documentElement) return null;
+  return doc;
+}
+
 function reviveInsertedScripts(root: Element) {
   const doc = root.ownerDocument;
   if (!doc) return;
@@ -821,7 +829,7 @@ export function VisualPageBuilder({
   }
 
   function activateLayoutInSection(sectionId: string | null) {
-    const doc = iframeRef.current?.contentDocument;
+    const doc = iframeDocument(iframeRef.current);
     if (!doc || !sectionId) return false;
     const hit = layoutHitRef.current;
     let el: HTMLElement | null = null;
@@ -844,7 +852,7 @@ export function VisualPageBuilder({
   }
 
   useEffect(() => {
-    const doc = iframeRef.current?.contentDocument;
+    const doc = iframeDocument(iframeRef.current);
     if (!doc) return;
     doc.documentElement.setAttribute("data-cms-mode", editorMode);
     if (editorMode !== "layout") {
@@ -894,7 +902,7 @@ export function VisualPageBuilder({
 
   const applySelectionInIframe = useCallback(
     (sectionId: string | null) => {
-      const doc = iframeRef.current?.contentDocument;
+      const doc = iframeDocument(iframeRef.current);
       if (!doc) return;
       doc.querySelectorAll(".cms-edit-section.is-selected").forEach((el) => {
         el.classList.remove("is-selected");
@@ -910,7 +918,7 @@ export function VisualPageBuilder({
   /** Patch one section's body in the live iframe without reloading srcDoc. */
   const paintSectionInIframe = useCallback(
     (s: PageSection) => {
-      const doc = iframeRef.current?.contentDocument;
+      const doc = iframeDocument(iframeRef.current);
       if (!doc) return false;
       const wrap = doc.querySelector(sectionSelector(s.id));
       if (!wrap) return false;
@@ -998,13 +1006,9 @@ export function VisualPageBuilder({
     }
     restoreIframeScroll();
     applySelectionInIframe(selectedSectionId);
-    iframeRef.current?.contentDocument?.documentElement.setAttribute(
-      "data-cms-mode",
-      editorMode,
-    );
-    if (iframeRef.current?.contentDocument) {
-      injectArbitraryCssIntoDocument(iframeRef.current.contentDocument);
-    }
+    const doc = iframeDocument(iframeRef.current);
+    doc?.documentElement.setAttribute("data-cms-mode", editorMode);
+    if (doc) injectArbitraryCssIntoDocument(doc);
     refreshTailwindInWindow(win);
   }, [
     ordered,
@@ -1066,7 +1070,7 @@ export function VisualPageBuilder({
 
   // In-canvas delete overlay on the target section
   useEffect(() => {
-    const doc = iframeRef.current?.contentDocument;
+    const doc = iframeDocument(iframeRef.current);
     if (!doc) return;
     doc.querySelectorAll(".cms-edit-delete-mask").forEach((el) => {
       el.parentElement?.classList.remove("is-delete-pending");
@@ -1195,7 +1199,7 @@ export function VisualPageBuilder({
         };
       }),
     );
-    const doc = iframeRef.current?.contentDocument;
+    const doc = iframeDocument(iframeRef.current);
     const el = doc?.querySelector(`[data-cms-nid="${nid}"]`) as HTMLElement | null;
     if (el) {
       el.className = `${cleaned}${cleaned ? " " : ""}is-layout-selected`;
@@ -1227,7 +1231,7 @@ export function VisualPageBuilder({
 
   function jumpLayoutParent() {
     if (!layoutHit?.parentNid) return;
-    const doc = iframeRef.current?.contentDocument;
+    const doc = iframeDocument(iframeRef.current);
     if (!doc) return;
     const el = doc.querySelector(
       `[data-cms-nid="${layoutHit.parentNid}"]`,

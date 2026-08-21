@@ -294,6 +294,7 @@ export function injectArbitraryCssIntoHtml(html: string): string {
 }
 
 export function injectArbitraryCssIntoDocument(doc: Document) {
+  if (!doc?.documentElement || !doc.head) return;
   const tokens = new Set<string>();
   doc.querySelectorAll("[class]").forEach((el) => {
     const cls = typeof el.className === "string" ? el.className : "";
